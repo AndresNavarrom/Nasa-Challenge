@@ -27,3 +27,7 @@ aidlc/diagnostics/
 .aidlc/base-source-listing.tsv
 .claude/settings.local.json
 # END AI-DLC:gitignore
+
+# Optional exploration scrapers (downloads and caches are never versioned)
+tools/scraping/resources/
+tools/scraping/**/__pycache__/
