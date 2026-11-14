@@ -6,5 +6,13 @@
     "scope": "poc",
     "status": "complete",
     "request": "6fa35e8c"
+  },
+  {
+    "uuid": "01a1dc25-111e-7a15-9259-c3aecf7508aa",
+    "slug": "globe-transition-ui",
+    "dirName": "261114-globe-transition-ui",
+    "scope": "poc",
+    "status": "complete",
+    "request": "90111762"
   }
 ]
