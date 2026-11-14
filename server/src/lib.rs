@@ -68,18 +68,19 @@ pub fn check_dist(dist: &Path) -> Result<(), DistError> {
 
 /// The router: every request is a static file under `dist`.
 ///
-/// `ServeDir` answers `/` with `index.html`, guesses content types from the
-/// extension, refuses paths that climb out of `dist`, and returns 404 for
-/// anything that is not there.
+/// `ServeDir` answers `/` with `index.html` (its default), guesses content
+/// types from the extension, refuses paths that climb out of `dist` (plain or
+/// percent-encoded), and returns 404 for anything that is not there.
 pub fn app(dist: &Path) -> Router {
-    Router::new().fallback_service(ServeDir::new(dist).append_index_html_on_directories(true))
+    Router::new().fallback_service(ServeDir::new(dist))
 }
 
 /// Address to listen on, from `JUKEBOX_HOST` and `JUKEBOX_PORT`.
 ///
-/// Defaults to `127.0.0.1:8080`. Inside a container the host is set to
-/// `0.0.0.0` so the published port reaches it; docker-compose.yml publishes
-/// that port on the host's loopback only.
+/// Defaults to `127.0.0.1:8080`. docker-compose.yml sets the host to `0.0.0.0`
+/// inside the container so the published port reaches it, and publishes that
+/// port on the host's loopback only. Port 0 asks the system for a free port;
+/// the server prints the one it got.
 pub fn listen_addr(host: Option<&str>, port: Option<&str>) -> Result<SocketAddr, String> {
     let ip = match host.map(str::trim).filter(|h| !h.is_empty()) {
         None => IpAddr::V4(Ipv4Addr::LOCALHOST),
@@ -126,13 +127,22 @@ mod tests {
         }
     }
 
-    /// A minimal built interface: index.html plus data/manifest.json.
-    fn fake_dist() -> TempDir {
-        let tmp = TempDir::new();
-        fs::create_dir_all(tmp.0.join("data")).unwrap();
-        fs::write(tmp.0.join("index.html"), "<!doctype html><title>Earth Jukebox</title>").unwrap();
-        fs::write(tmp.0.join("data/manifest.json"), r#"{"layers":[]}"#).unwrap();
-        tmp
+    /// A minimal built interface (`dist/index.html` plus
+    /// `dist/data/manifest.json`) inside a throwaway folder, with a
+    /// `secret.txt` next to `dist/` that must never be served.
+    struct Fixture {
+        _root: TempDir,
+        dist: PathBuf,
+    }
+
+    fn fake_dist() -> Fixture {
+        let root = TempDir::new();
+        let dist = root.0.join("dist");
+        fs::create_dir_all(dist.join("data")).unwrap();
+        fs::write(dist.join("index.html"), "<!doctype html><title>Earth Jukebox</title>").unwrap();
+        fs::write(dist.join("data/manifest.json"), r#"{"layers":[]}"#).unwrap();
+        fs::write(root.0.join("secret.txt"), "secret").unwrap();
+        Fixture { _root: root, dist }
     }
 
     async fn get(dist: &Path, uri: &str) -> (StatusCode, Option<String>, Vec<u8>) {
@@ -151,8 +161,8 @@ mod tests {
 
     #[test]
     fn check_dist_accepts_a_built_interface() {
-        let dist = fake_dist();
-        assert_eq!(check_dist(&dist.0), Ok(()));
+        let f = fake_dist();
+        assert_eq!(check_dist(&f.dist), Ok(()));
     }
 
     #[test]
@@ -166,17 +176,17 @@ mod tests {
 
     #[test]
     fn check_dist_reports_missing_data() {
-        let dist = fake_dist();
-        fs::remove_file(dist.0.join("data/manifest.json")).unwrap();
-        let err = check_dist(&dist.0).unwrap_err();
-        assert_eq!(err, DistError::MissingFile(dist.0.join("data/manifest.json")));
+        let f = fake_dist();
+        fs::remove_file(f.dist.join("data/manifest.json")).unwrap();
+        let err = check_dist(&f.dist).unwrap_err();
+        assert_eq!(err, DistError::MissingFile(f.dist.join("data/manifest.json")));
         assert!(err.to_string().contains("docker compose run --rm prep"));
     }
 
     #[tokio::test]
     async fn serves_index_at_the_root() {
-        let dist = fake_dist();
-        let (status, content_type, body) = get(&dist.0, "/").await;
+        let f = fake_dist();
+        let (status, content_type, body) = get(&f.dist, "/").await;
         assert_eq!(status, StatusCode::OK);
         assert!(content_type.unwrap().starts_with("text/html"));
         assert!(String::from_utf8(body).unwrap().contains("Earth Jukebox"));
@@ -184,8 +194,8 @@ mod tests {
 
     #[tokio::test]
     async fn serves_the_data_files() {
-        let dist = fake_dist();
-        let (status, content_type, body) = get(&dist.0, "/data/manifest.json").await;
+        let f = fake_dist();
+        let (status, content_type, body) = get(&f.dist, "/data/manifest.json").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(content_type.as_deref(), Some("application/json"));
         assert_eq!(body, br#"{"layers":[]}"#);
@@ -193,19 +203,32 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_files_are_not_found() {
-        let dist = fake_dist();
-        let (status, _, _) = get(&dist.0, "/data/nope.bin").await;
+        let f = fake_dist();
+        let (status, _, _) = get(&f.dist, "/data/nope.bin").await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
     async fn refuses_paths_outside_the_folder() {
-        let dist = fake_dist();
-        fs::write(dist.0.join("../secret.txt"), "secret").ok();
-        let (status, _, body) = get(&dist.0, "/../secret.txt").await;
-        assert_ne!(status, StatusCode::OK);
-        assert_ne!(body, b"secret");
-        let _ = fs::remove_file(dist.0.join("../secret.txt"));
+        let f = fake_dist();
+        // The file really is one level above dist/, so a traversal that got
+        // through would return it.
+        assert!(f.dist.join("../secret.txt").is_file());
+        for uri in [
+            "/../secret.txt",
+            "/%2e%2e/secret.txt",
+            "/%2E%2E/secret.txt",
+            "/..%2fsecret.txt",
+            "/%2e%2e%2fsecret.txt",
+            "/data/../../secret.txt",
+            "/data/%2e%2e/%2e%2e/secret.txt",
+            "/..%5csecret.txt",
+            "//etc/passwd",
+        ] {
+            let (status, _, body) = get(&f.dist, uri).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{uri} must be refused");
+            assert_ne!(body, b"secret", "{uri} leaked the file");
+        }
     }
 
     #[test]
@@ -221,6 +244,8 @@ mod tests {
             listen_addr(Some("0.0.0.0"), Some("9000")).unwrap(),
             "0.0.0.0:9000".parse().unwrap()
         );
+        // Port 0 is allowed: the system picks a free port and main prints it.
+        assert_eq!(listen_addr(None, Some("0")).unwrap().port(), 0);
         assert!(listen_addr(Some("localhost-ish"), None).is_err());
         assert!(listen_addr(None, Some("99999")).is_err());
     }
