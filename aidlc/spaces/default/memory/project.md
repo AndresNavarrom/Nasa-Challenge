@@ -43,8 +43,6 @@
 
 <!-- Technology choices locked for this project. -->
 
-- Todo se corre en contenedores de Docker (Docker Desktop): la app, las pruebas y el despliegue. Los comandos de compilación y prueba se dan primero en su forma con `docker compose`. (learned 2026-11-14) <!-- cid:261114-earth-jukebox-poc:code-generation:7d85c8df55e20c62d65988227fb5d21cf722fd44d659e902b85bc14e6eb852f8 -->
-
 ## Decided
 
 <!-- Decisions made in earlier stages that should not be re-asked. -->

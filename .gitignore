@@ -27,3 +27,16 @@ aidlc/diagnostics/
 .aidlc/base-source-listing.tsv
 .claude/settings.local.json
 # END AI-DLC:gitignore
+
+# App dependencies, builds and generated data
+web/node_modules/
+web/dist/
+tools/prep/target/
+server/target/
+data/raw/
+*.part
+
+# Exploration scrapers (downloaded archives and caches)
+tools/scraping/resources/
+tools/scraping/**/__pycache__/
+

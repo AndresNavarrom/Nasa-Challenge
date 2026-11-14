@@ -1,6 +1,0 @@
-# Keep host-side installs and build output out of the image build context.
-node_modules
-dist
-deno.lock
-*.tsbuildinfo
-.vite
