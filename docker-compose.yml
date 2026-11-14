@@ -54,6 +54,10 @@ services:
       target: app
     image: earth-jukebox-app:latest
     init: true
+    environment:
+      # Listen on every interface inside the container so the published port
+      # reaches it. The image itself defaults to 127.0.0.1 (see Dockerfile).
+      JUKEBOX_HOST: "0.0.0.0"
     ports:
       # Published on the loopback interface only.
       - "127.0.0.1:8080:8080"
@@ -98,7 +102,11 @@ services:
     profiles: ["dev"]
     volumes:
       - ./server:/work/server:ro
-      - ./web/dist:/work/web/dist:ro
+      # The whole web/ folder, read-only, so Docker never has to create
+      # web/dist on the host (an empty, root-owned folder there would get in
+      # the way of `npm run build`). If web/dist is missing, the server says so
+      # and stops. Build it first with `docker compose run --rm web npm run build`.
+      - ./web:/work/web:ro
     environment:
       # Listen on every interface inside the container so the published port
       # reaches it; the port is published on the host's loopback only.
