@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1–B2 implemented; B3 in progress (harness ready, smoke level raised after listening); manual measurement pending
+Status: B1–B2 implemented; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak); second browser pending
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14

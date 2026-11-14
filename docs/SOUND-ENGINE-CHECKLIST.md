@@ -104,7 +104,7 @@ Firefox). Note any difference in latency or autoplay behaviour.
 
 | Date | Browser | Device latency | Perceived latency (max) | Blind test | Soak 10 min | Notes |
 |---|---|---|---|---|---|---|
-|  |  |  |  |  |  |  |
+| 2026-11-14 | Firefox | 43 ms | Not perceptible in practice | Passed (layers identifiable) | Passed: no clips or odd noises | Second browser still pending before sign-off |
 |  |  |  |  |  |  |  |
 
 Sign-off for B3: every row above passes in two browsers, and the perceived
