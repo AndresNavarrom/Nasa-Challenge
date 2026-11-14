@@ -2,55 +2,99 @@
 
 Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10:00 p.m., límite interno 11:50 p.m. (hora de Colombia).
 
-El detalle de qué se construye está en
+## Dónde estamos
+
+La base ya está en `main` y probada: datos reales de la NASA para las tres capas, la lógica que calcula qué valor hay en cada punto y momento y a qué sonido corresponde, la herramienta en Rust que prepara los datos, y los contenedores de Docker. Sus 18 pruebas pasan.
+
+Falta lo que se ve y se oye: el motor de sonido, el planeta 3D, el servidor local y los entregables. Son los pasos 10 a 16 del plan de código:
+`aidlc/spaces/default/intents/261114-earth-jukebox-poc/construction/code-generation/code-generation-plan.md`
+
+Qué se construye y por qué está en:
 `aidlc/spaces/default/intents/261114-earth-jukebox-poc/inception/requirements-analysis/requirements.md`
-y el plan de código paso a paso en
-`aidlc/spaces/default/intents/261114-earth-jukebox-poc/construction/code-generation/code-generation-plan.md`.
+
+## Para arrancar
+
+Solo hace falta Docker Desktop.
+
+```bash
+docker compose --profile "*" build      # una vez; la imagen de Rust tarda en descargar
+docker compose up web                   # interfaz en http://127.0.0.1:5173, con recarga en vivo
+docker compose run --rm web-test        # pruebas de la interfaz y el sonido
+docker compose run --rm prep-test       # pruebas de la preparación de datos
+docker compose run --rm prep            # regenerar los datos
+```
+
+- Los cambios de código no requieren reconstruir. Los de `package.json`, `package-lock.json`, `Cargo.toml` o `Cargo.lock` sí.
+- Para agregar un paquete: `docker compose run --rm web npm install <nombre>` y subir `package.json` y `package-lock.json`.
+- Si cambia `package-lock.json`, bajen la interfaz con `docker compose down` antes de correr `web-test`.
 
 ## Cómo trabajamos
 
-- **El código base se está generando** a partir del plan de código y se sube a `main` en cuanto esté. Hasta entonces, cada uno lee su parte del plan y prepara su entorno (Node.js 20 o superior, Rust estable, ffmpeg).
-- **Cada uno es dueño de sus carpetas.** Si necesitas un cambio en la carpeta de otro, pídeselo; no lo edites por tu cuenta.
-- **Una rama por persona**: `sonido`, `datos-rust`, `interfaz`. Se integra a `main` al cierre de cada bloque, no antes.
-- **El formato del archivo de datos no se cambia sin avisar a los tres.** Es lo que une las tres partes. Está descrito en el plan de código, sección "Formato del archivo de datos".
-- Mientras no haya datos reales, sonido e interfaz trabajan con los datos de ejemplo (`--sample`).
+- **Cada uno es dueño de sus carpetas.** Si necesitas un cambio en la carpeta de otro, pídeselo.
+- **Una rama por persona**: `sonido`, `datos-rust`, `interfaz`. Se integra a `main` al cierre de cada bloque.
+- **El formato del archivo de datos no se cambia sin avisar a los tres.** Está en el plan de código, sección "Formato del archivo de datos", y en `web/src/data/types.ts`.
+- Commits pequeños y por tema.
+
+## Lo que ya existe y pueden usar
+
+- `loadJukeboxData()` en `web/src/data/loadManifest.ts`: devuelve las capas y el rectángulo de la Amazonía.
+- `sampleLayerAt(…)` en `web/src/lib/interpolate.ts`: el valor de una capa (de 0 a 1) en una longitud, latitud y momento; devuelve `null` donde la capa no tiene datos.
+- `web/src/lib/timeline.ts`: convierte la posición común de 0 a 1 en el instante y la fecha de cada capa.
+- `web/src/audio/mapping.ts`: de valor a nota y armonía (bosque), aspereza y filtro (humo), ritmo de respiración (CO2), paneo y volumen. Con `null`, el volumen es 0.
+- `web/public/data/`: los datos preparados y la imagen base del planeta (`earth.jpg`).
+
+## Tres cosas que hay que saber
+
+- **Solo el bosque tiene datos globales.** El humo y el CO2 existen únicamente sobre la Amazonía: en el planeta no se ven ni suenan fuera de la región. Las visualizaciones de la NASA para esas dos capas no tienen una vista global plana utilizable.
+- **Los valores son intensidades relativas** leídas de los cuadros, no mediciones físicas. Hay que decirlo así en los textos.
+- **El CO2 se presenta como contexto global**, no como efecto medido de lo que pasa en la Amazonía.
 
 ## Quién hace qué
 
-| Persona | Frente | Carpetas propias |
+| Persona | Pasos del plan | Carpetas propias |
 |---|---|---|
-| Samuel Betancur Muñoz | Sonido e interpolación | `web/src/audio/`, `web/src/lib/` |
-| Fernando Gonzalez Rivero | Datos en Rust, servidor local e integración | `tools/`, `server/`, `data/`, `web/public/data/`, `run-demo.sh` |
-| Andres Navarro Marin | Interfaz: planeta 3D, mapa, panel, accesibilidad | `web/src/scene/`, `web/src/ui/` |
+| Samuel Betancur Muñoz | 10 | `web/src/audio/`, `web/src/lib/` |
+| Fernando Gonzalez Rivero | 11, 15 y, con Danna, 16 | `tools/`, `server/`, `data/`, `web/public/data/`, `docker-compose.yml`, `run-demo.sh`, `docs/` |
+| Andres Navarro Marin | 12, 13 y 14 | `web/src/scene/`, `web/src/ui/`, `web/src/App.tsx` |
 
-## Samuel — Sonido
+## Samuel — Paso 10: motor de sonido
+
+`web/src/audio/engine.ts` con Web Audio API. Los cálculos ya están en `mapping.ts`; falta hacerlos sonar.
 
 | Bloque | Tarea | Listo cuando |
 |---|---|---|
-| B1 · Sáb hasta 11:00 p.m. | Voz del bosque: la altura fija la nota dentro de una escala de cinco notas; paneo según la posición; volumen según la intensidad. Botón de inicio que desbloquea el audio. | Al mover el cursor sobre datos de ejemplo se oye el bosque cambiar de nota sin chasquidos |
-| B2 · Dom 7:00 a.m.–1:00 p.m. | Voz del humo (aspereza y timbre más oscuro) y voz del CO2 (pulso de respiración que se acelera). Mezcla de las tres con limitador. Interpolación en el tiempo para humo y CO2. | Con los ojos cerrados, alguien distingue qué capa suena y si el valor es alto o bajo en 4 de 5 intentos |
-| B3 · Dom 1:00–5:00 p.m. | Afinar el sonido con las 2 personas ajenas al equipo. Medir la latencia (máximo 100 ms) y probar 10 minutos seguidos sin cortes. | La lista de verificación de la demo queda en verde en la parte de sonido |
+| B1 · Sáb hasta 11:00 p.m. | Voz del bosque: nota dentro de la escala de cinco notas, paneo y volumen. Botón de inicio que desbloquea el audio. Cambios con rampas suaves. | Al mover el cursor se oye el bosque cambiar de nota sin chasquidos |
+| B2 · Dom 7:00 a.m.–1:00 p.m. | Voz del humo y voz del CO2. Mezcla de las tres con limitador y medidor de salida. | Con los ojos cerrados, alguien distingue qué capa suena y si el valor es alto o bajo en 4 de 5 intentos |
+| B3 · Dom 1:00–5:00 p.m. | Afinar con 2 personas ajenas al equipo. Medir la latencia (máximo 100 ms) y probar 10 minutos seguidos. | La parte de sonido de la lista de verificación queda en verde |
 
-Plan B: si hay chasquidos o latencia, cambiar parámetros con rampas suaves y usar muestras precargadas para el fondo. Si suena ruidoso, menos voces a la vez.
+**Ojo:** al cruzar el borde de la Amazonía el valor del bosque pasa de la cuadrícula detallada a la global, que es mucho más gruesa, y puede oírse un salto. Suaviza el volumen o la nota en ese cruce.
 
-## Fernando — Datos en Rust, servidor e integración
+Plan B: si hay chasquidos o latencia, usar muestras precargadas para el fondo y dejar la síntesis para la voz principal. Si suena ruidoso, menos voces a la vez.
 
-| Bloque | Tarea | Listo cuando |
-|---|---|---|
-| B0 · Sáb hasta 5:30 p.m. | Con Alberto y Andres David: descargar los cuadros de las tres visualizaciones (SVS 4950 bosque, 5533 humo, 5196 CO2) y fijar el rectángulo de la Amazonía. Generar los datos de ejemplo. | Hay un `manifest.json` de ejemplo que Samuel y Andres ya usan |
-| B1 · Sáb hasta 11:00 p.m. | Programa de preparación: de cuadro a cuadrícula de intensidades (barra de color o brillo), una global y una de la Amazonía, para la capa bosque. Servidor local que entrega la app. | La app carga datos reales del bosque desde el servidor local |
-| B2 · Dom 7:00 a.m.–1:00 p.m. | Capas humo y CO2 con sus instantes y fechas. Anotar cada archivo usado y su enlace en `data/SOURCES.md`. | Las tres capas cargan con datos reales y pesan menos de 200 MB en total |
-| B3 · Dom 1:00–5:00 p.m. | Integrar las tres ramas, `run-demo.sh`, y prueba con el cable de red desconectado en el portátil de la demo y en el de respaldo. | La app arranca y funciona sin internet en menos de 5 segundos |
-
-Plan B: si el trabajo en Rust se atrasa al cierre de B1, preparar los datos con un script y dejar Rust solo como servidor. Si una capa no tiene vista global plana, dejarla solo en el mapa de la Amazonía. Si a Andres le falta el planeta o la transición al cierre de B1, pasas a apoyar la interfaz.
-
-## Andres Navarro — Interfaz
+## Fernando — Pasos 11, 15 y 16: servidor, arranque sin internet y documentos
 
 | Bloque | Tarea | Listo cuando |
 |---|---|---|
-| B1 · Sáb hasta 11:00 p.m. | Planeta en 3D que gira, con la textura de la capa activa. Transición a la Amazonía: giro y aplanado, ida y vuelta en 2 segundos o menos. El punto bajo el cursor se convierte en latitud y longitud y se le pasa al sonido. | Se ve el bosque en el planeta y en el mapa de la Amazonía. **A las 11:00 p.m. se decide**: si no corre fluido, se pasa a planeta fijo con cambio directo al mapa |
-| B2 · Dom 7:00 a.m.–1:00 p.m. | Panel lateral de capas. Línea de tiempo con reproducir y pausar y las fechas visibles. Modo historia (planeta → Amazonía, tres pasos con texto corto). | El modo historia corre completo en menos de 60 segundos |
-| B2–B3 · Dom hasta 5:00 p.m. | Accesibilidad mínima: todo con teclado (capas, reproducir, flechas para mover el punto) y un texto que el lector de pantalla lee con la capa, el lugar y si el valor es bajo, medio o alto. Revisar 30 cuadros por segundo. | Alguien completa el modo historia sin ratón y con el lector de pantalla activo |
+| B1 · Sáb hasta 11:00 p.m. | Paso 11: servidor local en `server/` con Axum, que entrega la interfaz compilada y los datos en `127.0.0.1`. Ya están declaradas las dependencias; falta el código. | La app compilada se abre desde el servidor local |
+| B2 · Dom 7:00 a.m.–1:00 p.m. | Contenedor final de la app (interfaz compilada más servidor) en `docker-compose.yml`. Apoyar a Alberto y Andres David si hay que mejorar los datos. | `docker compose up` levanta la app completa |
+| B3 · Dom 1:00–5:00 p.m. | Paso 15: integrar las tres ramas, `run-demo.sh`, y probar con el cable de red desconectado en el portátil de la demo y en el de respaldo. Paso 16, con Danna: `docs/DEMO-CHECKLIST.md` y `docs/SUBMISSION.md` en inglés. | La app arranca sin internet en 5 segundos o menos |
+
+**Ojo:** el arranque sin red nunca se ha probado con la red cortada. Las imágenes de Docker tienen que estar construidas en el portátil antes de desconectarlo.
+
+Plan B: si a Andres le falta el planeta o la transición al cierre de B1, pasas a apoyar la interfaz y el servidor queda para el domingo temprano.
+
+## Andres Navarro — Pasos 12, 13 y 14: interfaz
+
+| Bloque | Tarea | Listo cuando |
+|---|---|---|
+| B1 · Sáb hasta 11:00 p.m. | Paso 12: planeta en 3D que gira con la textura de la capa activa; transición a la Amazonía (giro y aplanado, ida y vuelta en 2 segundos o menos); mapa regional. El punto bajo el cursor se convierte en longitud y latitud y se le pasa al sonido. | Se ve el bosque en el planeta y en el mapa. **A las 11:00 p.m. se decide**: si no corre fluido, planeta fijo con cambio directo al mapa |
+| B2 · Dom 7:00 a.m.–1:00 p.m. | Paso 13: panel lateral de capas, línea de tiempo con reproducir y pausar y las fechas visibles, modo historia (planeta → Amazonía, tres pasos con texto corto), pantalla de inicio. Todos los controles con `data-testid`. | El modo historia corre completo en menos de 60 segundos |
+| B2–B3 · Dom hasta 5:00 p.m. | Paso 14: todo con teclado y un texto que el lector de pantalla lee con la capa, el lugar y si el valor es bajo, medio o alto (`web/src/ui/a11y.ts` y su prueba). Revisar 30 cuadros por segundo. | Alguien completa el modo historia sin ratón y con el lector de pantalla activo |
+
+**Ojo:**
+- Cambia el título "Global CO2" en `data/prep-config.json` y regenera los datos antes de mostrarlo en el panel: la capa solo cubre la Amazonía.
+- Las texturas del humo y del CO2 son solo del primer instante. Para que imagen y sonido avancen juntos, dibújalas desde las cuadrículas.
+- Los instantes del humo se reparten a intervalos iguales, aunque en el video están a tiempos desiguales; las etiquetas muestran el tiempo del clip, no una fecha.
 
 Plan B: texturas más pequeñas primero; si no basta, planeta fijo sin giro libre y cambio directo al mapa, sin animación de aplanado.
 
@@ -58,9 +102,9 @@ Plan B: texturas más pequeñas primero; si no basta, planeta fijo sin giro libr
 
 | Hora | Qué se revisa |
 |---|---|
-| Sáb 5:30 p.m. | Datos de ejemplo listos y formato de datos acordado |
-| Sáb 11:00 p.m. | Una capa de punta a punta; decisión sobre el planeta |
+| Sáb 11:00 p.m. | Una capa de punta a punta (se ve y se oye); decisión sobre el planeta |
 | Dom 1:00 p.m. | Tres capas, línea de tiempo y modo historia |
 | Dom 5:00 p.m. | **No entra nada nuevo.** Desde aquí solo arreglos; Danna graba el video |
+| Dom 10:00 p.m. | Envío |
 
 Si un bloque se atrasa, se recorta en este orden: primero la capa CO2, luego la línea de tiempo queda en 3 instantes fijos, luego el modo historia se lee en vivo. El video y el formulario no se recortan.
