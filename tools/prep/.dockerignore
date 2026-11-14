@@ -1,0 +1,2 @@
+# Host build output (macOS/Windows binaries) must not reach the Linux image.
+target
