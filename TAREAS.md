@@ -1,4 +1,4 @@
-# Reparto de tareas — Samuel, Fernando y Andres Navarro
+# Reparto de tareas — Fernando, Andres Navarro y Samuel
 
 Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10:00 p.m., límite interno 11:50 p.m. (hora de Colombia).
 
@@ -53,11 +53,11 @@ docker compose run --rm prep            # regenerar los datos
 
 | Persona | Pasos del plan | Carpetas propias |
 |---|---|---|
-| Samuel Betancur Muñoz | 10 | `web/src/audio/`, `web/src/lib/` |
-| Fernando Gonzalez Rivero | 11, 15 y, con Danna, 16 | `tools/`, `server/`, `data/`, `web/public/data/`, `docker-compose.yml`, `run-demo.sh`, `docs/` |
-| Andres Navarro Marin | 12, 13 y 14 | `web/src/scene/`, `web/src/ui/`, `web/src/App.tsx` |
+| Fernando Gonzalez Rivero | 10 | `web/src/audio/`, `web/src/lib/` |
+| Andres Navarro Marin | 11, 15 y, con Danna, 16 | `tools/`, `server/`, `data/`, `web/public/data/`, `docker-compose.yml`, `run-demo.sh`, `docs/` |
+| Samuel Betancur Muñoz | 12, 13 y 14 | `web/src/scene/`, `web/src/ui/`, `web/src/App.tsx` |
 
-## Samuel — Paso 10: motor de sonido
+## Fernando — Paso 10: motor de sonido
 
 `web/src/audio/engine.ts` con Web Audio API. Los cálculos ya están en `mapping.ts`; falta hacerlos sonar.
 
@@ -71,7 +71,7 @@ docker compose run --rm prep            # regenerar los datos
 
 Plan B: si hay chasquidos o latencia, usar muestras precargadas para el fondo y dejar la síntesis para la voz principal. Si suena ruidoso, menos voces a la vez.
 
-## Fernando — Pasos 11, 15 y 16: servidor, arranque sin internet y documentos
+## Andres Navarro — Pasos 11, 15 y 16: servidor, arranque sin internet y documentos
 
 | Bloque | Tarea | Listo cuando |
 |---|---|---|
@@ -81,9 +81,9 @@ Plan B: si hay chasquidos o latencia, usar muestras precargadas para el fondo y 
 
 **Ojo:** el arranque sin red nunca se ha probado con la red cortada. Las imágenes de Docker tienen que estar construidas en el portátil antes de desconectarlo.
 
-Plan B: si a Andres le falta el planeta o la transición al cierre de B1, pasas a apoyar la interfaz y el servidor queda para el domingo temprano.
+Plan B: si a Samuel le falta el planeta o la transición al cierre de B1, pasas a apoyar la interfaz y el servidor queda para el domingo temprano.
 
-## Andres Navarro — Pasos 12, 13 y 14: interfaz
+## Samuel — Pasos 12, 13 y 14: interfaz
 
 | Bloque | Tarea | Listo cuando |
 |---|---|---|
