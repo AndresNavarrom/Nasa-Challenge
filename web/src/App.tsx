@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { AudioStart } from "./audio/AudioStart";
+import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
+import { sampleLayerAt } from "./lib/interpolate";
 
 type LoadState =
   | { status: "loading" }
@@ -14,6 +17,7 @@ type LoadState =
  */
 export default function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const engine = useSoundEngine();
 
   useEffect(() => {
     let cancelled = false;
@@ -31,11 +35,28 @@ export default function App() {
     };
   }, []);
 
+  // Temporary listening point: the centre of the Amazon at the first instant.
+  // Step 12 (the planet and the map) replaces this with the point under the cursor.
+  useEffect(() => {
+    if (state.status !== "ready") return;
+    const { data } = state;
+    const lon = (data.bbox.west + data.bbox.east) / 2;
+    const lat = (data.bbox.south + data.bbox.north) / 2;
+    for (const layer of data.layers) {
+      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, lon, lat, 0));
+    }
+    engine.setPan(0.5);
+  }, [engine, state]);
+
   return (
     <main className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-6 p-8">
       <header>
         <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
         <p className="mt-1 text-slate-300">Listen to the Amazon, the lungs of the world.</p>
+        <AudioStart engine={engine} className="mt-4" />
+        <p className="mt-2 text-xs text-slate-400">
+          Until the planet is wired (Step 12), the sound follows a fixed point at the centre of the Amazon.
+        </p>
       </header>
 
       {state.status === "loading" && (

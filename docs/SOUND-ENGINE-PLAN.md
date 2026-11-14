@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1–B2 implemented; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak); second browser pending
+Status: B1–B2 implemented; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak) and playback confirmed in Chromium; engine wired into `App.tsx` at a fixed Amazon point until Step 12
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
@@ -63,6 +63,7 @@ Exports the engine will use as-is:
 | `web/src/audio/smoothing.ts` | Pure one-pole smoother (testable without Web Audio). |
 | `web/src/audio/smoothing.test.ts` | Tests for the smoother. |
 | `web/src/audio/AudioStart.tsx` | Start and mute control (`data-testid` for Step 14). |
+| `web/src/audio/useSoundEngine.ts` | Owns one engine for the app lifetime (shared with Steps 12–14). |
 | `web/src/audio/testing/fakeAudioContext.ts` | Shared fake context for the unit and soak tests. |
 | `web/src/audio/engine.soak.test.ts` | 10-minute simulation, stop/start cycles and idempotent dispose. |
 | `web/audio-check.html`, `web/src/audio/check.ts` | Development-only page for B3 listening, latency and soak. |
