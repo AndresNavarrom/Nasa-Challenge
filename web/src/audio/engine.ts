@@ -1,15 +1,15 @@
-// Real-time sound engine (plan Step 10, block B1).
+// Real-time sound engine (plan Step 10).
 //
 // Headless by design: it owns the Web Audio graph and exposes a small API that
 // the scene and the controls (Steps 12-14) call. Nothing here reads the data
 // grids; the scene samples a place and a time and passes a value in 0..1, or
 // null where the layer has no data.
 //
-// The forest voice is implemented in this block. The smoke and CO2 voices are
-// block B2 of docs/SOUND-ENGINE-PLAN.md and are marked as such below.
+// Blocks B1 (forest voice) and B2 (smoke and CO2 voices, three-layer mix) are
+// implemented here. Block B3 is manual tuning and measurement.
 
-import type { LayerId } from "../data/types";
-import { clampUnit, forestToVoice, intensityToGain, positionToPan } from "./mapping";
+import { LAYER_IDS, type LayerId } from "../data/types";
+import { clampUnit, co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
 import { DEFAULT_SMOOTHING_SECONDS, OnePoleSmoother } from "./smoothing";
 
 export type SoundEngineState = "idle" | "running" | "suspended";
@@ -45,6 +45,9 @@ const START_FADE_SECONDS = 0.2;
 const STOP_FADE_SECONDS = 0.2;
 const FOREST_HARMONY_MIX = 0.35;
 const FOREST_LOWPASS_HZ = 4000;
+const SMOKE_TONE_HZ = 180;
+const CO2_NOISE_MIX = 0.5;
+const NOISE_SECONDS = 2;
 
 interface ForestVoice {
   main: OscillatorNode;
@@ -55,12 +58,50 @@ interface ForestVoice {
   panner: StereoPannerNode;
 }
 
+interface SmokeVoice {
+  noiseGain: GainNode;
+  tone: OscillatorNode;
+  toneGain: GainNode;
+  filter: BiquadFilterNode;
+  tremolo: GainNode;
+  tremoloDepth: GainNode;
+  lfo: OscillatorNode;
+  gain: GainNode;
+  panner: StereoPannerNode;
+}
+
+interface Co2Voice {
+  noiseGain: GainNode;
+  tone: OscillatorNode;
+  toneGain: GainNode;
+  filter: BiquadFilterNode;
+  breath: GainNode;
+  breathDepth: GainNode;
+  lfo: OscillatorNode;
+  gain: GainNode;
+  panner: StereoPannerNode;
+}
+
 interface EngineGraph {
+  noise: AudioBufferSourceNode;
   bus: GainNode;
   limiter: DynamicsCompressorNode;
   master: GainNode;
   analyser: AnalyserNode;
   forest: ForestVoice;
+  smoke: SmokeVoice;
+  co2: Co2Voice;
+}
+
+interface LayerRuntime {
+  value: number | null;
+  enabled: boolean;
+  smoother: OnePoleSmoother;
+  lastUpdateTime: number;
+}
+
+function makeLayerRuntime(): LayerRuntime {
+  return { value: null, enabled: true, smoother: new OnePoleSmoother(0), lastUpdateTime: 0 };
 }
 
 /** Schedules a glide; setTargetAtTime reaches ~95% of the distance in 3 time constants. */
@@ -78,10 +119,11 @@ export class WebAudioSoundEngine implements SoundEngine {
   private currentState: SoundEngineState = "idle";
   private volume = DEFAULT_VOLUME;
   private lastPan = 0.5;
-  private pendingForest: number | null = null;
-  private forestEnabled = true;
-  private readonly forestSmoother = new OnePoleSmoother(0);
-  private lastUpdateTime = 0;
+  private readonly layers: Record<LayerId, LayerRuntime> = {
+    forest: makeLayerRuntime(),
+    smoke: makeLayerRuntime(),
+    co2: makeLayerRuntime(),
+  };
   private levelBuffer: Float32Array | undefined;
   private suspendTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -114,12 +156,12 @@ export class WebAudioSoundEngine implements SoundEngine {
       master.linearRampToValueAtTime(this.volume, now + START_FADE_SECONDS);
     }
 
-    this.lastUpdateTime = now;
     this.currentState = "running";
-    this.applyForestIntensity(this.pendingForest, true);
-    if (this.graph) {
-      rampParameter(this.graph.forest.panner.pan, positionToPan(this.lastPan), now, this.rampSeconds);
+    for (const layer of LAYER_IDS) {
+      this.layers[layer].lastUpdateTime = now;
+      this.applyLayer(layer, true);
     }
+    this.applyPan(now);
   }
 
   stop(): void {
@@ -142,31 +184,23 @@ export class WebAudioSoundEngine implements SoundEngine {
   }
 
   setLayerIntensity(layer: LayerId, value: number | null): void {
-    if (layer === "forest") {
-      this.pendingForest = value === null ? null : clampUnit(value);
-      if (this.currentState === "running") {
-        this.applyForestIntensity(this.pendingForest, false);
-      }
-      return;
+    this.layers[layer].value = value === null ? null : clampUnit(value);
+    if (this.currentState === "running") {
+      this.applyLayer(layer, false);
     }
-    // TODO(Step 10 / block B2): the smoke and CO2 voices are built in block B2.
   }
 
   setLayerEnabled(layer: LayerId, enabled: boolean): void {
-    if (layer !== "forest") {
-      // TODO(Step 10 / block B2): the smoke and CO2 voices are built in block B2.
-      return;
-    }
-    this.forestEnabled = enabled;
+    this.layers[layer].enabled = enabled;
     if (this.currentState === "running") {
-      this.applyForestIntensity(this.pendingForest, false);
+      this.applyLayer(layer, false);
     }
   }
 
   setPan(horizontal: number): void {
     this.lastPan = clampUnit(horizontal);
-    if (this.currentState === "running" && this.context && this.graph) {
-      rampParameter(this.graph.forest.panner.pan, positionToPan(this.lastPan), this.context.currentTime, this.rampSeconds);
+    if (this.currentState === "running" && this.context) {
+      this.applyPan(this.context.currentTime);
     }
   }
 
@@ -197,17 +231,54 @@ export class WebAudioSoundEngine implements SoundEngine {
 
     const graph = this.graph;
     if (graph) {
+      const oscillators = [
+        graph.forest.main,
+        graph.forest.harmony,
+        graph.smoke.tone,
+        graph.smoke.lfo,
+        graph.co2.tone,
+        graph.co2.lfo,
+      ];
+      for (const oscillator of oscillators) {
+        try {
+          oscillator.stop();
+        } catch {
+          // Already stopped.
+        }
+      }
       try {
-        graph.forest.main.stop();
+        graph.noise.stop();
       } catch {
         // Already stopped.
       }
-      try {
-        graph.forest.harmony.stop();
-      } catch {
-        // Already stopped.
-      }
-      for (const node of [graph.forest.main, graph.forest.harmony, graph.forest.harmonyGain, graph.forest.filter, graph.forest.gain, graph.forest.panner, graph.bus, graph.limiter, graph.master, graph.analyser]) {
+
+      const nodes: AudioNode[] = [
+        ...oscillators,
+        graph.noise,
+        graph.forest.harmonyGain,
+        graph.forest.filter,
+        graph.forest.gain,
+        graph.forest.panner,
+        graph.smoke.noiseGain,
+        graph.smoke.toneGain,
+        graph.smoke.filter,
+        graph.smoke.tremolo,
+        graph.smoke.tremoloDepth,
+        graph.smoke.gain,
+        graph.smoke.panner,
+        graph.co2.noiseGain,
+        graph.co2.toneGain,
+        graph.co2.filter,
+        graph.co2.breath,
+        graph.co2.breathDepth,
+        graph.co2.gain,
+        graph.co2.panner,
+        graph.bus,
+        graph.limiter,
+        graph.master,
+        graph.analyser,
+      ];
+      for (const node of nodes) {
         node.disconnect();
       }
     }
@@ -221,28 +292,65 @@ export class WebAudioSoundEngine implements SoundEngine {
     }
   }
 
-  private applyForestIntensity(value: number | null, snap: boolean): void {
+  private applyLayer(layer: LayerId, snap: boolean): void {
     const context = this.context;
-    const forest = this.graph?.forest;
-    if (!context || !forest) return;
+    const graph = this.graph;
+    if (!context || !graph) return;
 
+    const runtime = this.layers[layer];
     const now = context.currentTime;
     if (snap) {
-      this.forestSmoother.reset(value ?? 0);
+      runtime.smoother.reset(runtime.value ?? 0);
     } else {
-      const dt = Math.max(0, Math.min(0.25, now - this.lastUpdateTime));
-      this.forestSmoother.setTarget(value ?? 0);
-      this.forestSmoother.advance(dt, this.smoothingSeconds);
+      const dt = Math.max(0, Math.min(0.25, now - runtime.lastUpdateTime));
+      runtime.smoother.setTarget(runtime.value ?? 0);
+      runtime.smoother.advance(dt, this.smoothingSeconds);
     }
-    this.lastUpdateTime = now;
+    runtime.lastUpdateTime = now;
 
-    const smoothed = this.forestSmoother.value;
-    const voice = forestToVoice(smoothed);
-    const gain = value === null || !this.forestEnabled ? 0 : intensityToGain(smoothed);
+    const smoothed = runtime.smoother.value;
+    const gain = runtime.value === null || !runtime.enabled ? 0 : intensityToGain(smoothed);
 
-    rampParameter(forest.main.frequency, voice.frequency, now, this.rampSeconds);
-    rampParameter(forest.harmony.frequency, voice.harmonyFrequency, now, this.rampSeconds);
-    rampParameter(forest.gain.gain, gain, now, this.rampSeconds);
+    if (layer === "forest") {
+      const voice = forestToVoice(smoothed);
+      rampParameter(graph.forest.main.frequency, voice.frequency, now, this.rampSeconds);
+      rampParameter(graph.forest.harmony.frequency, voice.harmonyFrequency, now, this.rampSeconds);
+      rampParameter(graph.forest.gain.gain, gain, now, this.rampSeconds);
+      return;
+    }
+
+    if (layer === "smoke") {
+      const timbre = smokeToTimbre(smoothed);
+      const depth = timbre.roughness * 0.5;
+      rampParameter(graph.smoke.filter.frequency, timbre.filterCutoffHz, now, this.rampSeconds);
+      rampParameter(graph.smoke.noiseGain.gain, timbre.noiseMix, now, this.rampSeconds);
+      rampParameter(graph.smoke.toneGain.gain, 1 - timbre.noiseMix, now, this.rampSeconds);
+      rampParameter(graph.smoke.lfo.frequency, timbre.roughnessRateHz, now, this.rampSeconds);
+      rampParameter(graph.smoke.tremoloDepth.gain, depth, now, this.rampSeconds);
+      rampParameter(graph.smoke.tremolo.gain, 1 - depth, now, this.rampSeconds);
+      rampParameter(graph.smoke.gain.gain, gain, now, this.rampSeconds);
+      return;
+    }
+
+    const breath = co2ToBreath(smoothed);
+    const depth = breath.depth * 0.5;
+    rampParameter(graph.co2.filter.frequency, Math.min(FOREST_LOWPASS_HZ, breath.toneHz * 3), now, this.rampSeconds);
+    rampParameter(graph.co2.noiseGain.gain, CO2_NOISE_MIX, now, this.rampSeconds);
+    rampParameter(graph.co2.toneGain.gain, 1 - CO2_NOISE_MIX, now, this.rampSeconds);
+    rampParameter(graph.co2.tone.frequency, breath.toneHz, now, this.rampSeconds);
+    rampParameter(graph.co2.lfo.frequency, breath.rateHz, now, this.rampSeconds);
+    rampParameter(graph.co2.breathDepth.gain, depth, now, this.rampSeconds);
+    rampParameter(graph.co2.breath.gain, 1 - depth, now, this.rampSeconds);
+    rampParameter(graph.co2.gain.gain, gain, now, this.rampSeconds);
+  }
+
+  private applyPan(now: number): void {
+    const graph = this.graph;
+    if (!graph) return;
+    const pan = positionToPan(this.lastPan);
+    rampParameter(graph.forest.panner.pan, pan, now, this.rampSeconds);
+    rampParameter(graph.smoke.panner.pan, pan, now, this.rampSeconds);
+    rampParameter(graph.co2.panner.pan, pan, now, this.rampSeconds);
   }
 
   private buildGraph(): void {
@@ -271,8 +379,27 @@ export class WebAudioSoundEngine implements SoundEngine {
     master.connect(analyser);
     analyser.connect(context.destination);
 
+    const noise = this.buildNoiseSource(context);
     const forest = this.buildForestVoice(context, bus);
-    this.graph = { bus, limiter, master, analyser, forest };
+    const smoke = this.buildSmokeVoice(context, bus, noise);
+    const co2 = this.buildCo2Voice(context, bus, noise);
+
+    this.graph = { noise, bus, limiter, master, analyser, forest, smoke, co2 };
+  }
+
+  /** One looping white-noise buffer shared by the smoke and CO2 voices. */
+  private buildNoiseSource(context: AudioContext): AudioBufferSourceNode {
+    const length = Math.max(1, Math.floor(context.sampleRate * NOISE_SECONDS));
+    const buffer = context.createBuffer(1, length, context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    for (let index = 0; index < samples.length; index += 1) {
+      samples[index] = Math.random() * 2 - 1;
+    }
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.start();
+    return source;
   }
 
   private buildForestVoice(context: AudioContext, bus: GainNode): ForestVoice {
@@ -311,6 +438,104 @@ export class WebAudioSoundEngine implements SoundEngine {
     harmony.start();
 
     return { main, harmony, harmonyGain, filter, gain, panner };
+  }
+
+  private buildSmokeVoice(context: AudioContext, bus: GainNode, noise: AudioBufferSourceNode): SmokeVoice {
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1200;
+    filter.Q.value = 0.8;
+
+    const noiseGain = context.createGain();
+    noiseGain.gain.value = 0.3;
+
+    const tone = context.createOscillator();
+    tone.type = "sine";
+    tone.frequency.value = SMOKE_TONE_HZ;
+
+    const toneGain = context.createGain();
+    toneGain.gain.value = 0.5;
+
+    const tremolo = context.createGain();
+    tremolo.gain.value = 1;
+
+    const tremoloDepth = context.createGain();
+    tremoloDepth.gain.value = 0;
+
+    const lfo = context.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 18;
+
+    const gain = context.createGain();
+    gain.gain.value = 0;
+
+    const panner = context.createStereoPanner();
+    panner.pan.value = positionToPan(0.5);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(tremolo);
+    tone.connect(toneGain);
+    toneGain.connect(tremolo);
+    lfo.connect(tremoloDepth);
+    tremoloDepth.connect(tremolo.gain);
+    tremolo.connect(gain);
+    gain.connect(panner);
+    panner.connect(bus);
+
+    tone.start();
+    lfo.start();
+
+    return { noiseGain, tone, toneGain, filter, tremolo, tremoloDepth, lfo, gain, panner };
+  }
+
+  private buildCo2Voice(context: AudioContext, bus: GainNode, noise: AudioBufferSourceNode): Co2Voice {
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1200;
+    filter.Q.value = 0.7;
+
+    const noiseGain = context.createGain();
+    noiseGain.gain.value = CO2_NOISE_MIX;
+
+    const tone = context.createOscillator();
+    tone.type = "sine";
+    tone.frequency.value = 520;
+
+    const toneGain = context.createGain();
+    toneGain.gain.value = 1 - CO2_NOISE_MIX;
+
+    const breath = context.createGain();
+    breath.gain.value = 1;
+
+    const breathDepth = context.createGain();
+    breathDepth.gain.value = 0;
+
+    const lfo = context.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.3;
+
+    const gain = context.createGain();
+    gain.gain.value = 0;
+
+    const panner = context.createStereoPanner();
+    panner.pan.value = positionToPan(0.5);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(breath);
+    tone.connect(toneGain);
+    toneGain.connect(breath);
+    lfo.connect(breathDepth);
+    breathDepth.connect(breath.gain);
+    breath.connect(gain);
+    gain.connect(panner);
+    panner.connect(bus);
+
+    tone.start();
+    lfo.start();
+
+    return { noiseGain, tone, toneGain, filter, breath, breathDepth, lfo, gain, panner };
   }
 
   private clearSuspendTimer(): void {

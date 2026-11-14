@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSoundEngine } from "./engine";
-import { forestToVoice, intensityToGain, positionToPan } from "./mapping";
+import { co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
 
 interface ParamEvent {
   method: string;
@@ -33,8 +33,8 @@ class FakeParam {
 }
 
 class FakeNode {
-  readonly connections: FakeNode[] = [];
-  readonly connect = vi.fn((target: FakeNode): FakeNode => {
+  readonly connections: unknown[] = [];
+  readonly connect = vi.fn((target: unknown): unknown => {
     this.connections.push(target);
     return target;
   });
@@ -78,14 +78,41 @@ class FakeAnalyser extends FakeNode {
   });
 }
 
+class FakeAudioBuffer {
+  readonly channels: Float32Array[];
+
+  constructor(
+    readonly numberOfChannels: number,
+    readonly length: number,
+    readonly sampleRate: number,
+  ) {
+    this.channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+  }
+
+  getChannelData(channel: number): Float32Array {
+    return this.channels[channel] ?? new Float32Array(this.length);
+  }
+}
+
+class FakeBufferSource extends FakeNode {
+  buffer: FakeAudioBuffer | null = null;
+  loop = false;
+  readonly start = vi.fn();
+  readonly stop = vi.fn();
+}
+
 class FakeAudioContext {
   currentTime = 0;
+  sampleRate = 48000;
   state: "suspended" | "running" | "closed" = "suspended";
   readonly destination = new FakeNode();
   readonly gains: FakeGain[] = [];
   readonly oscillators: FakeOscillator[] = [];
+  readonly filters: FakeBiquad[] = [];
   readonly panners: FakePanner[] = [];
   readonly analysers: FakeAnalyser[] = [];
+  readonly buffers: FakeAudioBuffer[] = [];
+  readonly bufferSources: FakeBufferSource[] = [];
   readonly resume = vi.fn(async (): Promise<void> => {
     this.state = "running";
   });
@@ -109,7 +136,9 @@ class FakeAudioContext {
   }
 
   createBiquadFilter(): FakeBiquad {
-    return new FakeBiquad();
+    const node = new FakeBiquad();
+    this.filters.push(node);
+    return node;
   }
 
   createStereoPanner(): FakePanner {
@@ -127,6 +156,18 @@ class FakeAudioContext {
     this.analysers.push(node);
     return node;
   }
+
+  createBuffer(numberOfChannels: number, length: number, sampleRate: number): FakeAudioBuffer {
+    const buffer = new FakeAudioBuffer(numberOfChannels, length, sampleRate);
+    this.buffers.push(buffer);
+    return buffer;
+  }
+
+  createBufferSource(): FakeBufferSource {
+    const node = new FakeBufferSource();
+    this.bufferSources.push(node);
+    return node;
+  }
 }
 
 function setup() {
@@ -139,9 +180,14 @@ function setup() {
   return { context, engine };
 }
 
-function voiceGain(context: FakeAudioContext): FakeGain {
-  const node = context.gains.find((candidate) => candidate.connections.some((target) => target instanceof FakePanner));
-  if (!node) throw new Error("the forest voice gain was not created");
+/** Voice gains in creation order: forest, smoke, CO2 (each connects to its panner). */
+function layerVoiceGains(context: FakeAudioContext): FakeGain[] {
+  return context.gains.filter((candidate) => candidate.connections.some((target) => target instanceof FakePanner));
+}
+
+function layerVoiceGain(context: FakeAudioContext, index: number): FakeGain {
+  const node = layerVoiceGains(context)[index];
+  if (!node) throw new Error(`the voice gain ${index} was not created`);
   return node;
 }
 
@@ -151,57 +197,79 @@ function masterGain(context: FakeAudioContext): FakeGain {
   return node;
 }
 
-describe("sound engine (block B1)", () => {
-  it("builds the graph once and reuses it when start is called again", async () => {
+describe("sound engine", () => {
+  it("builds all three voices once and reuses the graph when start is called again", async () => {
     const { context, engine } = setup();
     await engine.start();
-    expect(context.oscillators).toHaveLength(2);
+    expect(context.oscillators).toHaveLength(6);
+    expect(context.bufferSources).toHaveLength(1);
+    expect(context.panners).toHaveLength(3);
     expect(context.resume).toHaveBeenCalledTimes(1);
 
     await engine.start();
-    expect(context.oscillators).toHaveLength(2);
+    expect(context.oscillators).toHaveLength(6);
     expect(context.resume).toHaveBeenCalledTimes(1);
     engine.dispose();
   });
 
-  it("turns a forest value into a pentatonic note and pans the voice", async () => {
+  it("turns a forest value into a pentatonic note", async () => {
     const { context, engine } = setup();
     engine.setLayerIntensity("forest", 1);
-    engine.setPan(0.9);
     await engine.start();
 
-    const [main, harmony] = context.oscillators;
     const voice = forestToVoice(1);
-    expect(main?.frequency.value).toBeCloseTo(voice.frequency, 6);
-    expect(harmony?.frequency.value).toBeCloseTo(voice.harmonyFrequency, 6);
-    expect(context.panners[0]?.pan.value).toBeCloseTo(positionToPan(0.9), 6);
+    expect(context.oscillators[0]?.frequency.value).toBeCloseTo(voice.frequency, 6);
+    expect(context.oscillators[1]?.frequency.value).toBeCloseTo(voice.harmonyFrequency, 6);
     engine.dispose();
   });
 
-  it("goes silent where the layer has no data and comes back when data returns", async () => {
+  it("makes smoke rougher and darker as its value rises", async () => {
+    const { context, engine } = setup();
+    engine.setLayerIntensity("smoke", 0.9);
+    await engine.start();
+
+    const timbre = smokeToTimbre(0.9);
+    expect(context.filters[1]?.frequency.value).toBeCloseTo(timbre.filterCutoffHz, 6);
+    expect(context.oscillators[3]?.frequency.value).toBeCloseTo(timbre.roughnessRateHz, 6);
+    expect(context.gains[4]?.gain.value).toBeCloseTo(timbre.noiseMix, 6);
+    expect(layerVoiceGain(context, 1).gain.value).toBeGreaterThan(0);
+    engine.dispose();
+  });
+
+  it("makes breathing faster and lower as CO2 rises", async () => {
+    const { context, engine } = setup();
+    engine.setLayerIntensity("co2", 0.9);
+    await engine.start();
+
+    const breath = co2ToBreath(0.9);
+    expect(context.oscillators[4]?.frequency.value).toBeCloseTo(breath.toneHz, 6);
+    expect(context.oscillators[5]?.frequency.value).toBeCloseTo(breath.rateHz, 6);
+    expect(context.filters[2]?.frequency.value).toBeCloseTo(Math.min(4000, breath.toneHz * 3), 6);
+    expect(layerVoiceGain(context, 2).gain.value).toBeGreaterThan(0);
+    engine.dispose();
+  });
+
+  it("silences a layer where it has no data and brings it back when data returns", async () => {
     const { context, engine } = setup();
     await engine.start();
-    const gain = voiceGain(context);
 
-    context.currentTime = 0.02;
-    engine.setLayerIntensity("forest", 1);
-    expect(gain.gain.value).toBeGreaterThan(0);
-    expect(gain.gain.value).toBeLessThanOrEqual(intensityToGain(1));
+    for (const index of [0, 1, 2]) {
+      const gain = layerVoiceGain(context, index);
+      context.currentTime = 0.02;
+      engine.setLayerIntensity(index === 0 ? "forest" : index === 1 ? "smoke" : "co2", 0.7);
+      expect(gain.gain.value).toBeGreaterThan(0);
 
-    context.currentTime = 0.04;
-    engine.setLayerIntensity("forest", null);
-    expect(gain.gain.value).toBe(0);
-
-    context.currentTime = 0.06;
-    engine.setLayerIntensity("forest", 0.8);
-    expect(gain.gain.value).toBeGreaterThan(0);
+      context.currentTime += 0.02;
+      engine.setLayerIntensity(index === 0 ? "forest" : index === 1 ? "smoke" : "co2", null);
+      expect(gain.gain.value).toBe(0);
+    }
     engine.dispose();
   });
 
   it("schedules ramps instead of setting parameters instantly", async () => {
     const { context, engine } = setup();
     await engine.start();
-    const gain = voiceGain(context);
+    const gain = layerVoiceGain(context, 0);
 
     context.currentTime = 0.05;
     engine.setLayerIntensity("forest", 0.5);
@@ -210,20 +278,36 @@ describe("sound engine (block B1)", () => {
     engine.dispose();
   });
 
-  it("mutes the forest when the layer is disabled", async () => {
+  it("mutes one layer without touching the others", async () => {
     const { context, engine } = setup();
+    engine.setLayerIntensity("smoke", 0.8);
+    engine.setLayerIntensity("co2", 0.8);
     await engine.start();
-    const gain = voiceGain(context);
+    const smoke = layerVoiceGain(context, 1);
+    const co2 = layerVoiceGain(context, 2);
 
-    context.currentTime = 0.02;
-    engine.setLayerIntensity("forest", 1);
-    expect(gain.gain.value).toBeGreaterThan(0);
+    expect(smoke.gain.value).toBeGreaterThan(0);
+    engine.setLayerEnabled("smoke", false);
+    expect(smoke.gain.value).toBe(0);
+    expect(co2.gain.value).toBeGreaterThan(0);
+    engine.dispose();
+  });
 
-    engine.setLayerEnabled("forest", false);
-    expect(gain.gain.value).toBe(0);
+  it("keeps all three layers audible together and pans them as one", async () => {
+    const { context, engine } = setup();
+    engine.setLayerIntensity("forest", 0.7);
+    engine.setLayerIntensity("smoke", 0.7);
+    engine.setLayerIntensity("co2", 0.7);
+    engine.setPan(0.2);
+    await engine.start();
 
-    engine.setLayerEnabled("forest", true);
-    expect(gain.gain.value).toBeGreaterThan(0);
+    for (const gain of layerVoiceGains(context)) {
+      expect(gain.gain.value).toBeGreaterThan(0);
+      expect(gain.gain.value).toBeLessThanOrEqual(intensityToGain(0.7));
+    }
+    for (const panner of context.panners) {
+      expect(panner.pan.value).toBeCloseTo(positionToPan(0.2), 6);
+    }
     engine.dispose();
   });
 
@@ -237,8 +321,12 @@ describe("sound engine (block B1)", () => {
     expect(engine.state).toBe("suspended");
 
     engine.dispose();
-    expect(context.oscillators[0]?.stop).toHaveBeenCalled();
-    expect(context.oscillators[0]?.disconnect).toHaveBeenCalled();
+    for (const oscillator of context.oscillators) {
+      expect(oscillator.stop).toHaveBeenCalled();
+      expect(oscillator.disconnect).toHaveBeenCalled();
+    }
+    expect(context.bufferSources[0]?.stop).toHaveBeenCalled();
+    expect(context.bufferSources[0]?.disconnect).toHaveBeenCalled();
     expect(engine.state).toBe("idle");
   });
 
@@ -247,14 +335,5 @@ describe("sound engine (block B1)", () => {
     await engine.start();
     expect(engine.getOutputLevel()).toBeCloseTo(0.25, 6);
     engine.dispose();
-  });
-
-  it("leaves the smoke and CO2 voices for block B2", () => {
-    const { context, engine } = setup();
-    engine.setLayerIntensity("smoke", 0.5);
-    engine.setLayerIntensity("co2", 0.5);
-    engine.setLayerEnabled("smoke", false);
-    expect(context.oscillators).toHaveLength(0);
-    expect(context.gains).toHaveLength(0);
   });
 });

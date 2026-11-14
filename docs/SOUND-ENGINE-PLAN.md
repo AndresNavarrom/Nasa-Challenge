@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1 implemented (forest voice, start/mute control, tests); B2–B3 pending
+Status: B1 and B2 implemented (three voices, mix, meter, tests); B3 (tuning and measurement) pending
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
