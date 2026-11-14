@@ -4,9 +4,27 @@
 
 - **Interfaz y sonido**: Vitest, configurado en `web/vitest.config.ts`, entorno `node` (las funciones probadas son puras y no necesitan navegador).
 - **Preparación de datos**: pruebas integradas de Rust dentro de `tools/prep/src/`.
-- Requisitos: Node.js 20 o superior y Rust estable con `cargo`.
+- Requisitos: Docker Desktop. Sin Docker: Node.js 20 o superior y Rust estable con `cargo`.
 
 ## Cómo correr las pruebas de este trabajo
+
+### Con Docker (la forma del equipo)
+
+El equipo corre todo en contenedores; solo hace falta Docker Desktop. Desde la raíz del proyecto:
+
+```bash
+docker compose run --rm web-test
+```
+
+```bash
+docker compose run --rm prep-test
+```
+
+`web-test` corre los archivos de prueba de `web/src/` que existan; `prep-test` corre `cargo test` en `tools/prep/`.
+
+### Sin Docker
+
+`src/ui/a11y.test.ts` aparece con el Step 14; hasta entonces, quitarlo del comando de abajo.
 
 Desde la raíz del proyecto, primero instalar una vez las dependencias de la interfaz:
 
