@@ -83,10 +83,11 @@ Pass: **≤ 100 ms** perceived latency.
 Pass: no dropouts, no clicks, no errors in the console, and the timer reaches
 10 minutes with the sound still running.
 
-## 7. Amazon border (after Step 12)
+## 7. Amazon border (scene wired)
 
-This needs the scene: the forest jumps from the detailed regional grid to the
-coarse global grid at the Amazon rectangle. With the scene wired:
+The scene now publishes the listening point, so this is testable: the forest
+jumps from the detailed regional grid to the coarse global grid at the Amazon
+rectangle.
 
 1. Move the listened point slowly across the rectangle edge.
 2. Listen for a click or a jump.

@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1–B2 implemented; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak) and playback confirmed in Chromium; engine wired into `App.tsx` at a fixed Amazon point until Step 12
+Status: B1–B2 implemented; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak) and playback confirmed in Chromium; engine wired into `App.tsx` and driven by the scene's listening point (Step 12). Frame position is still the first instant until Step 13's timeline.
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
@@ -163,6 +163,11 @@ export function createSoundEngine(options?: {
   animation frame; the engine coalesces repeated calls and schedules at most one
   parameter update per frame per voice.
 - `setPan` follows the same rule.
+- The scene publishes the point under the cursor through
+  `web/src/scene/listeningPoint.tsx` (Step 12). `AudioListener` in `App.tsx`
+  reads it, samples every layer and calls `setLayerIntensity` and `setPan`;
+  when the point is `null` (outside the planet/map, or during the transition)
+  all layers go silent. The frame position is 0 until Step 13's timeline exists.
 - The engine never reads the grids itself; that keeps sampling testable and the
   audio code independent of the data format.
 
