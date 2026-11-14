@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: planned
+Status: B1 implemented (forest voice, start/mute control, tests); B2–B3 pending
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
