@@ -1,0 +1,39 @@
+import { describe, expect, it } from "vitest";
+import type { Grid } from "../data/types";
+import { FIRST_INSTANT, LAYER_RAMPS, NEUTRAL_RAMP, gridToRgba, rampFor, type ColorRamp } from "./layerTexture";
+
+const TEST_RAMP: ColorRamp = { low: [0, 0, 0], high: [255, 100, 50], maxAlpha: 1 };
+
+describe("gridToRgba (FR1.2)", () => {
+  it("turns the first instant of a 2 x 2 grid into the expected colours and transparencies", () => {
+    // Two instants; the second one is all 255 so reading it by mistake shows up.
+    const grid: Grid = { width: 2, height: 2, frames: 2, data: Uint8Array.from([0, 255, 51, 102, 255, 255, 255, 255]) };
+
+    const pixels = gridToRgba(grid, FIRST_INSTANT, TEST_RAMP, "smoke");
+
+    expect(Array.from(pixels)).toEqual([
+      0, 0, 0, 0, // value 0: low colour, fully transparent
+      255, 100, 50, 255, // value 255: high colour, opaque
+      51, 20, 10, 51, // value 51 (20 %)
+      102, 40, 20, 102, // value 102 (40 %)
+    ]);
+
+    // Ramps are chosen from the data's layer ids, with a neutral fallback (FR1.3).
+    expect(rampFor("forest")).toBe(LAYER_RAMPS.forest);
+    expect(rampFor("aerosol")).toBe(rampFor("smoke"));
+    expect(rampFor("a-layer-added-later")).toBe(NEUTRAL_RAMP);
+  });
+});
+
+describe("gridToRgba errors (FR1.3)", () => {
+  it("fails with a message naming the layer when the grid has fewer bytes than declared", () => {
+    const shortGrid: Grid = { width: 2, height: 2, frames: 2, data: Uint8Array.from([1, 2, 3, 4, 5]) };
+
+    expect(() => gridToRgba(shortGrid, FIRST_INSTANT, TEST_RAMP, "co2")).toThrow(
+      'Layer "co2": its grid has 5 bytes but 2 x 2 x 2 = 8 are declared.',
+    );
+
+    const grid: Grid = { width: 1, height: 1, frames: 1, data: Uint8Array.from([7]) };
+    expect(() => gridToRgba(grid, 1, TEST_RAMP, "forest")).toThrow(/Layer "forest": instant 1 does not exist/);
+  });
+});
