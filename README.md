@@ -25,7 +25,8 @@ This repository is the **shared base** of the build. What is in place:
 | Planet, Amazon map, transition, panels, story mode, accessibility | `web/src/scene/`, `web/src/ui/` | To build (`App.tsx` is a starting shell that lists the loaded layers) |
 | Docker containers to run, test and prepare the data | `docker-compose.yml`, `web/Dockerfile`, `tools/prep/Dockerfile` | Done |
 | Final app container (built interface + local server) | `Dockerfile`, service `app` | Done |
-| `run-demo.sh`, demo checklist, submission drafts | — | To build |
+| Demo launcher | `run-demo.sh`, `run-demo.ps1` | Done |
+| Demo checklist, submission drafts | `docs/DEMO-CHECKLIST.md`, `docs/SUBMISSION.md` | Drafts |
 
 ## Project layout
 
@@ -35,6 +36,8 @@ tools/prep/       Rust program: NASA frames -> intensity grids + textures + mani
 tools/fetch-frames.sh  downloads the NASA frames into data/raw/
 server/           Rust (Axum) static server for 127.0.0.1: serves web/dist
 Dockerfile        final app image: built interface + release server binary
+run-demo.sh       demo launcher (run-demo.ps1 on Windows PowerShell)
+docs/             demo checklist and submission drafts
 data/             prep-config.json, SOURCES.md, raw/ (downloaded frames, not versioned)
 web/public/data/  prepared data shipped with the app
 docker-compose.yml  services to run, test and prepare the data in containers
@@ -62,6 +65,20 @@ other service sits behind a profile (so that `docker compose up` never starts
 them by accident).
 
 ### 2. Run the app (the demo)
+
+The quickest way, which also checks that Docker is running and the image is
+built, waits for the app and opens the browser:
+
+```bash
+./run-demo.sh --build     # once, with internet
+./run-demo.sh             # every time after, works offline; --stop to stop it
+```
+
+On Windows PowerShell: `.\run-demo.ps1 -Build`, then `.\run-demo.ps1` (and
+`-Stop`). If scripts are blocked, run
+`powershell -ExecutionPolicy Bypass -File .\run-demo.ps1`.
+
+The same with Docker Compose directly:
 
 ```bash
 docker compose build app        # needs internet; again after any change to web/ or server/
