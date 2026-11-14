@@ -1,23 +1,131 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AudioStart } from "./audio/AudioStart";
 import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
+import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
+import type { ViewMode } from "./scene/FocusTransition";
+import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
+import { PlanetHud } from "./ui/PlanetHud";
 
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; data: JukeboxData }
   | { status: "error"; message: string };
 
+/** Plan B switch: `?lite=1` in the address (half-resolution planet image, instant view changes). */
+function readLiteMode(search: string): boolean {
+  return new URLSearchParams(search).get("lite") === "1";
+}
+
+/** Layer shown first: the first one with a whole-planet grid (forest today), else the first listed. */
+function defaultLayerId(data: JukeboxData): string {
+  const withGlobal = data.layers.find((layer) => layer.global !== null) ?? data.layers[0];
+  return withGlobal?.manifest.id ?? "";
+}
+
+/** The planet, the Amazon map and their controls, once the data is loaded. */
+function PlanetView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+  const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
+  const [targetView, setTargetView] = useState<TargetView>("globe");
+  const [mode, setMode] = useState<ViewMode>("globe");
+  const [probe, setProbe] = useState<Probe | null>(null);
+  const [fps, setFps] = useState<number | null>(null);
+  const [sceneError, setSceneError] = useState<string | null>(null);
+
+  const activeLayer = useMemo(
+    () => data.layers.find((layer) => layer.manifest.id === activeLayerId) ?? data.layers[0],
+    [data, activeLayerId],
+  );
+  const showAmazon = useCallback(() => setTargetView("map"), []);
+  const showEarth = useCallback(() => setTargetView("globe"), []);
+
+  if (!activeLayer) {
+    return (
+      <p role="alert" data-testid="data-error" className="m-8 rounded border border-red-400 p-4 text-red-200">
+        The data file lists no layers.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <div className="absolute inset-0">
+        <EarthScene
+          data={data}
+          activeLayer={activeLayer}
+          targetView={targetView}
+          lite={lite}
+          onRequestView={setTargetView}
+          onModeChange={setMode}
+          onProbe={setProbe}
+          onFps={setFps}
+          onSceneError={setSceneError}
+        />
+      </div>
+      <PlanetHud
+        layers={data.layers}
+        activeLayerId={activeLayer.manifest.id}
+        onSelectLayer={setActiveLayerId}
+        mode={mode}
+        onAmazon={showAmazon}
+        onBackToEarth={showEarth}
+        probe={probe}
+        fps={fps}
+        lite={lite}
+        sceneError={sceneError}
+      />
+    </>
+  );
+}
+
 /**
- * Starting shell: loads the prepared data and lists what arrived, so the data
- * path can be checked end to end. The planet, the Amazon map, the sound engine
- * and the controls (plan Steps 10 and 12-14) replace this body.
+ * Feeds the sound engine from the point under the cursor (plan Step 10, FR3 and
+ * FR6). Lives inside ListeningPointProvider, so the scene publishes the point
+ * without knowing about audio. The first instant is used until the timeline of
+ * Step 13 exists.
+ */
+function AudioListener({ data }: { data: JukeboxData }) {
+  const engine = useSoundEngine();
+  const point = useListeningPoint();
+
+  useEffect(() => {
+    if (!point) {
+      for (const layer of data.layers) {
+        engine.setLayerIntensity(layer.manifest.id, null);
+      }
+      return;
+    }
+    for (const layer of data.layers) {
+      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, point.lon, point.lat, 0));
+    }
+    engine.setPan(point.screenX);
+  }, [engine, data, point]);
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
+      <AudioStart engine={engine} className="pointer-events-auto w-64" />
+    </div>
+  );
+}
+
+function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+  return (
+    <>
+      <PlanetView data={data} lite={lite} />
+      <AudioListener data={data} />
+    </>
+  );
+}
+
+/**
+ * Loads the prepared data, then shows the 3D planet with the Amazon map
+ * transition (plan Step 12) and the sound of the listening point (Step 10).
  */
 export default function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const engine = useSoundEngine();
+  const lite = useMemo(() => readLiteMode(window.location.search), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,64 +143,29 @@ export default function App() {
     };
   }, []);
 
-  // Temporary listening point: the centre of the Amazon at the first instant.
-  // Step 12 (the planet and the map) replaces this with the point under the cursor.
-  useEffect(() => {
-    if (state.status !== "ready") return;
-    const { data } = state;
-    const lon = (data.bbox.west + data.bbox.east) / 2;
-    const lat = (data.bbox.south + data.bbox.north) / 2;
-    for (const layer of data.layers) {
-      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, lon, lat, 0));
-    }
-    engine.setPan(0.5);
-  }, [engine, state]);
-
   return (
-    <main className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-6 p-8">
-      <header>
-        <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-        <p className="mt-1 text-slate-300">Listen to the Amazon, the lungs of the world.</p>
-        <AudioStart engine={engine} className="mt-4" />
-        <p className="mt-2 text-xs text-slate-400">
-          Until the planet is wired (Step 12), the sound follows a fixed point at the centre of the Amazon.
-        </p>
-      </header>
+    <ListeningPointProvider>
+      <main className="relative h-full w-full overflow-hidden">
+        {state.status === "loading" && (
+          <div className="flex h-full flex-col items-center justify-center gap-2">
+            <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+            <p role="status" data-testid="data-loading">
+              Loading data…
+            </p>
+          </div>
+        )}
 
-      {state.status === "loading" && (
-        <p role="status" data-testid="data-loading">
-          Loading data…
-        </p>
-      )}
+        {state.status === "error" && (
+          <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-8">
+            <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+            <p role="alert" data-testid="data-error" className="rounded border border-red-400 p-4 text-red-200">
+              {state.message}
+            </p>
+          </div>
+        )}
 
-      {state.status === "error" && (
-        <p role="alert" data-testid="data-error" className="rounded border border-red-400 p-4 text-red-200">
-          {state.message}
-        </p>
-      )}
-
-      {state.status === "ready" && (
-        <ul data-testid="layer-list" className="flex flex-col gap-3">
-          {state.data.layers.map(({ manifest, global, region }) => (
-            <li key={manifest.id} data-testid={`layer-list-item-${manifest.id}`} className="rounded border border-slate-600 p-4">
-              <h2 className="text-xl font-medium">
-                {manifest.title}
-                {manifest.sample && (
-                  <span className="ml-2 rounded bg-amber-300 px-2 py-0.5 text-sm text-black">sample data</span>
-                )}
-              </h2>
-              <p className="mt-1 text-sm text-slate-300">{manifest.description}</p>
-              <p className="mt-2 text-sm">
-                {manifest.static ? "Fixed layer" : `${region.frames} instants`} · {manifest.dates[0]}
-                {manifest.dates.length > 1 ? ` to ${manifest.dates[manifest.dates.length - 1]}` : ""} ·{" "}
-                {global ? `planet ${global.width}×${global.height} + ` : "Amazon only, "}
-                region {region.width}×{region.height}
-              </p>
-              <p className="mt-1 text-sm text-slate-400">Source: {manifest.source.title}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+        {state.status === "ready" && <JukeboxView data={state.data} lite={lite} />}
+      </main>
+    </ListeningPointProvider>
   );
 }
