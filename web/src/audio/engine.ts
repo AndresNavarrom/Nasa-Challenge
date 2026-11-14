@@ -51,6 +51,14 @@ const SMOKE_TONE_HZ = 180;
 const CO2_NOISE_MIX = 0.5;
 const NOISE_SECONDS = 2;
 
+/**
+ * Per-layer output trim. The smoke voice is mostly filtered noise and a low
+ * tone, so at equal gain the two-oscillator forest masks it. Raising its level
+ * keeps it audible in the three-layer mix (B3 listening feedback).
+ */
+export const SMOKE_LAYER_TRIM = 1.6;
+const LAYER_TRIM: Record<LayerId, number> = { forest: 1, smoke: SMOKE_LAYER_TRIM, co2: 1 };
+
 interface ForestVoice {
   main: OscillatorNode;
   harmony: OscillatorNode;
@@ -318,7 +326,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     runtime.lastUpdateTime = now;
 
     const smoothed = runtime.smoother.value;
-    const gain = runtime.value === null || !runtime.enabled ? 0 : intensityToGain(smoothed);
+    const gain = runtime.value === null || !runtime.enabled ? 0 : intensityToGain(smoothed) * LAYER_TRIM[layer];
 
     if (layer === "forest") {
       const voice = forestToVoice(smoothed);

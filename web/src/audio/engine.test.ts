@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSoundEngine } from "./engine";
+import { createSoundEngine, SMOKE_LAYER_TRIM } from "./engine";
 import { co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
 import { FakeAnalyser, FakeAudioContext, FakeGain, FakePanner } from "./testing/fakeAudioContext";
 
@@ -126,6 +126,20 @@ describe("sound engine", () => {
     engine.dispose();
   });
 
+  it("gives the smoke layer extra level so the forest does not mask it", async () => {
+    const { context, engine } = setup();
+    engine.setLayerIntensity("forest", 0.7);
+    engine.setLayerIntensity("smoke", 0.7);
+    await engine.start();
+
+    const [forest, smoke] = layerVoiceGains(context);
+    if (!forest || !smoke) throw new Error("the forest and smoke gains were not created");
+    expect(forest.gain.value).toBeCloseTo(intensityToGain(0.7), 6);
+    expect(smoke.gain.value).toBeCloseTo(intensityToGain(0.7) * SMOKE_LAYER_TRIM, 6);
+    expect(smoke.gain.value).toBeGreaterThan(forest.gain.value);
+    engine.dispose();
+  });
+
   it("keeps all three layers audible together and pans them as one", async () => {
     const { context, engine } = setup();
     engine.setLayerIntensity("forest", 0.7);
@@ -134,10 +148,12 @@ describe("sound engine", () => {
     engine.setPan(0.2);
     await engine.start();
 
-    for (const gain of layerVoiceGains(context)) {
+    const [forest, smoke, co2] = layerVoiceGains(context);
+    if (!forest || !smoke || !co2) throw new Error("the three voice gains were not created");
+    for (const gain of [forest, smoke, co2]) {
       expect(gain.gain.value).toBeGreaterThan(0);
-      expect(gain.gain.value).toBeLessThanOrEqual(intensityToGain(0.7));
     }
+    expect(smoke.gain.value).toBeGreaterThan(forest.gain.value);
     for (const panner of context.panners) {
       expect(panner.pan.value).toBeCloseTo(positionToPan(0.2), 6);
     }

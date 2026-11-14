@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1–B2 implemented; B3 harness, latency readout and soak tests ready; manual listening and measurement pending
+Status: B1–B2 implemented; B3 in progress (harness ready, smoke level raised after listening); manual measurement pending
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
@@ -120,6 +120,9 @@ Static layer (no time dimension).
 - `AnalyserNode` (or a small RMS tap) for the output meter.
 - Conservative per-voice gains so the sum keeps headroom; the limiter is the
   safety net, not the normal operating point.
+- A per-layer trim (`LAYER_TRIM` in `engine.ts`): the smoke voice runs ~4 dB above
+  the others because its filtered noise is masked by the two-oscillator forest at
+  equal gain. This is a B3 tuning value; adjust it here, not in `mapping.ts`.
 
 ## Public API
 
