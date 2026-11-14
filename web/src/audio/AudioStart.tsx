@@ -4,7 +4,7 @@
 // started from this button. The component is self-contained: it creates its own
 // engine unless one is injected, and it disposes only what it owns.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createSoundEngine, type SoundEngine } from "./engine";
 
 const FULL_VOLUME = 0.8;
@@ -15,28 +15,25 @@ export interface AudioStartProps {
 }
 
 export function AudioStart({ engine: injectedEngine, className = "" }: AudioStartProps) {
-  const engineRef = useRef<SoundEngine | null>(injectedEngine ?? null);
+  // Always create the fallback, but use the injected engine when there is one.
+  // Keeping the engine in state (not in a ref that cleanup can clear) matters:
+  // React StrictMode runs cleanup once on mount, and clearing the ref would make
+  // the button start a different, silent engine than the one App feeds.
+  const [fallbackEngine] = useState<SoundEngine>(() => createSoundEngine());
+  const engine = injectedEngine ?? fallbackEngine;
   const ownsEngine = injectedEngine === undefined;
   const [running, setRunning] = useState(false);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
 
-  const getEngine = (): SoundEngine => {
-    if (!engineRef.current) {
-      engineRef.current = createSoundEngine();
-    }
-    return engineRef.current;
-  };
-
   useEffect(() => {
     return () => {
       if (ownsEngine) {
-        engineRef.current?.dispose();
+        fallbackEngine.dispose();
       }
-      engineRef.current = null;
     };
-  }, [ownsEngine]);
+  }, [ownsEngine, fallbackEngine]);
 
   useEffect(() => {
     if (!running) {
@@ -45,17 +42,17 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
     }
     let frame = 0;
     const tick = (): void => {
-      setLevel(getEngine().getOutputLevel());
+      setLevel(engine.getOutputLevel());
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [running]);
+  }, [engine, running]);
 
   const handleStart = async (): Promise<void> => {
     setError(null);
     try {
-      await getEngine().start();
+      await engine.start();
       setRunning(true);
       setMuted(false);
     } catch (cause) {
@@ -65,7 +62,7 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
 
   const handleMute = (): void => {
     const nextMuted = !muted;
-    getEngine().setMasterVolume(nextMuted ? 0 : FULL_VOLUME);
+    engine.setMasterVolume(nextMuted ? 0 : FULL_VOLUME);
     setMuted(nextMuted);
   };
 
