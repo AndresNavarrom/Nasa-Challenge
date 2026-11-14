@@ -26,7 +26,10 @@ RUN mkdir -p tools/prep/src \
 
 COPY src tools/prep/src
 # The touch makes cargo see the real main.rs as newer than the stand-in build.
+# The test target is built here too: otherwise `prep-test` would run the empty
+# harness that was compiled from the stand-in main.rs and report zero tests.
 RUN touch tools/prep/src/main.rs \
-    && cargo build --locked --manifest-path tools/prep/Cargo.toml
+    && cargo build --locked --manifest-path tools/prep/Cargo.toml \
+    && cargo test --locked --no-run --manifest-path tools/prep/Cargo.toml
 
 CMD ["cargo", "test", "--locked", "--manifest-path", "tools/prep/Cargo.toml"]
