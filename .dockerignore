@@ -3,6 +3,8 @@
 # .dockerignore next to their Dockerfile.
 .git
 .claude
+.aidlc
+.opencode
 aidlc
 **/node_modules
 **/dist
