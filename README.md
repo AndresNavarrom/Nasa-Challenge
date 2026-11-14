@@ -109,6 +109,9 @@ docker compose run --rm web npm run build
 docker compose up server        # http://127.0.0.1:8081
 ```
 
+Build `web/dist` first: without it the server stops and says which command to
+run.
+
 ### 4. Run the tests
 
 ```bash

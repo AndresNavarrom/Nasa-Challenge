@@ -11,7 +11,8 @@
 # The final app image (built interface + release binary) is added in plan
 # Step 15 / block B2.
 
-FROM rust:1-slim-bookworm AS dev
+# Same exact Rust version as the app image in the root Dockerfile.
+FROM rust:1.100.0-slim-bookworm AS dev
 WORKDIR /work
 # Build output stays inside the image, outside the bind-mounted source.
 ENV CARGO_TARGET_DIR=/work/target

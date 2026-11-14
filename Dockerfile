@@ -21,7 +21,8 @@ RUN npm run build \
     && test -f dist/data/manifest.json
 
 # --- 2. Server: release build of server/ ------------------------------------
-FROM rust:1-slim-bookworm AS server-build
+# Exact Rust version, so a new release cannot change the build before the demo.
+FROM rust:1.100.0-slim-bookworm AS server-build
 WORKDIR /src
 # Compile the dependencies in their own layer with stand-in sources.
 COPY server/Cargo.toml server/Cargo.lock ./
@@ -43,9 +44,10 @@ WORKDIR /app
 COPY --from=server-build /src/target/release/jukebox-server /usr/local/bin/jukebox-server
 COPY --from=web-build /app/dist ./dist
 USER jukebox
-# Inside the container the server listens on every interface so the published
-# port reaches it; docker-compose.yml publishes it on 127.0.0.1 only.
-ENV JUKEBOX_HOST=0.0.0.0 \
-    JUKEBOX_PORT=8080
+# JUKEBOX_HOST is deliberately not set here: on its own the server listens on
+# the container's 127.0.0.1, so a bare `docker run -p 8080:8080` stays
+# unreachable instead of exposing it to the local network. docker-compose.yml
+# sets JUKEBOX_HOST=0.0.0.0 and publishes the port on the host's 127.0.0.1 only.
+ENV JUKEBOX_PORT=8080
 EXPOSE 8080
 CMD ["jukebox-server", "/app/dist"]
