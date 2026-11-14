@@ -27,3 +27,13 @@ aidlc/diagnostics/
 .aidlc/base-source-listing.tsv
 .claude/settings.local.json
 # END AI-DLC:gitignore
+
+# Optional exploration scrapers (downloads and caches are never versioned)
+tools/scraping/resources/
+tools/scraping/**/__pycache__/
+
+# opencode runtime dependencies (regenerated locally)
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock
