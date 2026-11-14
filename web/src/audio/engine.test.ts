@@ -1,179 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createSoundEngine } from "./engine";
 import { co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
-
-interface ParamEvent {
-  method: string;
-  target: number;
-  time: number;
-}
-
-class FakeParam {
-  value = 0;
-  readonly events: ParamEvent[] = [];
-
-  setValueAtTime(target: number, time: number): void {
-    this.value = target;
-    this.events.push({ method: "setValueAtTime", target, time });
-  }
-
-  linearRampToValueAtTime(target: number, time: number): void {
-    this.value = target;
-    this.events.push({ method: "linearRampToValueAtTime", target, time });
-  }
-
-  setTargetAtTime(target: number, time: number, _timeConstant: number): void {
-    this.value = target;
-    this.events.push({ method: "setTargetAtTime", target, time });
-  }
-
-  cancelScheduledValues(time: number): void {
-    this.events.push({ method: "cancelScheduledValues", target: this.value, time });
-  }
-}
-
-class FakeNode {
-  readonly connections: unknown[] = [];
-  readonly connect = vi.fn((target: unknown): unknown => {
-    this.connections.push(target);
-    return target;
-  });
-  readonly disconnect = vi.fn();
-}
-
-class FakeGain extends FakeNode {
-  readonly gain = new FakeParam();
-}
-
-class FakeOscillator extends FakeNode {
-  type = "sine";
-  readonly frequency = new FakeParam();
-  readonly start = vi.fn();
-  readonly stop = vi.fn();
-}
-
-class FakeBiquad extends FakeNode {
-  type = "lowpass";
-  readonly frequency = new FakeParam();
-  readonly Q = new FakeParam();
-}
-
-class FakePanner extends FakeNode {
-  readonly pan = new FakeParam();
-}
-
-class FakeCompressor extends FakeNode {
-  readonly threshold = new FakeParam();
-  readonly knee = new FakeParam();
-  readonly ratio = new FakeParam();
-  readonly attack = new FakeParam();
-  readonly release = new FakeParam();
-}
-
-class FakeAnalyser extends FakeNode {
-  fftSize = 2048;
-  smoothingTimeConstant = 0.8;
-  readonly getFloatTimeDomainData = vi.fn((data: Float32Array): void => {
-    data.fill(0.25);
-  });
-}
-
-class FakeAudioBuffer {
-  readonly channels: Float32Array[];
-
-  constructor(
-    readonly numberOfChannels: number,
-    readonly length: number,
-    readonly sampleRate: number,
-  ) {
-    this.channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
-  }
-
-  getChannelData(channel: number): Float32Array {
-    return this.channels[channel] ?? new Float32Array(this.length);
-  }
-}
-
-class FakeBufferSource extends FakeNode {
-  buffer: FakeAudioBuffer | null = null;
-  loop = false;
-  readonly start = vi.fn();
-  readonly stop = vi.fn();
-}
-
-class FakeAudioContext {
-  currentTime = 0;
-  sampleRate = 48000;
-  state: "suspended" | "running" | "closed" = "suspended";
-  readonly destination = new FakeNode();
-  readonly gains: FakeGain[] = [];
-  readonly oscillators: FakeOscillator[] = [];
-  readonly filters: FakeBiquad[] = [];
-  readonly panners: FakePanner[] = [];
-  readonly analysers: FakeAnalyser[] = [];
-  readonly buffers: FakeAudioBuffer[] = [];
-  readonly bufferSources: FakeBufferSource[] = [];
-  readonly resume = vi.fn(async (): Promise<void> => {
-    this.state = "running";
-  });
-  readonly suspend = vi.fn(async (): Promise<void> => {
-    this.state = "suspended";
-  });
-  readonly close = vi.fn(async (): Promise<void> => {
-    this.state = "closed";
-  });
-
-  createGain(): FakeGain {
-    const node = new FakeGain();
-    this.gains.push(node);
-    return node;
-  }
-
-  createOscillator(): FakeOscillator {
-    const node = new FakeOscillator();
-    this.oscillators.push(node);
-    return node;
-  }
-
-  createBiquadFilter(): FakeBiquad {
-    const node = new FakeBiquad();
-    this.filters.push(node);
-    return node;
-  }
-
-  createStereoPanner(): FakePanner {
-    const node = new FakePanner();
-    this.panners.push(node);
-    return node;
-  }
-
-  createDynamicsCompressor(): FakeCompressor {
-    return new FakeCompressor();
-  }
-
-  createAnalyser(): FakeAnalyser {
-    const node = new FakeAnalyser();
-    this.analysers.push(node);
-    return node;
-  }
-
-  createBuffer(numberOfChannels: number, length: number, sampleRate: number): FakeAudioBuffer {
-    const buffer = new FakeAudioBuffer(numberOfChannels, length, sampleRate);
-    this.buffers.push(buffer);
-    return buffer;
-  }
-
-  createBufferSource(): FakeBufferSource {
-    const node = new FakeBufferSource();
-    this.bufferSources.push(node);
-    return node;
-  }
-}
+import { FakeAnalyser, FakeAudioContext, FakeGain, FakePanner } from "./testing/fakeAudioContext";
 
 function setup() {
   const context = new FakeAudioContext();
   const engine = createSoundEngine({
-    context: context as unknown as AudioContext,
+    context: context.asAudioContext(),
     rampSeconds: 0.05,
     smoothingSeconds: 0.15,
   });
@@ -308,6 +141,37 @@ describe("sound engine", () => {
     for (const panner of context.panners) {
       expect(panner.pan.value).toBeCloseTo(positionToPan(0.2), 6);
     }
+    engine.dispose();
+  });
+
+  it("clamps odd input instead of producing invalid parameters", async () => {
+    const { context, engine } = setup();
+    await engine.start();
+    const gains = layerVoiceGains(context);
+
+    engine.setLayerIntensity("forest", Number.NaN);
+    engine.setLayerIntensity("smoke", -3);
+    engine.setLayerIntensity("co2", 9);
+    engine.setPan(Number.NaN);
+
+    for (const gain of gains) {
+      expect(Number.isFinite(gain.gain.value)).toBe(true);
+    }
+    for (const osc of context.oscillators) {
+      expect(Number.isFinite(osc.frequency.value)).toBe(true);
+    }
+    for (const panner of context.panners) {
+      expect(Number.isFinite(panner.pan.value)).toBe(true);
+    }
+    engine.dispose();
+  });
+
+  it("reports the context latency for the B3 measurement", async () => {
+    const { context, engine } = setup();
+    context.baseLatency = 0.01;
+    context.outputLatency = 0.02;
+    await engine.start();
+    expect(engine.getLatencyMs()).toBeCloseTo(30, 6);
     engine.dispose();
   });
 

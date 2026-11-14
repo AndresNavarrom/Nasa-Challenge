@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1 and B2 implemented (three voices, mix, meter, tests); B3 (tuning and measurement) pending
+Status: B1–B2 implemented; B3 harness, latency readout and soak tests ready; manual listening and measurement pending
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
@@ -63,6 +63,10 @@ Exports the engine will use as-is:
 | `web/src/audio/smoothing.ts` | Pure one-pole smoother (testable without Web Audio). |
 | `web/src/audio/smoothing.test.ts` | Tests for the smoother. |
 | `web/src/audio/AudioStart.tsx` | Start and mute control (`data-testid` for Step 14). |
+| `web/src/audio/testing/fakeAudioContext.ts` | Shared fake context for the unit and soak tests. |
+| `web/src/audio/engine.soak.test.ts` | 10-minute simulation, stop/start cycles and idempotent dispose. |
+| `web/audio-check.html`, `web/src/audio/check.ts` | Development-only page for B3 listening, latency and soak. |
+| `docs/SOUND-ENGINE-CHECKLIST.md` | B3 manual verification protocol and results table. |
 | `docs/SOUND-ENGINE-PLAN.md` | This document. |
 
 ## Architecture
@@ -135,6 +139,8 @@ export interface SoundEngine {
   setMasterVolume(value: number): void;
   /** 0..1, for the output meter. */
   getOutputLevel(): number;
+  /** Device latency reported by the context, in milliseconds (base + output). */
+  getLatencyMs(): number;
   dispose(): void;
 }
 
@@ -206,9 +212,13 @@ Automated (Vitest, in Docker: `docker compose run --rm web-test`):
   - pan follows `positionToPan`;
   - `stop()` fades out and `dispose()` disconnects;
   - `getOutputLevel()` reads the analyser without throwing.
-- Existing suite stays green (18 tests today).
+- `engine.soak.test.ts`: 18,000 simulated updates (10 minutes at the 30 fps
+  target) keeps the graph size fixed and every parameter finite; repeated
+  stop/start cycles do not duplicate nodes; `dispose()` is idempotent.
+- Existing suite stays green (28 tests today).
 
-Manual checklist (real browser, recorded in `docs/DEMO-CHECKLIST.md` in Step 16):
+Manual checklist: `docs/SOUND-ENGINE-CHECKLIST.md` (open
+`/audio-check.html` while the dev server runs).
 
 - Moving the cursor over the forest changes the note without clicks.
 - With eyes closed, a listener identifies which layer is sounding and whether

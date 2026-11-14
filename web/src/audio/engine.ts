@@ -27,6 +27,8 @@ export interface SoundEngine {
   setMasterVolume(value: number): void;
   /** Current output level in 0..1, for a meter. */
   getOutputLevel(): number;
+  /** Device latency reported by the context, in milliseconds (base + output). */
+  getLatencyMs(): number;
   dispose(): void;
 }
 
@@ -223,6 +225,13 @@ export class WebAudioSoundEngine implements SoundEngine {
       sum += sample * sample;
     }
     return Math.min(1, Math.sqrt(sum / this.levelBuffer.length));
+  }
+
+  getLatencyMs(): number {
+    if (!this.context) return 0;
+    const base = Number.isFinite(this.context.baseLatency) ? this.context.baseLatency : 0;
+    const output = Number.isFinite(this.context.outputLatency) ? this.context.outputLatency : 0;
+    return (base + output) * 1000;
   }
 
   dispose(): void {
