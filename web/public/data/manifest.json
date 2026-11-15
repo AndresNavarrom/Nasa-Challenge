@@ -80,6 +80,39 @@
       }
     },
     {
+      "id": "co2",
+      "title": "Global CO2",
+      "description": "Carbon dioxide moving through the atmosphere, 23 to 25 February 2020, every six hours, from NASA's DYAMOND simulation with the GEOS model. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier. Shown over the Amazon only.",
+      "source": {
+        "title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)",
+        "url": "https://svs.gsfc.nasa.gov/5196"
+      },
+      "static": false,
+      "sample": false,
+      "dates": [
+        "Feb 23, 2020 00:00 UTC",
+        "Feb 23, 2020 06:00 UTC",
+        "Feb 23, 2020 12:00 UTC",
+        "Feb 23, 2020 18:00 UTC",
+        "Feb 24, 2020 00:00 UTC",
+        "Feb 24, 2020 06:00 UTC",
+        "Feb 24, 2020 12:00 UTC",
+        "Feb 24, 2020 18:00 UTC",
+        "Feb 25, 2020 00:00 UTC",
+        "Feb 25, 2020 06:00 UTC",
+        "Feb 25, 2020 12:00 UTC",
+        "Feb 25, 2020 18:00 UTC"
+      ],
+      "global": null,
+      "region": {
+        "width": 144,
+        "height": 112,
+        "frames": 12,
+        "file": "co2_region.bin",
+        "texture": "co2_region.png"
+      }
+    },
+    {
       "id": "lightning",
       "title": "Lightning",
       "description": "How often lightning was seen from the International Space Station (NASA's LIS instrument) between January 2017 and July 2023, all years accumulated. Brighter means lightning in more of the ten-day windows of the period; it is a relative frequency read from a NASA visualization, not a flash count. LIS sees only between about 55° N and 55° S.",

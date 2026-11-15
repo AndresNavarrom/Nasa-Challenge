@@ -80,6 +80,30 @@
       ]
     },
     {
+      "id": "co2",
+      "title": "Global CO2",
+      "description": "Carbon dioxide moving through the atmosphere, 23 to 25 February 2020, every six hours, from NASA's DYAMOND simulation with the GEOS model. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier. Shown over the Amazon only.",
+      "source": { "title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)", "url": "https://svs.gsfc.nasa.gov/5196" },
+      "static": false,
+      "global": false,
+      "grid": { "region": [144, 112] },
+      "value": { "method": "warmth", "low": 0.02, "high": 0.75 },
+      "instants": [
+        { "date": "Feb 23, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_31.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -49.90, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 23, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_31.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -51.07, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 23, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_31.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -52.24, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 23, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_31.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -53.40, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 24, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_32.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -54.57, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 24, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_32.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -55.74, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 24, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_32.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -56.91, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 24, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_32.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -58.08, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 25, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_32.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -59.24, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 25, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_33.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -60.41, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 25, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_33.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -61.58, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
+        { "date": "Feb 25, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_33.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -62.75, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] }
+      ]
+    },
+    {
       "id": "lightning",
       "title": "Lightning",
       "description": "How often lightning was seen from the International Space Station (NASA's LIS instrument) between January 2017 and July 2023, all years accumulated. Brighter means lightning in more of the ten-day windows of the period; it is a relative frequency read from a NASA visualization, not a flash count. LIS sees only between about 55° N and 55° S.",

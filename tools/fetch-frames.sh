@@ -17,15 +17,16 @@
 # Total download is about 1.9 GB: Natural Earth (324 MB zip), 24 hours of
 # GEOS-CF (about 160 MB), one pass over the SVS 5011 lightning video (350 MB,
 # streamed, not stored) and 14 frames of SVS 4950 in 4K (66 MB each as 16-bit
-# TIFF, kept as 8-bit PNG). Files from earlier versions of this script (SVS
-# 5533, SVS 5196, SVS 3615) stay in data/raw/ and are no longer downloaded.
+# TIFF, kept as 8-bit PNG), plus the SVS 5196 CO2 video (12 frames are kept).
+# Files from earlier versions of this script (SVS 5533, SVS 3615) stay in
+# data/raw/ and are no longer downloaded.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RAW="$ROOT/data/raw"
 SOURCES="$ROOT/data/SOURCES.md"
 FETCH_TOOLS="$ROOT/tools/fetch"
-UA="Mozilla/5.0 (compatible; data-fetch-script)"
+UA="earth-jukebox-fetch/1.0 (NASA Space Apps 2026)"
 SVS="https://svs.gsfc.nasa.gov/vis/a000000"
 FORCE="${FORCE:-0}"
 ROWS=""
@@ -115,6 +116,28 @@ else
 fi
 record "$LIGHTNING_PNG" "$LIGHTNING_VIDEO" "mean lightning (yellow) of about 250 frames, one every 0.4 s, by tools/fetch/lightning_composite.py"
 
+echo "Global CO2 - DYAMOND (SVS 5196)"
+CO2_VIDEO="$SVS/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4"
+download "5196/dyamond_co2_globe_orbit_1080p30_h265.mp4" "$CO2_VIDEO"
+record "5196/dyamond_co2_globe_orbit_1080p30_h265.mp4" "$CO2_VIDEO" "downloaded as published"
+# South America faces the camera here. The video advances one model hour per
+# frame (30 per second), so frames 0.2 s apart are six hours apart:
+# 23 Feb 2020 00:00 UTC to 25 Feb 2020 18:00 UTC.
+for at in 31.3 31.5 31.7 31.9 32.1 32.3 32.5 32.7 32.9 33.1 33.3 33.5; do
+  png="5196/co2_globe_${at}.png"
+  if have "$png"; then
+    echo "  have   $png"
+  else
+    echo "  frame  $png (at ${at}s)"
+    if ! ffmpeg -v error -y -ss "$at" -i "$RAW/5196/dyamond_co2_globe_orbit_1080p30_h265.mp4" -frames:v 1 "$RAW/$png"; then
+      rm -f "$RAW/$png"
+      echo "fetch-frames: could not extract a frame at ${at}s from the CO2 video" >&2
+      exit 1
+    fi
+  fi
+  record "$png" "$CO2_VIDEO" "video frame at ${at} s, extracted with ffmpeg"
+done
+
 echo "Forest height fill - GEDI (SVS 4950), 4K frames"
 GEDI_L3_NAME="GEDI03_rh100_mean_2019108_2025190_003_01.tif"
 GEDI_L3_URL="https://data.ornldaac.earthdata.nasa.gov/protected/gedi/GEDI_L3_LandSurface_Metrics_V3/data/$GEDI_L3_NAME"
@@ -152,7 +175,9 @@ cat >"$SOURCES" <<EOF
 Everything shown and heard in Earth Jukebox comes from the public sources
 below. Only GEDI L3 (forest height) needs a free NASA Earthdata login: it is
 downloaded on its own with \`docker compose run --rm fetch-gedi\`, which reads
-the login from \`~/.netrc\`. No other source needs a login. This file is
+the login from \`~/.netrc\`. Keep only the \`urs.earthdata.nasa.gov\` line in that
+file: the download container can read all of it. No other source needs a
+login. This file is
 rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fetch\`).
 
 ## Layers
@@ -161,6 +186,7 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file \`GEDI03_rh100_mean_2019108_2025190_003_01.tif\` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
+| Global CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 12 frames of the orbiting-globe video | 23 - 25 February 2020, every 6 hours | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. **Amazon only.** Not ppm. |
 | Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, accumulated | Relative frequency (0 to 1): how often lightning was drawn at each place across the whole period, read from the video frames. Not a flash count. |
 
 ## How each source was turned into a map
@@ -220,9 +246,6 @@ West 80 W, east 44 W, south 20 S, north 8 N.
 
 ## No longer used
 
-- **Global CO2** (DYAMOND, SVS 5196) is no longer in the data file. Its frames
-  in \`data/raw/5196/\` and its grid in \`web/public/data/\` stay in the
-  repository, unused.
 - The old smoke frames (SVS 5533), the 1080p GEDI video and the SVS 3615 base
   image (\`earth.jpg\`) are no longer downloaded; files already in
   \`data/raw/\` and \`web/public/data/earth.jpg\` are kept.
