@@ -14,6 +14,7 @@ import {
   rampAlpha,
   rampColor,
   rampFor,
+  showLayerBlend,
   showLayerFrame,
   type ColorRamp,
 } from "./layerTexture";
@@ -129,6 +130,29 @@ describe("instants following the timeline", () => {
     // Going back shows instant 0 again, not a mix of what was shown before.
     showLayerFrame(textures, layer, 0);
     expect(Array.from(region.image.data as Uint8Array)).toEqual(Array.from(gridToRgba(layer.region, 0, ramp, "smoke")));
+    disposeLayerTextures(textures);
+  });
+
+  it("fades between two instants, computing only the new one when the timeline moves on", () => {
+    const textures = layerTextureFor(layer, 0, 1);
+    expect([textures.frame, textures.nextFrame]).toEqual([0, 1]);
+    const pixels = (frame: number) => Array.from(gridToRgba(layer.region, frame, ramp, "smoke"));
+    expect(Array.from(textures.region.image.data as Uint8Array)).toEqual(pixels(0));
+    expect(Array.from(textures.regionNext.image.data as Uint8Array)).toEqual(pixels(1));
+    const later = textures.regionNext.image.data;
+
+    showLayerBlend(textures, layer, 1, 2);
+    // The image that was the later one is now the earlier one, reused as it is.
+    expect(textures.region.image.data).toBe(later);
+    expect(Array.from(textures.regionNext.image.data as Uint8Array)).toEqual(pixels(2));
+    expect(Array.from(textures.globalNext!.image.data as Uint8Array)).toEqual(
+      Array.from(gridToRgba(layer.global!, 2, ramp, "smoke")),
+    );
+
+    // A single instant: both textures hold it.
+    showLayerFrame(textures, layer, 0);
+    expect([textures.frame, textures.nextFrame]).toEqual([0, 0]);
+    expect(Array.from(textures.regionNext.image.data as Uint8Array)).toEqual(pixels(0));
     disposeLayerTextures(textures);
   });
 

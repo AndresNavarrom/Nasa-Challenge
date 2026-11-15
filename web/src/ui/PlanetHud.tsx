@@ -35,7 +35,7 @@ export interface PlanetHudProps {
   selectedValue?: number | null;
   /** Sound controls, docked in the bottom-right panel so they never overlap the HUD. */
   audio?: ReactNode;
-  /** Timeline bar (play, position, speed, dates), docked above the sound controls. */
+  /** Timeline line under the planet, between the two bottom panels (its own row on narrow screens). */
   timeline?: ReactNode;
   /** Shows the welcome window and guided tour again (the "?" button). */
   onShowTour?: () => void;
@@ -220,8 +220,11 @@ export function PlanetHud(props: PlanetHudProps) {
           </div>
         </div>
 
+        {timeline && (
+          <div className="order-last w-full md:order-none md:max-w-2xl md:flex-1">{timeline}</div>
+        )}
+
         <div className={`${panel} flex flex-col items-end gap-2`}>
-          {timeline && <div className="w-full">{timeline}</div>}
           {audio && <div className="w-full">{audio}</div>}
           <p
             role="status"

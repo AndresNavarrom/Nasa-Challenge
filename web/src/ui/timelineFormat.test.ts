@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
-import timelineBarSource from "./TimelineBar.tsx?raw";
+import timelineTrackSource from "./TimelineTrack.tsx?raw";
 import { EARTH_VIEW_ID } from "./layerChoice";
-import { formatPercent, isTimed, scrubValueText, timelineLayer } from "./timelineFormat";
+import { isTimed, trackLayer, trackValueText } from "./timelineFormat";
 
 function layer(id: LayerManifest["id"], isStatic: boolean, dates: string[]): LoadedLayer {
   const grid: Grid = { width: 1, height: 1, frames: dates.length, data: new Uint8Array(dates.length) };
@@ -21,55 +21,43 @@ function layer(id: LayerManifest["id"], isStatic: boolean, dates: string[]): Loa
   return { manifest, global: grid, region: grid };
 }
 
-describe("timeline bar text", () => {
+describe("timeline line text", () => {
   const layers = [
     layer("forest", true, ["Apr 2019 - Jul 2025"]),
     layer("smoke", false, ["00:30", "01:30", "02:30"]),
-    layer("co2", false, ["Feb 23 00:00", "Feb 23 06:00"]),
-    layer("lightning", true, ["2017 - 2023"]),
+    layer("lightning", false, ["Jan 2017", "Feb 2017"]),
   ];
 
-  it("is for the picked layer only, when it changes over time", () => {
-    expect(timelineLayer(layers, "smoke")?.manifest.id).toBe("smoke");
-    expect(timelineLayer(layers, "co2")?.manifest.id).toBe("co2");
+  it("is for the picked layer, static or not, and absent on the plain Earth view", () => {
+    expect(trackLayer(layers, "smoke")?.manifest.id).toBe("smoke");
+    expect(trackLayer(layers, "lightning")?.manifest.id).toBe("lightning");
+    expect(trackLayer(layers, "forest")?.manifest.id).toBe("forest");
+    expect(trackLayer(layers, EARTH_VIEW_ID)).toBeNull();
+    expect(trackLayer(layers, "unknown")).toBeNull();
   });
 
-  it("is not shown for a static layer such as the forest height", () => {
-    expect(timelineLayer(layers, "forest")).toBeNull();
-    expect(timelineLayer(layers, "lightning")).toBeNull();
-  });
-
-  it("is not shown on the plain Earth view or for an unknown value", () => {
-    expect(timelineLayer(layers, EARTH_VIEW_ID)).toBeNull();
-    expect(timelineLayer(layers, "unknown")).toBeNull();
-  });
-
-  it("does not count a changing layer that has a single date as timed", () => {
+  it("counts only layers with more than one date as changing over time", () => {
+    expect(isTimed(layers[1]!)).toBe(true);
+    expect(isTimed(layers[0]!)).toBe(false);
     expect(isTimed(layer("smoke", false, ["only one"]))).toBe(false);
   });
 
-  it("writes the position as a whole percentage, limited to 0..100", () => {
-    expect(formatPercent(0)).toBe("0 %");
-    expect(formatPercent(0.456)).toBe("46 %");
-    expect(formatPercent(1)).toBe("100 %");
-    expect(formatPercent(3)).toBe("100 %");
-    expect(formatPercent(Number.NaN)).toBe("0 %");
+  it("tells a screen reader the date and which instant it is", () => {
+    expect(trackValueText(layers[1]!, 0.5)).toBe("01:30, instant 2 of 3");
+    expect(trackValueText(layers[1]!, 1)).toBe("02:30, instant 3 of 3");
+    expect(trackValueText(layers[0]!, 0.7)).toBe("Apr 2019 - Jul 2025, fixed layer");
   });
 
-  it("gives the position slider a spoken value", () => {
-    expect(scrubValueText(0.5)).toBe("Timeline at 50 %");
-  });
-
-  it("keeps the test ids agreed in docs/TIMELINE-HANDOFF.md", () => {
-    for (const id of ["timeline-bar", "timeline-scrub"]) {
-      expect(timelineBarSource).toContain(`data-testid="${id}"`);
+  it("keeps its test ids", () => {
+    for (const id of ["timeline-track", "timeline-scrub", "timeline-playing"]) {
+      expect(timelineTrackSource).toContain(`data-testid="${id}"`);
     }
-    expect(timelineBarSource).toContain("data-testid={`timeline-date-${manifest.id}`}");
+    expect(timelineTrackSource).toContain("data-testid={`timeline-date-${manifest.id}`}");
   });
 
-  it("has no play, pause or speed control: the timeline is static and the person sets it", () => {
-    for (const id of ["timeline-play", "timeline-speed", "timeline-elapsed"]) {
-      expect(timelineBarSource).not.toContain(`data-testid="${id}"`);
+  it("has no play, pause or speed button: the planet's turn plays it", () => {
+    for (const id of ["timeline-play", "timeline-speed"]) {
+      expect(timelineTrackSource).not.toContain(`data-testid="${id}"`);
     }
   });
 });

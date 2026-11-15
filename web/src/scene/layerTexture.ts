@@ -236,6 +236,12 @@ export interface LayerTextures {
   global: DataTexture | null;
   /** Amazon texture, drawn inside `region.bbox` on the planet and on the map. */
   region: DataTexture;
+  /**
+   * The next instant, which the shader fades in over `global` / `region` as the
+   * timeline moves between the two (uFrameMix). Equal to `nextFrame`.
+   */
+  globalNext: DataTexture | null;
+  regionNext: DataTexture;
   /** Heights for relief layers (RELIEF_LAYERS); null otherwise. */
   heightGlobal: DataTexture | null;
   heightRegion: DataTexture | null;
@@ -245,14 +251,21 @@ export interface LayerTextures {
   baseDim: number;
   /** Instant currently drawn in `global` and `region`. */
   frame: number;
+  /** Instant currently drawn in `globalNext` and `regionNext`. */
+  nextFrame: number;
 }
 
 /**
- * three.js textures of one instant of a layer (the first by default). Rows keep
- * the grid order (north first), so shaders sample them with
+ * three.js textures of one instant of a layer (the first by default) and of the
+ * instant the shader fades towards (`nextFrame`, the same one by default). Rows
+ * keep the grid order (north first), so shaders sample them with
  * `v = (north - lat) / (north - south)`.
  */
-export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTANT): LayerTextures {
+export function layerTextureFor(
+  layer: LoadedLayer,
+  frame: number = FIRST_INSTANT,
+  nextFrame: number = frame,
+): LayerTextures {
   const id = layer.manifest.id;
   const created: DataTexture[] = [];
   const keep = (texture: DataTexture): DataTexture => {
@@ -262,6 +275,8 @@ export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTAN
   try {
     const global = layer.global ? keep(textureOf(layer.global, id, true, frame)) : null;
     const region = keep(textureOf(layer.region, id, false, frame));
+    const globalNext = layer.global ? keep(textureOf(layer.global, id, true, nextFrame)) : null;
+    const regionNext = keep(textureOf(layer.region, id, false, nextFrame));
     const relief = RELIEF_LAYERS.has(id);
     const heightGlobal = relief && layer.global ? keep(heightTextureOf(layer.global, id, true)) : null;
     const heightRegion = relief ? keep(heightTextureOf(layer.region, id, false)) : null;
@@ -269,11 +284,14 @@ export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTAN
     return {
       global,
       region,
+      globalNext,
+      regionNext,
       heightGlobal,
       heightRegion,
       opacity: ramp.opacity ?? LAYER_OPACITY_DEFAULT,
       baseDim: ramp.baseDim ?? 0,
       frame: frameIn(layer.region, frame),
+      nextFrame: frameIn(layer.region, nextFrame),
     };
   } catch (cause) {
     // Some textures may already exist when a later one throws.
@@ -282,33 +300,75 @@ export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTAN
   }
 }
 
-/**
- * Redraws the layer's textures at another instant, in place: the shader keeps the
- * same textures and only their pixels change, so one instant replaces the previous
- * one (nothing accumulates). Does nothing when that instant is already drawn.
- * Heights (relief) stay on the first instant: only static layers have relief.
- */
-export function showLayerFrame(textures: LayerTextures, layer: LoadedLayer, frame: number): void {
-  const next = frameIn(layer.region, frame);
-  if (next === textures.frame) return;
-  const id = layer.manifest.id;
-  // Both images are computed before either texture changes, so a failure leaves
-  // the planet and the Amazon map on the same (previous) instant.
+type Pixels = Uint8Array;
+
+/** Pixels of one view (planet or Amazon) for the pair of instants, reusing what is already drawn. */
+function pairPixels(
+  grid: Grid,
+  drawn: { frame: number; pixels: Pixels; nextFrame: number; nextPixels: Pixels },
+  from: number,
+  to: number,
+  id: string,
+): { pixels: Pixels; nextPixels: Pixels } {
   const ramp = rampFor(id);
-  const globalPixels = textures.global && layer.global ? gridToRgba(layer.global, frameIn(layer.global, next), ramp, id) : null;
-  const regionPixels = gridToRgba(layer.region, frameIn(layer.region, next), ramp, id);
-  if (textures.global && globalPixels) {
-    textures.global.image.data = globalPixels;
-    textures.global.needsUpdate = true;
+  const reuse = (frame: number): Pixels | null =>
+    frame === drawn.frame ? drawn.pixels : frame === drawn.nextFrame ? drawn.nextPixels : null;
+  const pixels = reuse(from) ?? gridToRgba(grid, frameIn(grid, from), ramp, id);
+  const nextPixels = to === from ? pixels : (reuse(to) ?? gridToRgba(grid, frameIn(grid, to), ramp, id));
+  return { pixels, nextPixels };
+}
+
+/**
+ * Redraws the layer's textures at another pair of instants, in place: the shader
+ * keeps the same textures and only their pixels change, so the instants on screen
+ * replace the previous ones (nothing accumulates). Moving on by one instant only
+ * computes the new later one: the earlier one is the image already drawn.
+ * Does nothing when that pair is already drawn. Heights (relief) stay on the
+ * first instant: only static layers have relief.
+ */
+export function showLayerBlend(textures: LayerTextures, layer: LoadedLayer, from: number, to: number): void {
+  const first = frameIn(layer.region, from);
+  const second = frameIn(layer.region, to);
+  if (first === textures.frame && second === textures.nextFrame) return;
+  const id = layer.manifest.id;
+  const drawn = (texture: DataTexture, next: DataTexture) => ({
+    frame: textures.frame,
+    pixels: texture.image.data as Pixels,
+    nextFrame: textures.nextFrame,
+    nextPixels: next.image.data as Pixels,
+  });
+  // Every image is computed before any texture changes, so a failure leaves the
+  // planet and the Amazon map on the same (previous) instants.
+  const globalPair =
+    textures.global && textures.globalNext && layer.global
+      ? pairPixels(layer.global, drawn(textures.global, textures.globalNext), first, second, id)
+      : null;
+  const regionPair = pairPixels(layer.region, drawn(textures.region, textures.regionNext), first, second, id);
+  const put = (texture: DataTexture, pixels: Pixels): void => {
+    if (texture.image.data === pixels) return;
+    texture.image.data = pixels;
+    texture.needsUpdate = true;
+  };
+  if (globalPair && textures.global && textures.globalNext) {
+    put(textures.global, globalPair.pixels);
+    put(textures.globalNext, globalPair.nextPixels);
   }
-  textures.region.image.data = regionPixels;
-  textures.region.needsUpdate = true;
-  textures.frame = next;
+  put(textures.region, regionPair.pixels);
+  put(textures.regionNext, regionPair.nextPixels);
+  textures.frame = first;
+  textures.nextFrame = second;
+}
+
+/** Shows a single instant (no fade): the earlier and later textures both hold it. */
+export function showLayerFrame(textures: LayerTextures, layer: LoadedLayer, frame: number): void {
+  showLayerBlend(textures, layer, frame, frame);
 }
 
 export function disposeLayerTextures(textures: LayerTextures): void {
   textures.global?.dispose();
   textures.region.dispose();
+  textures.globalNext?.dispose();
+  textures.regionNext.dispose();
   textures.heightGlobal?.dispose();
   textures.heightRegion?.dispose();
 }

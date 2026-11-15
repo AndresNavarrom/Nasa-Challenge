@@ -11,6 +11,13 @@ const at = (position: number, overrides: Parameters<typeof createPlayback>[0] = 
   createPlayback({ position, durationSeconds: 10, ...overrides });
 
 describe("playback", () => {
+  it("steps with the turning planet whether or not the clock plays, starting again after the end", () => {
+    const paused = at(0.5);
+    expect(playbackReducer(paused, { type: "step", delta: 0.1 }).position).toBeCloseTo(0.6);
+    expect(playbackReducer(at(0.95), { type: "step", delta: 0.1 }).position).toBeCloseTo(0.05);
+    expect(playbackReducer(paused, { type: "step", delta: 0.1 }).playing).toBe(false);
+  });
+
   it("starts paused at the beginning, at 1x, looping over the default duration", () => {
     const state = createPlayback();
     expect(state).toEqual({
