@@ -190,6 +190,9 @@ pub struct LayerConfig {
     /// change over time need it together with a `time` on every instant.
     #[serde(default)]
     pub cadence: Option<String>,
+    /// Sharp images of the first instant for the planet view (the sound keeps the grids).
+    #[serde(default)]
+    pub sharp: Option<SharpSizes>,
     pub value: ValueConfig,
     pub instants: Vec<InstantConfig>,
 }
@@ -342,6 +345,38 @@ fn is_cadence(text: &str) -> bool {
     unit && number.is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && n != "0")
 }
 
+/// Largest side of a sharp image: WebGL textures above this are not usable on every card.
+pub const MAX_SHARP_SIDE: u32 = 8192;
+
+/// Sizes `[width, height]` of the sharp images of a layer: the whole planet (`global`,
+/// equirectangular) and the Amazon rectangle (`region`). Each instant gets one grey
+/// image per area, value 0..1 as 0..255 like the grids, 0 where no view has data. They
+/// are drawn from the frames at that size directly, not averaged down to the grid, so
+/// the planet view can show the full detail of the source.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub struct SharpSizes {
+    #[serde(default)]
+    pub global: Option<[u32; 2]>,
+    #[serde(default)]
+    pub region: Option<[u32; 2]>,
+}
+
+impl SharpSizes {
+    pub fn validate(&self) -> Result<()> {
+        if self.global.is_none() && self.region.is_none() {
+            return Err(PrepError::new("\"sharp\" gives neither a \"global\" nor a \"region\" size"));
+        }
+        for [width, height] in self.global.iter().chain(self.region.iter()) {
+            if *width == 0 || *height == 0 || *width > MAX_SHARP_SIDE || *height > MAX_SHARP_SIDE {
+                return Err(PrepError::new(format!(
+                    "\"sharp\" sizes must be between 1 and {MAX_SHARP_SIDE} pixels per side, got {width} x {height}"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
 impl LayerConfig {
     /// A layer that changes over time names its `cadence` and gives every instant a
     /// `time`, in order; a static layer may leave both out.
@@ -380,6 +415,12 @@ impl LayerConfig {
     fn validate_views(&self) -> Result<()> {
         let named = |cause: PrepError| PrepError::new(format!("layer \"{}\": {cause}", self.id));
         self.value.validate().map_err(named)?;
+        if let Some(sharp) = &self.sharp {
+            sharp.validate().map_err(named)?;
+            if sharp.global.is_some() && !self.global {
+                return Err(named(PrepError::new("a region-only layer (\"global\": false) cannot have a global sharp image")));
+            }
+        }
         for instant in &self.instants {
             if instant.views.iter().all(|view| view.fallback) {
                 return Err(named(PrepError::new(format!(
@@ -468,6 +509,30 @@ mod tests {
             }}"#
         );
         serde_json::from_str(&text).expect("test configuration parses")
+    }
+
+    /// The test layer of `config_with`, with a `sharp` entry (JSON text) and `global` set.
+    fn config_with_sharp(sharp: &str, global: bool) -> PrepConfig {
+        let mut config = config_with(r#"{ "global": [1440, 720], "region": [360, 280] }"#, "null");
+        config.layers[0].sharp = serde_json::from_str(sharp).expect("sharp parses");
+        config.layers[0].global = global;
+        config
+    }
+
+    #[test]
+    fn sharp_images_need_a_size_within_the_texture_cap() {
+        assert!(config_with_sharp(r#"{ "global": [4096, 2048], "region": [1152, 896] }"#, true).validate().is_ok());
+        assert!(config_with_sharp(r#"{ "region": [1152, 896] }"#, false).validate().is_ok());
+        assert!(config_with_sharp("null", true).validate().is_ok());
+
+        let none = config_with_sharp("{}", true).validate().unwrap_err().to_string();
+        assert!(none.contains("neither"), "{none}");
+        let huge = config_with_sharp(r#"{ "global": [16384, 8192] }"#, true).validate().unwrap_err().to_string();
+        assert!(huge.contains("8192"), "{huge}");
+        let empty = config_with_sharp(r#"{ "region": [0, 10] }"#, true).validate().unwrap_err().to_string();
+        assert!(empty.contains("between 1"), "{empty}");
+        let region_only = config_with_sharp(r#"{ "global": [4096, 2048] }"#, false).validate().unwrap_err().to_string();
+        assert!(region_only.contains("region-only"), "{region_only}");
     }
 
     #[test]
@@ -629,6 +694,26 @@ pub struct LayerOut {
     pub cadence: Option<String>,
     pub global: Option<GridOut>,
     pub region: GridOut,
+    /// Sharp images of every instant, when the layer asks for them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sharp: Option<SharpOut>,
+}
+
+/// Sharp grey images of a layer (see `SharpSizes`).
+#[derive(Debug, Clone, Serialize)]
+pub struct SharpOut {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub global: Option<ImagesOut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<ImagesOut>,
+}
+
+/// One image per instant of an area, all the same size, in the order of `dates`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ImagesOut {
+    pub width: u32,
+    pub height: u32,
+    pub files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

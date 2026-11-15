@@ -492,7 +492,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
       <PlanetView
         data={data}
         lite={lite}
-        audio={<AudioStart engine={engine} className="w-56" />}
+        audio={<AudioStart engine={engine} className="w-full sm:w-56" />}
         activeLayerId={activeLayerId}
         onSelectLayer={setActiveLayerId}
         onShowTour={showTour}

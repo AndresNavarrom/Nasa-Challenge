@@ -4,11 +4,13 @@ import {
   type Cadence,
   type Grid,
   type GridInfo,
+  type ImagesInfo,
   type JukeboxData,
   type LayerId,
   type LayerManifest,
   type LoadedLayer,
   type Manifest,
+  type SharpImages,
 } from "./types";
 
 /** Error with a message that can be shown to the person running the demo. */
@@ -89,6 +91,31 @@ function parseTimes(value: unknown, dates: number, where: string): number[] | un
   return times;
 }
 
+function parseImagesInfo(value: unknown, where: string, instants: number): ImagesInfo {
+  if (!isRecord(value)) {
+    throw new DataLoadError(`manifest.json: "${where}" must be an object. ${PREP_HINT}`);
+  }
+  if (!Array.isArray(value.files) || value.files.length !== instants) {
+    throw new DataLoadError(`manifest.json: "${where}.files" must list one image for each of the ${instants} dates. ${PREP_HINT}`);
+  }
+  return {
+    width: requirePositiveInt(value.width, `${where}.width`),
+    height: requirePositiveInt(value.height, `${where}.height`),
+    files: value.files.map((file, index) => requireString(file, `${where}.files[${index}]`)),
+  };
+}
+
+function parseSharp(value: unknown, where: string, instants: number): SharpImages | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) {
+    throw new DataLoadError(`manifest.json: "${where}" must be an object. ${PREP_HINT}`);
+  }
+  const sharp: SharpImages = {};
+  if (value.global != null) sharp.global = parseImagesInfo(value.global, `${where}.global`, instants);
+  if (value.region != null) sharp.region = parseImagesInfo(value.region, `${where}.region`, instants);
+  return sharp;
+}
+
 function parseLayer(value: unknown, index: number): LayerManifest {
   const where = `layers[${index}]`;
   if (!isRecord(value)) {
@@ -109,6 +136,7 @@ function parseLayer(value: unknown, index: number): LayerManifest {
   const region = parseGridInfo(value.region, `${where}.region`);
   const global = value.global == null ? null : parseGridInfo(value.global, `${where}.global`);
   const dates = value.dates as string[];
+  const sharp = parseSharp(value.sharp, `${where}.sharp`, dates.length);
   if (dates.length !== region.frames) {
     throw new DataLoadError(
       `manifest.json: "${where}" lists ${dates.length} dates but its region grid has ${region.frames} frames. ${PREP_HINT}`,
@@ -144,6 +172,7 @@ function parseLayer(value: unknown, index: number): LayerManifest {
     ...(cadence ? { cadence } : {}),
     global,
     region,
+    ...(sharp ? { sharp } : {}),
   };
 }
 

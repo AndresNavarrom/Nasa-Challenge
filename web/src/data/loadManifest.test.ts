@@ -93,6 +93,29 @@ describe("loadJukeboxData", () => {
     );
   });
 
+  it("reads the optional sharp images of a layer, one per date, and rejects broken ones", async () => {
+    const load = (json: unknown) => loadJukeboxData("./data/", fakeFetch(filesFor(json)));
+    const smoke = manifest.layers[1]!; // two dates
+    const sharp = {
+      global: { width: 4096, height: 2048, files: ["smoke_sharp_global_00.png", "smoke_sharp_global_01.png"] },
+      region: { width: 1152, height: 896, files: ["smoke_sharp_region_00.png", "smoke_sharp_region_01.png"] },
+    };
+    const withSharp = { ...manifest, layers: [manifest.layers[0], { ...smoke, sharp }] };
+    const data = await load(withSharp);
+    expect(data.layers[1]!.manifest.sharp).toEqual(sharp);
+    expect(data.layers[0]!.manifest.sharp).toBeUndefined(); // no sharp images: the field stays out
+
+    const onlyRegion = { ...manifest, layers: [manifest.layers[0], { ...smoke, sharp: { region: sharp.region } }] };
+    expect((await load(onlyRegion)).layers[1]!.manifest.sharp).toEqual({ region: sharp.region });
+
+    const oneShort = { ...manifest, layers: [manifest.layers[0], { ...smoke, sharp: { global: { ...sharp.global, files: ["a.png"] } } }] };
+    await expect(load(oneShort)).rejects.toThrow(/sharp\.global\.files" must list one image for each of the 2 dates/);
+    const badWidth = { ...manifest, layers: [manifest.layers[0], { ...smoke, sharp: { global: { ...sharp.global, width: 0 } } }] };
+    await expect(load(badWidth)).rejects.toThrow(/sharp\.global\.width/);
+    const notObject = { ...manifest, layers: [manifest.layers[0], { ...smoke, sharp: "yes" }] };
+    await expect(load(notObject)).rejects.toThrow(/sharp" must be an object/);
+  });
+
   it("accepts a data file with the lightning layer in place of co2 (FR7.2)", async () => {
     const lightning: LayerManifest = {
       id: "lightning",

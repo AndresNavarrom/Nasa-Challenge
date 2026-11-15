@@ -4,6 +4,10 @@
 // switch that starts and stops the planet's own turn, the "?"
 // button that repeats the guided tour, the longitude/latitude/value indicator
 // (FR4.4) and a frames-per-second counter (NFR1).
+//
+// Responsive: on a phone (below Tailwind's `sm`, 640 px) the panels stack and
+// take the full width, with smaller margins and the safe areas of notched
+// screens kept clear; from `sm` up the layout is the original one.
 
 import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
@@ -70,7 +74,7 @@ export function modeLabel(mode: ViewMode, regionName = "Amazon", hoveredRegionNa
 }
 
 const panel =
-  "pointer-events-auto rounded-lg bg-slate-950/75 p-3 text-sm shadow-lg backdrop-blur";
+  "pointer-events-auto rounded-lg bg-slate-950/75 p-2 text-sm shadow-lg backdrop-blur sm:p-3";
 const button =
   "rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400";
 
@@ -102,12 +106,12 @@ export function PlanetHud(props: PlanetHudProps) {
   return (
     <div
       data-testid="planet-hud"
-      className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4"
+      className="hud-safe pointer-events-none absolute inset-0 flex flex-col justify-between gap-2"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className={panel}>
+      <div className="flex items-start justify-between gap-2 sm:gap-4">
+        <div className={`${panel} min-w-0`}>
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold">Earth Jukebox</h1>
+            <h1 className="text-lg font-semibold sm:text-xl">Earth Jukebox</h1>
             {onShowTour && (
               <button
                 type="button"
@@ -121,11 +125,11 @@ export function PlanetHud(props: PlanetHudProps) {
               </button>
             )}
           </div>
-          <label className="mt-2 flex items-center gap-2">
+          <label className="mt-2 flex min-w-0 items-center gap-2">
             <span className="text-slate-300">Layer</span>
             <select
               data-testid="planet-hud-layer-select"
-              className="rounded bg-slate-800 px-2 py-1"
+              className="min-w-0 max-w-full rounded bg-slate-800 px-2 py-1"
               value={activeLayerId}
               onChange={(event) => onSelectLayer(event.target.value)}
             >
@@ -152,7 +156,7 @@ export function PlanetHud(props: PlanetHudProps) {
 
         <p
           data-testid="planet-hud-fps"
-          className={`${panel} font-mono ${fps !== null && fps < FPS_TARGET ? "text-red-300" : "text-emerald-300"}`}
+          className={`${panel} shrink-0 font-mono ${fps !== null && fps < FPS_TARGET ? "text-red-300" : "text-emerald-300"}`}
           title="Average frames per second over the last second (target: 30 or more)"
         >
           {fps === null ? "-- fps" : `${fps} fps`}
@@ -171,11 +175,12 @@ export function PlanetHud(props: PlanetHudProps) {
       )}
 
       {/* Three columns on wide screens: the two side columns share the space
-          equally, so the timeline in the middle sits centred under the planet. */}
-      <div className="flex flex-wrap items-end justify-between gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          equally, so the timeline in the middle sits centred under the planet.
+          On narrow screens the panels stack and the timeline goes last. */}
+      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div
           data-testid="planet-hud-probe"
-          className={`${panel} min-w-56 font-mono text-slate-400 lg:justify-self-start`}
+          className={`${panel} font-mono text-slate-400 sm:min-w-56 lg:justify-self-start`}
           aria-live="off"
         >
           <p className="text-slate-400">Hover</p>
@@ -228,12 +233,12 @@ export function PlanetHud(props: PlanetHudProps) {
           </div>
         )}
 
-        <div className={`${panel} flex flex-col items-end gap-2 lg:col-start-3 lg:max-w-sm lg:justify-self-end`}>
+        <div className={`${panel} flex flex-col items-stretch gap-2 sm:items-end lg:col-start-3 lg:max-w-sm lg:justify-self-end`}>
           {audio && <div className="w-full">{audio}</div>}
           <p
             role="status"
             data-testid="planet-hud-status"
-            className="text-right text-slate-300"
+            className="text-right text-slate-300 max-sm:sr-only [@media(max-height:480px)]:sr-only"
           >
             {modeLabel(mode, regionName, hoveredRegionName)}
           </p>
@@ -241,7 +246,7 @@ export function PlanetHud(props: PlanetHudProps) {
             <button
               type="button"
               data-testid="planet-hud-amazon-button"
-              className={button}
+              className={`${button} max-sm:flex-1`}
               disabled={mode !== "globe"}
               onClick={onAmazon}
             >
@@ -250,7 +255,7 @@ export function PlanetHud(props: PlanetHudProps) {
             <button
               type="button"
               data-testid="planet-hud-back-button"
-              className={button}
+              className={`${button} max-sm:flex-1`}
               disabled={mode !== "map"}
               onClick={onBackToEarth}
             >
