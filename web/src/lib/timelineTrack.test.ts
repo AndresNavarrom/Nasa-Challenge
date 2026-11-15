@@ -5,7 +5,8 @@ import {
   SpinAccumulator,
   playDelta,
   DEFAULT_TIMELINE_SPEED,
-  TIMELINE_SPEEDS,
+  TIMELINE_MAX_SPEED,
+  TIMELINE_MIN_SPEED,
   cadenceText,
   turnText,
   fractionAtPosition,
@@ -143,8 +144,9 @@ describe("marks on the line", () => {
     expect(ticks.map((tick) => tick.label)).toEqual(["Sample 1 of 3", "", "Sample 3 of 3"]);
   });
 
-  it("offers only 4x and 8x and starts at 4x", () => {
-    expect(TIMELINE_SPEEDS).toEqual([4, 8]);
+  it("offers a 4x to 32x slider and starts at 4x", () => {
+    expect(TIMELINE_MIN_SPEED).toBe(4);
+    expect(TIMELINE_MAX_SPEED).toBe(32);
     expect(DEFAULT_TIMELINE_SPEED).toBe(4);
   });
 

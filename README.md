@@ -186,8 +186,8 @@ docker compose up web     # then open http://127.0.0.1:5173/
   layer, at its real time (three hours of smoke, a day of CO2, a month of
   lightning). It plays by itself at the pace of the planet's turn: one turn is one day of
   smoke, 30 days of CO2 and one year of lightning, and the picture and the sound fade from one
-  instant to the next. The 4× and 8× buttons (4× to start) make each turn cover more time
-  (the line shows `1 turn = …`); the planet keeps its pace. It keeps playing on the map
+  instant to the next. The 4×–32× speed slider (4× to start) makes each turn cover
+  more time (the line shows `1 turn = …`); the planet keeps its pace. It keeps playing on the map
   view, during a drag and with Auto-rotate off; only the **❚❚ Pause** button
   on the line stops it (**▶ Play** goes on). Click
   or drag along the line (or use the arrow keys, Page Up/Down for a whole

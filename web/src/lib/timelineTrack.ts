@@ -193,10 +193,12 @@ export function cadenceText(cadence: Cadence | undefined): string {
   return cadence.count === 1 ? `every ${unit}` : `every ${cadence.count} ${unit}s`;
 }
 
-/** Speeds the person can pick for the timeline; the planet itself keeps turning at the same pace. */
-export const TIMELINE_SPEEDS = [4, 8] as const;
+/** Slider range for the timeline speed; the planet keeps its own pace. */
+export const TIMELINE_MIN_SPEED = 4;
+export const TIMELINE_MAX_SPEED = 32;
+export const TIMELINE_SPEED_STEP = 1;
 /** Speed the timeline starts at. */
-export const DEFAULT_TIMELINE_SPEED = TIMELINE_SPEEDS[0];
+export const DEFAULT_TIMELINE_SPEED = TIMELINE_MIN_SPEED;
 
 /** How much real time one turn of the planet covers at `speed`: "1 day", "120 days", "2 years". */
 export function turnText(cadence: Cadence | undefined, speed: number): string {

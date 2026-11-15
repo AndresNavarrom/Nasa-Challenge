@@ -27,7 +27,7 @@ root.innerHTML = `
     <header>
       <h1 style="margin: 0 0 4px; font-size: 24px">Earth Jukebox — timeline check</h1>
       <p style="margin: 0; color: #94a3b8; font-size: 14px">
-        Development page. Shared 0..1 position, loop forever, 0.1×–8×. Sound follows the Amazon-centre point.
+        Development page. Shared 0..1 position, loop forever, 0.1×–32×. Sound follows the Amazon-centre point.
       </p>
     </header>
 
