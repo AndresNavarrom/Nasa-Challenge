@@ -50,7 +50,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     testId: "planet-hud-amazon-button",
     title: "Fly to a region",
     description:
-      "The world is divided into regions, with the Amazon on its own. Double-click one, or press Amazon, to open its map; double-click the map or press Back to Earth to return.",
+      "The world is divided into regions, with the Amazon on its own. Double-click (or tap twice) one, or press Amazon, to open its map; double-click the map or press Back to Earth to return.",
     side: "left",
     align: "end",
   },

@@ -108,6 +108,8 @@ function emptyLayerTextures(): LayerTextures {
 
 /** Size of the region map: about 0.09 degrees per cell, so the outline stays smooth on the zoomed map. */
 const REGION_MASK_SIZE = { width: 4096, height: 2048 };
+/** Touch screens: longest time between the two taps that return from a region's map. */
+const DOUBLE_TAP_MS = 400;
 /** Lite mode (plan B): a quarter of the cells, built faster and four times lighter on the GPU. */
 const LITE_REGION_MASK_SIZE = { width: 2048, height: 1024 };
 
@@ -297,6 +299,8 @@ function SceneContents(props: SceneContentsProps) {
     [mask],
   );
   const [hoverRegion, setHoverRegion] = useState<number | null>(null);
+  // Region chosen with a tap on a touch screen (index), waiting for a second tap to visit it.
+  const touchSelected = useRef<number | null>(null);
   const focusBbox = useMemo(() => {
     const region = regionById(focusRegionId, knownRegions) ?? regionById(AMAZON_REGION_ID, knownRegions);
     return region ? focusBboxFor(region, data.bbox) : data.bbox;
@@ -311,6 +315,7 @@ function SceneContents(props: SceneContentsProps) {
   // A new region map renumbers the regions: forget the old highlight, in the
   // shader and in the status text alike.
   useEffect(() => {
+    touchSelected.current = null;
     showHoverRegion(null);
   }, [mask, showHoverRegion]);
   const [mode, setModeState] = useState<ViewMode>("globe");
@@ -440,6 +445,7 @@ function SceneContents(props: SceneContentsProps) {
       // where it was so the sound does not cut out (FR5.2).
       onProbe(null);
       lastProbeRef.current = null;
+      touchSelected.current = null;
       showHoverRegion(null);
     }
   };
@@ -512,11 +518,16 @@ function SceneContents(props: SceneContentsProps) {
       lastProbeRef.current = null;
       setListeningPoint(null);
       onProbe(null);
-      showHoverRegion(null);
+      // A region chosen with a tap stays chosen when the finger lifts.
+      if (touchSelected.current === null) showHoverRegion(null);
       return;
     }
-    // Regions are only picked on the planet; on the map there is no outline.
-    showHoverRegion(modeRef.current === "globe" ? regionAt(hit.lon, hit.lat) : null);
+    // Regions are only picked on the planet; on the map there is no outline. On touch
+    // screens taps choose the region (handleGlobeTap), not the moving finger.
+    if (!hit.touch) {
+      touchSelected.current = null;
+      showHoverRegion(modeRef.current === "globe" ? regionAt(hit.lon, hit.lat) : null);
+    }
     const rect = gl.domElement.getBoundingClientRect();
     setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
     const probe = probeFor(hit);
@@ -555,6 +566,40 @@ function SceneContents(props: SceneContentsProps) {
 
   const handleMapDoubleClick = useCallback(() => onRequestView("globe"), [onRequestView]);
 
+  // Touch screens: the first tap on a region chooses it (outline and name), a second
+  // tap on the same region flies there; a tap elsewhere chooses again or clears.
+  const handleGlobeTap = useCallback(
+    (lon: number, lat: number) => {
+      const index = regionAt(lon, lat);
+      const region = index === null ? undefined : knownRegions[index];
+      if (index === null || !region) {
+        touchSelected.current = null;
+        showHoverRegion(null);
+        return;
+      }
+      if (touchSelected.current === index) {
+        touchSelected.current = null;
+        onFocusRegion(region.id);
+        return;
+      }
+      touchSelected.current = index;
+      showHoverRegion(index);
+    },
+    [regionAt, knownRegions, showHoverRegion, onFocusRegion],
+  );
+
+  // Touch screens: two taps on the map within DOUBLE_TAP_MS go back to the planet.
+  const lastMapTap = useRef(0);
+  const handleMapTap = useCallback(() => {
+    const now = performance.now();
+    if (now - lastMapTap.current <= DOUBLE_TAP_MS) {
+      lastMapTap.current = 0;
+      onRequestView("globe");
+    } else {
+      lastMapTap.current = now;
+    }
+  }, [onRequestView]);
+
   const handleGlobeDoubleClick = useCallback(
     (lon: number, lat: number) => {
       const index = regionAt(lon, lat);
@@ -584,6 +629,8 @@ function SceneContents(props: SceneContentsProps) {
         onHover={handleHover}
         onGlobeDoubleClick={handleGlobeDoubleClick}
         onMapDoubleClick={handleMapDoubleClick}
+        onGlobeTap={handleGlobeTap}
+        onMapTap={handleMapTap}
       />
       <FpsProbe onFps={onFps} />
     </>

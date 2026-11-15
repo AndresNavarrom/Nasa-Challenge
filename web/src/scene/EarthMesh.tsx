@@ -104,6 +104,8 @@ export interface GlobeHit {
   lon: number;
   lat: number;
   clientX: number;
+  /** The point comes from a finger (touch screen), not a mouse or pen. */
+  touch: boolean;
 }
 
 export interface EarthMeshProps {
@@ -142,6 +144,10 @@ export interface EarthMeshProps {
   onGlobeDoubleClick: (lon: number, lat: number) => void;
   /** Double-click on the map of a region (not after a drag): back to the planet. */
   onMapDoubleClick: () => void;
+  /** Touch screens: a tap on the planet (not after a drag); double taps are not reported as double-clicks. */
+  onGlobeTap: (lon: number, lat: number) => void;
+  /** Touch screens: a tap on the map of a region. */
+  onMapTap: () => void;
 }
 
 export interface ReliefImages {
@@ -470,6 +476,8 @@ export function EarthMesh({
   onHover,
   onGlobeDoubleClick,
   onMapDoubleClick,
+  onGlobeTap,
+  onMapTap,
 }: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
@@ -478,7 +486,10 @@ export function EarthMesh({
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   // Where the cursor rests over the canvas, so the point under it can be found
   // again while the planet turns or a transition ends beneath a still cursor.
-  const pointerRef = useRef<{ inside: boolean; clientX: number }>({ inside: false, clientX: 0 });
+  const pointerRef = useRef<{ inside: boolean; clientX: number; touch: boolean }>({ inside: false, clientX: 0, touch: false });
+  // Whether the last press on the planet or the map was a finger: taps then select and
+  // visit regions, and the browser's double-click (and double-tap zoom) are ignored.
+  const lastPressTouch = useRef(false);
   const sinceHoverRefresh = useRef(0);
   // True while the last report to the scene was a point (not "nothing under the cursor").
   const reportedPoint = useRef(false);
@@ -639,6 +650,16 @@ export function EarthMesh({
     gl.domElement.style.cursor = "";
   }, [mode, gl]);
 
+  // Fingers on the planet turn it and tap regions: no page scroll or double-tap zoom.
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const before = canvas.style.touchAction;
+    canvas.style.touchAction = "none";
+    return () => {
+      canvas.style.touchAction = before;
+    };
+  }, [gl]);
+
   const euler = useMemo(() => new Euler(0, 0, 0, "XYZ"), []);
   const rotation = useMemo(() => new Matrix4(), []);
   useFrame((_, delta) => {
@@ -657,7 +678,7 @@ export function EarthMesh({
   useEffect(() => {
     const canvas = gl.domElement;
     const move = (event: PointerEvent) => {
-      pointerRef.current = { inside: true, clientX: event.clientX };
+      pointerRef.current = { inside: true, clientX: event.clientX, touch: event.pointerType === "touch" };
     };
     const leave = () => {
       pointerRef.current = { ...pointerRef.current, inside: false };
@@ -686,12 +707,12 @@ export function EarthMesh({
     const point = sphereLonLat(world);
     if (!point) return;
     gl.domElement.style.cursor = regionAt(point.lon, point.lat) !== null ? "pointer" : "grab";
-    emit({ ...point, clientX });
+    emit({ ...point, clientX, touch: pointerRef.current.touch });
   };
 
   const reportPlane = (uvX: number, uvY: number, clientX: number) => {
     // PlaneGeometry's texture v grows northwards; planeUvToLonLat counts from the north.
-    emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX });
+    emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX, touch: pointerRef.current.touch });
   };
 
   // Browsers only send pointer events when the mouse moves. While the planet
@@ -727,14 +748,30 @@ export function EarthMesh({
 
   const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
+    lastPressTouch.current = event.nativeEvent.pointerType === "touch";
     const state = view.current;
     dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
   };
 
   const handleSphereDoubleClick = (event: ThreeEvent<MouseEvent>) => {
-    if (event.delta > CLICK_TOLERANCE_PX) return;
+    if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
     if (point) onGlobeDoubleClick(point.lon, point.lat);
+  };
+
+  const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
+    if (!lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
+    const point = sphereLonLat(event.point);
+    if (point) onGlobeTap(point.lon, point.lat);
+  };
+
+  const handlePlaneDown = (event: ThreeEvent<PointerEvent>) => {
+    lastPressTouch.current = event.nativeEvent.pointerType === "touch";
+  };
+
+  const handlePlaneClick = (event: ThreeEvent<MouseEvent>) => {
+    if (!lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
+    onMapTap();
   };
 
   const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
@@ -743,7 +780,7 @@ export function EarthMesh({
   };
 
   const handlePlaneDoubleClick = (event: ThreeEvent<MouseEvent>) => {
-    if (event.delta > CLICK_TOLERANCE_PX) return;
+    if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
     onMapDoubleClick();
   };
 
@@ -762,6 +799,7 @@ export function EarthMesh({
             ref={sphereMesh}
             onPointerMove={handleSphereMove}
             onPointerDown={handleSphereDown}
+            onClick={handleSphereClick}
             onDoubleClick={handleSphereDoubleClick}
             onPointerOut={handleOut}
           >
@@ -773,6 +811,8 @@ export function EarthMesh({
 
       {mode === "map" && (
         <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove}
+          onPointerDown={handlePlaneDown}
+          onClick={handlePlaneClick}
           onDoubleClick={handlePlaneDoubleClick}
           onPointerOut={handleOut}
         >
