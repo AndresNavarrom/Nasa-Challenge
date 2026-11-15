@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Cadence, LayerManifest } from "../data/types";
 import {
   SpinAccumulator,
+  DEFAULT_TIMELINE_SPEED,
+  TIMELINE_SPEEDS,
   cadenceText,
   turnText,
   fractionAtPosition,
@@ -137,6 +139,11 @@ describe("marks on the line", () => {
   it("labels only the ends when the layer has no times", () => {
     const ticks = timelineTicks({ dates: ["Sample 1 of 3", "Sample 2 of 3", "Sample 3 of 3"] });
     expect(ticks.map((tick) => tick.label)).toEqual(["Sample 1 of 3", "", "Sample 3 of 3"]);
+  });
+
+  it("offers only 4x and 8x and starts at 4x", () => {
+    expect(TIMELINE_SPEEDS).toEqual([4, 8]);
+    expect(DEFAULT_TIMELINE_SPEED).toBe(4);
   });
 
   it("says how much real time one turn covers at the picked speed", () => {

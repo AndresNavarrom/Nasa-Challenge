@@ -8,7 +8,7 @@
 // keeps turning and the timeline goes on from there. Arrow keys move one instant,
 // Page Up / Page Down one turn (a day or a year), Home / End to the ends.
 //
-// Speed buttons (1x to 8x) make each turn cover more real time; the planet keeps
+// Speed buttons (4x and 8x, starting at 4x) make each turn cover more real time; the planet keeps
 // its pace, and the header says how much one turn covers ("1 turn = 4 days").
 //
 // A static layer (forest) shows the same line dimmed, with its one period.

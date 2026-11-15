@@ -46,7 +46,7 @@ TODO: confirm against the final app.
 - A short welcome tour explains the controls the first time the app opens.
 - Focusing on the Amazon turns the planet and flattens it into a regional map.
 - A timeline under the planet that plays while the planet turns (one turn is
-  a day of smoke, 30 days of CO2 or a year of lightning, 1× to 8×); a story
+  a day of smoke, 30 days of CO2 or a year of lightning, 4× or 8×); a story
   mode walks through the three ideas in under a minute.
 - Keyboard-only use and screen-reader descriptions (layer, place, low / medium
   / high value).

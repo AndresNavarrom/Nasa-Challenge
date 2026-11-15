@@ -31,7 +31,7 @@
     {
       "id": "smoke",
       "title": "Wildfire smoke",
-      "description": "Smoke from fires seen through the whole column of air: how much the organic and black carbon particles that fires give off dim the sunlight (aerosol optical depth), from NASA's MERRA-2, every three hours from 1 August to 30 September 2026, the fire season of the Amazon and of Africa. Desert dust and sea salt are left out, so only smoke shows, drifting over the oceans. Square-root scale: thin haze and thick plumes both show; an optical depth of 2 or more is the top. One turn of the planet is one day. More smoke makes the sound rougher and darker.",
+      "description": "Smoke from fires seen through the whole column of air: how much the organic and black carbon particles that fires give off dim the sunlight (aerosol optical depth), from NASA's MERRA-2, every three hours from 1 August to 30 September 2026, the fire season of the Amazon and of Africa. Desert dust and sea salt are left out, so only smoke shows, drifting over the oceans. Square-root scale: thin haze and thick plumes both show; an optical depth of 2 or more is the top. More smoke makes the sound rougher and darker.",
       "source": {
         "title": "MERRA-2 tavg1_2d_aer_Nx, organic + black carbon optical depth (NASA GMAO, GES DISC)",
         "url": "https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary"
@@ -1037,7 +1037,7 @@
     {
       "id": "co2",
       "title": "Atmospheric CO2",
-      "description": "Carbon dioxide in the whole column of air, from NASA's GEOS model with the measurements of the OCO-2 satellite folded in (OCO-2 GEOS Level 3, version 10r), day by day through 2020. Fixed scale: 404 ppm is the bottom and 420 ppm or more is the top, the same every day, so the yearly rise and the northern summer dip, when plants take CO2 up, both show. One turn of the planet is 30 days. More CO2 makes the breathing pulse faster and heavier.",
+      "description": "Carbon dioxide in the whole column of air, from NASA's GEOS model with the measurements of the OCO-2 satellite folded in (OCO-2 GEOS Level 3, version 10r), day by day through 2020. Fixed scale: 404 ppm is the bottom and 420 ppm or more is the top, the same every day, so the yearly rise and the northern summer dip, when plants take CO2 up, both show. More CO2 makes the breathing pulse faster and heavier.",
       "source": {
         "title": "OCO-2 GEOS Level 3 daily, 0.5x0.625 assimilated CO2 V10r (NASA GES DISC)",
         "url": "https://disc.gsfc.nasa.gov/datasets/OCO2_GEOS_L3CO2_DAY_10r/summary"

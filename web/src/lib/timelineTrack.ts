@@ -180,7 +180,9 @@ export function cadenceText(cadence: Cadence | undefined): string {
 }
 
 /** Speeds the person can pick for the timeline; the planet itself keeps turning at the same pace. */
-export const TIMELINE_SPEEDS = [1, 2, 4, 8] as const;
+export const TIMELINE_SPEEDS = [4, 8] as const;
+/** Speed the timeline starts at. */
+export const DEFAULT_TIMELINE_SPEED = TIMELINE_SPEEDS[0];
 
 /** How much real time one turn of the planet covers at `speed`: "1 day", "120 days", "2 years". */
 export function turnText(cadence: Cadence | undefined, speed: number): string {
