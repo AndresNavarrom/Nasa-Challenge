@@ -164,9 +164,9 @@ docker compose up web     # then open http://127.0.0.1:5173/
 
 - **Planet**: it turns slowly by itself. The overview plays the visible globe
   all at once: screen position sets the stereo side, latitude sets the pitch
-  (poles low, equator high), and the layer value sets the volume. Data time and
-  the field are independent, so Auto-rotate off freezes the frame but the field
-  keeps sounding. The forest overview adds sparse bird excerpts from
+  (poles low, equator high), and the layer value sets the volume. The timeline
+  plays on its own clock, so Auto-rotate off stops the planet but the data frame
+  and the field keep going. The forest overview adds sparse bird excerpts from
   `audio/samples/oajaros-suaves.ogg` when the visible forest is dense enough.
   Drag to turn the planet; double-click a region to fly there. On a touch screen
   a finger drag turns the planet and a double tap flies to a region. Point
