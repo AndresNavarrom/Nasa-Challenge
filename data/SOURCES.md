@@ -15,7 +15,7 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file `GEDI03_rh100_mean_2019108_2025190_003_01.tif` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file `aqc_tavg_1hr_glo_L1440x721_slv`, variable `PM25_RH35` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
 | Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 17 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every 6 hours, where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
-| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, accumulated | Relative frequency (0 to 1): how often lightning was drawn at each place across the whole period, read from the video frames. Not a flash count. The planet view draws the lightning dots of the video themselves (`web/public/data/lightning-4k.png`), coloured by that frequency; the sound uses the frequency grids only. |
+| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per quarter (27 frames, the last one July 2023 only) | Relative frequency (0 to 1): how often lightning was drawn at each place during that quarter only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one quarter at a time, on the timeline. |
 
 ## How each source was turned into a map
 
@@ -46,6 +46,17 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
   of each pixel (lightning is drawn in yellow over a grey map), so places with
   lightning in more windows are brighter (tools/fetch/lightning_composite.py).
   LIS sees only between about 55 N and 55 S.
+  **Timeline frames.** The app's lightning layer has one frame per quarter,
+  January 2017 to July 2023 (27 frames), from the same 250 windows kept in
+  `data/raw/5011/lightning_dots_2017_2023.npz`. The video runs linearly over the
+  period (100 s, about 24 days per second), so window k ends about k x 0.4 / 100
+  of the way through it; each window goes to the quarter of its middle day, and
+  each quarter's image is the mean yellowness of its own 9 or 10 windows only
+  (2 for July 2023), so playing them shows where lightning was seen each
+  quarter, never an accumulation (tools/fetch/lightning_quarters.py, images in
+  `data/raw/5011/quarters/`). January - March 2017 is almost empty: the
+  video shows almost no lightning in its first weeks (LIS was new on the ISS). The accumulated mean and the
+  sharp dots image below are kept but no longer drawn by the app.
   The planet view does not draw that mean, which is a soft blur and covers the
   tropics in one solid patch: over 250 windows almost every pixel of the Congo
   basin sees lightning many times. It draws distinct dots, like SVS 5011, from
@@ -91,6 +102,22 @@ backdrop of the planet and the map; it carries no data values.
 ## Amazon rectangle
 
 West 80 W, east 44 W, south 20 S, north 8 N.
+
+## World regions
+
+The regions outlined on the planet (`web/public/data/regions.json`) divide the
+world into 22 regions built from Natural Earth's 1:50m countries
+(`ne_50m_admin_0_countries.geojson`, version 5.1.2) by
+tools/fetch/world_regions.py: each country goes to its UN subregion (the
+SUBREGION field) and each subregion's countries are merged. Russia is a region
+of its own, Melanesia, Micronesia and Polynesia are joined as Pacific Islands,
+the open-ocean islands are left out, and France's overseas departments go with
+the region they lie in. Outlines are simplified (Douglas-Peucker, 0.05 degree)
+without breaking shared borders (each border between two countries is simplified
+once and used by both, so a region has no gaps inside), and islands under 0.02
+square degrees are dropped. The Amazon is drawn on top as
+its own region: the app keeps the forest (GEDI height of about 5 m or more)
+inside a hand-drawn area around the basin.
 
 ## Licences and credit
 
@@ -197,4 +224,6 @@ West 80 W, east 44 W, south 20 S, north 8 N.
 | `data/raw/4950/4k/GEDI_global.2575.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a004900/a004950/frames/3840x2160_16x9_60p/GEDI_global/GEDI_global.2575.tif> | 4K frame (16-bit TIFF) converted to 8-bit PNG with ffmpeg |
 | `data/raw/4950/4k/GEDI_global.2791.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a004900/a004950/frames/3840x2160_16x9_60p/GEDI_global/GEDI_global.2791.tif> | 4K frame (16-bit TIFF) converted to 8-bit PNG with ffmpeg |
 | `data/raw/4950/4k/GEDI_global.2999.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a004900/a004950/frames/3840x2160_16x9_60p/GEDI_global/GEDI_global.2999.tif> | 4K frame (16-bit TIFF) converted to 8-bit PNG with ffmpeg |
+| `data/raw/naturalearth/ne_50m_admin_0_countries.geojson` | <https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson> | downloaded as published |
+| `web/public/data/regions.json` | <https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson> | the 22 world regions (UN subregions of the countries, merged and simplified) by tools/fetch/world_regions.py |
 

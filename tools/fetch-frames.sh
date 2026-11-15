@@ -146,6 +146,30 @@ elif ! python3 "$FETCH_TOOLS/lightning_dots.py" render "$RAW/$LIGHTNING_DOTS" "$
   exit 1
 fi
 ROWS+="| \`web/public/data/lightning-4k.png\` | <$LIGHTNING_VIDEO> | distinct lightning dots for the planet view (4096 x 2048, one 8-bit channel), drawn from \`data/raw/$LIGHTNING_DOTS\` by tools/fetch/lightning_dots.py render |"$'\n'
+# The timeline frames of the lightning layer: one image per quarter (2017 Q1 to
+# 2023 Q3), each the mean of only that quarter's ten-day windows, never accumulated.
+LIGHTNING_QUARTERS="5011/quarters"
+# Every quarter must be there (2017 Q1 to 2023 Q3, 27 images), not only the last.
+quarters_present() {
+  local year number
+  for year in 2017 2018 2019 2020 2021 2022 2023; do
+    for number in 1 2 3 4; do
+      [[ "$year" == "2023" && "$number" == "4" ]] && continue
+      [[ -s "$RAW/$LIGHTNING_QUARTERS/lightning_${year}_q${number}.png" ]] || return 1
+    done
+  done
+}
+if [[ "$FORCE" != "1" ]] && quarters_present \
+    && [[ "$RAW/$LIGHTNING_QUARTERS/lightning_2023_q3.png" -nt "$RAW/$LIGHTNING_DOTS" ]]; then
+  echo "  have   $LIGHTNING_QUARTERS/lightning_<year>_q<n>.png"
+elif ! python3 "$FETCH_TOOLS/lightning_quarters.py" "$RAW/$LIGHTNING_DOTS" "$RAW/$LIGHTNING_QUARTERS" >/dev/null; then
+  echo "fetch-frames: could not build the quarterly lightning images from $LIGHTNING_DOTS" >&2
+  exit 1
+fi
+for png in "$RAW/$LIGHTNING_QUARTERS"/lightning_*_q?.png; do
+  [[ "$png" == *.part.png || ! -f "$png" ]] && continue
+  record "$LIGHTNING_QUARTERS/$(basename "$png")" "$LIGHTNING_VIDEO" "mean lightning of the ten-day windows of one quarter only, from \`data/raw/$LIGHTNING_DOTS\`, by tools/fetch/lightning_quarters.py"
+done
 
 echo "Atmospheric CO2 - DYAMOND (SVS 5196), 5760 x 3240 EXR frames"
 # The orbit animation, frame by frame, as uncompressed EXR (about 25 MB each).
@@ -209,6 +233,21 @@ for frame in 0199 0415 0631 0847 1063 1279 1495 1711 1927 2143 2359 2575 2791 29
   record "$png" "$GEDI_FRAMES/GEDI_global.$frame.tif" "4K frame (16-bit TIFF) converted to 8-bit PNG with ffmpeg"
 done
 
+echo "World regions - Natural Earth 1:50m countries"
+NE_COUNTRIES_URL="https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson"
+download "naturalearth/ne_50m_admin_0_countries.geojson" "$NE_COUNTRIES_URL"
+record "naturalearth/ne_50m_admin_0_countries.geojson" "$NE_COUNTRIES_URL" "downloaded as published"
+REGIONS_JSON="$ROOT/web/public/data/regions.json"
+# Rebuilt when missing, older than the countries file or older than the script itself.
+if [[ "$FORCE" != "1" && -s "$REGIONS_JSON" && "$REGIONS_JSON" -nt "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" \
+    && "$REGIONS_JSON" -nt "$FETCH_TOOLS/world_regions.py" ]]; then
+  echo "  have   web/public/data/regions.json"
+elif ! python3 "$FETCH_TOOLS/world_regions.py" "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" "$REGIONS_JSON"; then
+  echo "fetch-frames: could not build web/public/data/regions.json" >&2
+  exit 1
+fi
+ROWS+="| \`web/public/data/regions.json\` | <$NE_COUNTRIES_URL> | the 22 world regions (UN subregions of the countries, merged and simplified) by tools/fetch/world_regions.py |"$'\n'
+
 cat >"$SOURCES" <<EOF
 # Data sources
 
@@ -227,7 +266,7 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file \`GEDI03_rh100_mean_2019108_2025190_003_01.tif\` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
 | Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 17 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every 6 hours, where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
-| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, accumulated | Relative frequency (0 to 1): how often lightning was drawn at each place across the whole period, read from the video frames. Not a flash count. The planet view draws the lightning dots of the video themselves (\`web/public/data/lightning-4k.png\`), coloured by that frequency; the sound uses the frequency grids only. |
+| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per quarter (27 frames, the last one July 2023 only) | Relative frequency (0 to 1): how often lightning was drawn at each place during that quarter only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one quarter at a time, on the timeline. |
 
 ## How each source was turned into a map
 
@@ -258,6 +297,17 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
   of each pixel (lightning is drawn in yellow over a grey map), so places with
   lightning in more windows are brighter (tools/fetch/lightning_composite.py).
   LIS sees only between about 55 N and 55 S.
+  **Timeline frames.** The app's lightning layer has one frame per quarter,
+  January 2017 to July 2023 (27 frames), from the same 250 windows kept in
+  \`data/raw/5011/lightning_dots_2017_2023.npz\`. The video runs linearly over the
+  period (100 s, about 24 days per second), so window k ends about k x 0.4 / 100
+  of the way through it; each window goes to the quarter of its middle day, and
+  each quarter's image is the mean yellowness of its own 9 or 10 windows only
+  (2 for July 2023), so playing them shows where lightning was seen each
+  quarter, never an accumulation (tools/fetch/lightning_quarters.py, images in
+  \`data/raw/5011/quarters/\`). January - March 2017 is almost empty: the
+  video shows almost no lightning in its first weeks (LIS was new on the ISS). The accumulated mean and the
+  sharp dots image below are kept but no longer drawn by the app.
   The planet view does not draw that mean, which is a soft blur and covers the
   tropics in one solid patch: over 250 windows almost every pixel of the Congo
   basin sees lightning many times. It draws distinct dots, like SVS 5011, from
@@ -303,6 +353,22 @@ backdrop of the planet and the map; it carries no data values.
 ## Amazon rectangle
 
 West 80 W, east 44 W, south 20 S, north 8 N.
+
+## World regions
+
+The regions outlined on the planet (\`web/public/data/regions.json\`) divide the
+world into 22 regions built from Natural Earth's 1:50m countries
+(\`ne_50m_admin_0_countries.geojson\`, version 5.1.2) by
+tools/fetch/world_regions.py: each country goes to its UN subregion (the
+SUBREGION field) and each subregion's countries are merged. Russia is a region
+of its own, Melanesia, Micronesia and Polynesia are joined as Pacific Islands,
+the open-ocean islands are left out, and France's overseas departments go with
+the region they lie in. Outlines are simplified (Douglas-Peucker, 0.05 degree)
+without breaking shared borders (each border between two countries is simplified
+once and used by both, so a region has no gaps inside), and islands under 0.02
+square degrees are dropped. The Amazon is drawn on top as
+its own region: the app keeps the forest (GEDI height of about 5 m or more)
+inside a hand-drawn area around the basin.
 
 ## Licences and credit
 

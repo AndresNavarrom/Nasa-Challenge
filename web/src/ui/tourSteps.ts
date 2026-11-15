@@ -33,10 +33,10 @@ export const TOUR_STEPS: readonly TourStep[] = [
     align: "end",
   },
   {
-    testId: "planet-hud-heard-layers",
+    testId: "planet-hud-layer-select",
     title: "Choose what you hear",
     description:
-      "Tick the layers you want to listen to and untick the ones you want to silence. The layer picked above is the one drawn on the planet.",
+      "Pick a layer: it is drawn on the planet and it is the only one you hear. Earth (no layer) is silent.",
     side: "right",
     align: "start",
   },
@@ -48,8 +48,9 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     testId: "planet-hud-amazon-button",
-    title: "Fly to the Amazon",
-    description: "Click the Amazon on the planet or press Amazon to flatten it into a detailed map. Back to Earth returns.",
+    title: "Fly to a region",
+    description:
+      "The world is divided into regions, with the Amazon on its own. Double-click (or tap twice) one, or press Amazon, to open its map; double-click the map or press Back to Earth to return.",
     side: "left",
     align: "end",
   },

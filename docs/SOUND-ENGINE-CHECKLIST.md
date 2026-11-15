@@ -45,19 +45,25 @@ For each layer: clear the other two, move the slider slowly from 0 to 1 and back
 The lightning layer is a relative frequency (0..1, static), so it is tested as a
 rhythm, not as a sustained voice. The mapping is exact:
 
+Each hit is an excerpt of `audio/samples/tormenta-albert.ogg`; the synthesized
+hit is only a fallback when the sample cannot be loaded.
+
 | Slider | Expected |
 |---|---|
 | 0 | No hits (silence) |
-| 0.5 | 3 hits per second, body around 210 Hz |
-| 1 | 6 hits per second, body around 330 Hz |
+| 0.5 | 3 hits per second of thunder |
+| 1 | 6 hits per second of thunder |
 
 | Check | Pass condition |
 |---|---|
+| Sound | The hits are thunder from the sample, not a synth blip |
 | Count over 10 s at 0.5 / 1 | About 30 / 60 hits, evenly spaced |
-| Pitch | The body is clearly higher at 1 than at 0.5 |
+| Variation | Repeated hits do not sound identical (four excerpt starts) |
+| High rate (0.8–1) | Trails overlap and are not cut when the next hit starts; loudness stays controlled |
 | Pan | The hits move with the pan control |
 | Disable the layer / tick "no data" | The rhythm stops within one hit; the other voices are unchanged |
 | CO2 with lightning | The CO2 breathing does not change when the lightning slider moves |
+| Fallback | If the sample is missing, the synth hit still plays at the same rate |
 
 ## 3. Three-layer mix (FR4)
 

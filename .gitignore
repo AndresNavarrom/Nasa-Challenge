@@ -32,6 +32,9 @@ aidlc/diagnostics/
 tools/scraping/resources/
 tools/scraping/**/__pycache__/
 
+# Python bytecode from the helper scripts
+**/__pycache__/
+
 # opencode runtime dependencies (regenerated locally)
 .opencode/node_modules/
 .opencode/package.json

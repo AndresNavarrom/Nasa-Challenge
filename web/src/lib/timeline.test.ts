@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayerManifest } from "../data/types";
-import { advancePosition, dateLabelAt, frameBlend, framePosition } from "./timeline";
+import { advancePosition, dateLabelAt, frameBlend, frameIndexAt, framePosition } from "./timeline";
 
 type Dated = Pick<LayerManifest, "static" | "dates">;
 
@@ -57,6 +57,25 @@ describe("timeline", () => {
     for (const position of [0, 0.5, 1]) {
       expect(dateLabelAt(lightning, position)).toBe("2017 - 2023 (accumulated)");
     }
+  });
+
+  it("shows one instant at a time, the same one the date label reads", () => {
+    // Starts on the first instant, then each frame replaces the previous one.
+    expect(frameIndexAt(0, 5)).toBe(0);
+    expect(frameIndexAt(0.1, 5)).toBe(0);
+    expect(frameIndexAt(0.2, 5)).toBe(1);
+    expect(frameIndexAt(0.5, 5)).toBe(2);
+    expect(frameIndexAt(1, 5)).toBe(4);
+    // The picture and the label never disagree.
+    for (let step = 0; step <= 100; step += 1) {
+      const position = step / 100;
+      expect(co2.dates[frameIndexAt(position, co2.dates.length)]).toBe(dateLabelAt(co2, position));
+    }
+    // Static or broken inputs stay on the only frame.
+    expect(frameIndexAt(0.7, 1)).toBe(0);
+    expect(frameIndexAt(0.7, 0)).toBe(0);
+    expect(frameIndexAt(Number.NaN, 12)).toBe(0);
+    expect(frameIndexAt(5, 12)).toBe(11);
   });
 
   it("advances with playback and loops back to the start", () => {
