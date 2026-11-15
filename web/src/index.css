@@ -16,6 +16,32 @@ body,
   margin: 0;
 }
 
+/* On phones the browser bars come and go; the dynamic height keeps the HUD's
+   bottom panel on screen instead of under the address bar. */
+#root {
+  height: 100dvh;
+}
+
+/* The planet takes every touch on it (turn, tap the Amazon) instead of the
+   page scrolling or zooming. */
+canvas {
+  touch-action: none;
+}
+
+/* HUD margins: 0.5 rem on phones and 1 rem from Tailwind's `sm` up, never less
+   than the safe areas of screens with a notch or rounded corners. */
+.hud-safe {
+  --hud-pad: 0.5rem;
+  padding: max(var(--hud-pad), env(safe-area-inset-top)) max(var(--hud-pad), env(safe-area-inset-right))
+    max(var(--hud-pad), env(safe-area-inset-bottom)) max(var(--hud-pad), env(safe-area-inset-left));
+}
+
+@media (min-width: 40rem) {
+  .hud-safe {
+    --hud-pad: 1rem;
+  }
+}
+
 body {
   background: #05070d;
   color: #e8edf5;
@@ -41,7 +67,8 @@ body {
   @apply rounded-lg bg-slate-950/75 p-3 font-sans text-sm shadow-lg backdrop-blur;
   /* The panels inherit the page's text colour (body); driver.css sets its own. */
   color: #e8edf5;
-  max-width: 20rem;
+  /* Never wider than a phone screen, with a margin on each side. */
+  max-width: min(20rem, calc(100vw - 1rem));
 }
 
 .jukebox-tour .driver-popover-title {

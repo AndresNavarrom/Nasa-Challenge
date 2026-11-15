@@ -11,7 +11,7 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ClampToEdgeWrapping,
   DataTexture,
@@ -36,6 +36,7 @@ import { EarthMesh, type DotImage, type GlobeHit, type ReliefImages } from "./Ea
 import {
   GLOBE_CAMERA_Z,
   createViewState,
+  globeCameraZ,
   mapCameraZ,
   playFocus,
   playReturn,
@@ -44,7 +45,7 @@ import {
   type ViewState,
 } from "./FocusTransition";
 import { GLOBE_RADIUS, screenX01 } from "./geo";
-import { disposeLayerTextures, layerTextureFor, rampFor, showLayerFrame, type LayerTextures } from "./layerTexture";
+import { disposeLayerTextures, layerTextureFor, rampFor, showLayerBlend, type LayerTextures } from "./layerTexture";
 import { useListeningPoint, useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 import {
   AMAZON_REGION_ID,
@@ -70,12 +71,18 @@ export interface EarthSceneProps {
   data: JukeboxData;
   /** null: the plain Earth, no layer drawn. */
   activeLayer: LoadedLayer | null;
-  /** Instant of the active layer to draw, from the timeline (frameIndexAt); 0 for static layers. */
+  /** Instant of the active layer to draw, from the timeline (frameBlend.from); 0 for static layers. */
   frame: number;
+  /** Instant the picture fades towards (frameBlend.to); equal to `frame` when there is no fade. */
+  nextFrame: number;
+  /** How far the timeline is from `frame` towards `nextFrame` (0..1), read on every animation frame. */
+  frameMix: RefObject<number>;
   targetView: TargetView;
   lite: boolean;
   /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
   autoRotate: boolean;
+  /** The planet turned by itself by this angle (radians) this frame; drives the timeline. */
+  onSpin?: (radians: number) => void;
   onRequestView: (view: TargetView) => void;
   /**
    * Regions of the world, the Amazon first (regions.ts); they are outlined and can be
@@ -116,7 +123,18 @@ const LITE_SEGMENTS = { width: 64, height: 32 };
 function emptyLayerTextures(): LayerTextures {
   const region = new DataTexture(new Uint8Array(4), 1, 1);
   region.needsUpdate = true;
-  return { global: null, region, heightGlobal: null, heightRegion: null, opacity: 0.8, baseDim: 0, frame: 0 };
+  return {
+    global: null,
+    region,
+    globalNext: null,
+    regionNext: region,
+    heightGlobal: null,
+    heightRegion: null,
+    opacity: 0.8,
+    baseDim: 0,
+    frame: 0,
+    nextFrame: 0,
+  };
 }
 
 /** Size of the region map: about 0.09 degrees per cell, so the outline stays smooth on the zoomed map. */
@@ -265,9 +283,12 @@ function SceneContents(props: SceneContentsProps) {
     data,
     activeLayer,
     frame,
+    nextFrame,
+    frameMix,
     targetView,
     lite,
     autoRotate,
+    onSpin,
     regions,
     focusRegionId,
     onRequestView,
@@ -352,6 +373,8 @@ function SceneContents(props: SceneContentsProps) {
   const [forestGlobalError, setForestGlobalError] = useState<string | null>(null);
   const [forestRegionError, setForestRegionError] = useState<string | null>(null);
   const [lightningError, setLightningError] = useState<string | null>(null);
+  const [sharpGlobalError, setSharpGlobalError] = useState<string | null>(null);
+  const [sharpRegionError, setSharpRegionError] = useState<string | null>(null);
 
   const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
   const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
@@ -398,13 +421,43 @@ function SceneContents(props: SceneContentsProps) {
     setForestRegionError,
     configureRegionHeight,
   );
-  const reliefImages = useMemo<ReliefImages | null>(
+  const forestImages = useMemo<ReliefImages | null>(
     () =>
       forestActive && forestGlobal && forestRegion
-        ? { global: forestGlobal, region: forestRegion, ramp: rampFor(SHARP_RELIEF_LAYER) }
+        ? { global: forestGlobal, region: forestRegion, ramp: rampFor(SHARP_RELIEF_LAYER), relief: true }
         : null,
     [forestActive, forestGlobal, forestRegion],
   );
+
+  // Sharp images that tools/prep made for the active layer (CO2): one per instant,
+  // only the instant on screen is loaded. Until both are there, or if one fails,
+  // the layer is drawn from its grids. The forest keeps its own height images.
+  const sharp = activeLayer && !forestActive ? activeLayer.manifest.sharp : undefined;
+  const sharpFrame = activeLayer ? Math.min(frame, activeLayer.region.frames - 1) : 0;
+  const sharpGlobalFile = sharp?.global && sharp.region ? (sharp.global.files[sharpFrame] ?? null) : null;
+  const sharpRegionFile = sharp?.global && sharp.region ? (sharp.region.files[sharpFrame] ?? null) : null;
+  const sharpGlobalUrl = sharpGlobalFile ? `${data.baseUrl}${sharpGlobalFile}` : null;
+  const sharpRegionUrl = sharpRegionFile ? `${data.baseUrl}${sharpRegionFile}` : null;
+  const sharpGlobal = useImageTexture(
+    sharpGlobalUrl,
+    `The sharp image of this layer (${sharpGlobalUrl}) could not be loaded, so it is drawn from the coarser grid. Everything else still works.`,
+    setSharpGlobalError,
+    configureGlobalHeight,
+  );
+  const sharpRegion = useImageTexture(
+    sharpRegionUrl,
+    `The sharp Amazon image of this layer (${sharpRegionUrl}) could not be loaded, so it is drawn from the coarser grid. Everything else still works.`,
+    setSharpRegionError,
+    configureRegionHeight,
+  );
+  const layerSharpImages = useMemo<ReliefImages | null>(
+    () =>
+      activeLayer && sharpGlobal && sharpRegion
+        ? { global: sharpGlobal, region: sharpRegion, ramp: rampFor(activeLayer.manifest.id), relief: false }
+        : null,
+    [activeLayer, sharpGlobal, sharpRegion],
+  );
+  const reliefImages = forestImages ?? layerSharpImages;
 
   // Sharp lightning dots: requested the first time lightning is shown, then kept
   // (same rule as the forest images), so start-up does not wait for them.
@@ -435,13 +488,13 @@ function SceneContents(props: SceneContentsProps) {
 
   // The textures are built once per layer, at the instant on screen; later instants
   // are swapped in place below, so playing the timeline does not rebuild them.
-  const frameRef = useRef(frame);
-  frameRef.current = frame;
+  const frameRef = useRef({ frame, nextFrame });
+  frameRef.current = { frame, nextFrame };
   const layer = useMemo(() => {
     // The plain Earth view: an empty (fully transparent) layer, so only the planet shows.
     if (activeLayer === null) return { textures: emptyLayerTextures(), error: null };
     try {
-      return { textures: layerTextureFor(activeLayer, frameRef.current), error: null };
+      return { textures: layerTextureFor(activeLayer, frameRef.current.frame, frameRef.current.nextFrame), error: null };
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       return { textures: emptyLayerTextures(), error: message };
@@ -457,11 +510,11 @@ function SceneContents(props: SceneContentsProps) {
     return () => disposeLayerTextures(layer.textures);
   }, [layer]);
 
-  // The timeline moved to another instant: it replaces the one on screen.
+  // The timeline moved to another pair of instants: they replace the ones on screen.
   useEffect(() => {
     if (activeLayer === null || layer.error) return;
     try {
-      showLayerFrame(layer.textures, activeLayer, frame);
+      showLayerBlend(layer.textures, activeLayer, frame, nextFrame);
       // This instant drew well: a banner left by an earlier one no longer applies.
       setLayerError(null);
     } catch (cause) {
@@ -469,7 +522,7 @@ function SceneContents(props: SceneContentsProps) {
       console.error("Earth Jukebox could not draw an instant of a layer:", cause);
       setLayerError(`${message} The layer stays on its previous instant.`);
     }
-  }, [layer, activeLayer, frame]);
+  }, [layer, activeLayer, frame, nextFrame]);
 
   // One banner for every source: a good layer or image clears itself without
   // hiding a failure somewhere else.
@@ -477,9 +530,10 @@ function SceneContents(props: SceneContentsProps) {
   const forestError = forestActive ? (forestGlobalError ?? forestRegionError) : null;
   // Likewise the lightning image banner, only while lightning is on screen.
   const lightningImageError = lightningActive ? lightningError : null;
+  const sharpImageError = sharpGlobalUrl ? (sharpGlobalError ?? sharpRegionError) : null;
   useEffect(() => {
-    onSceneError(layerError ?? baseError ?? regionError ?? forestError ?? lightningImageError ?? null);
-  }, [layerError, baseError, regionError, forestError, lightningImageError, onSceneError]);
+    onSceneError(layerError ?? baseError ?? regionError ?? forestError ?? lightningImageError ?? sharpImageError ?? null);
+  }, [layerError, baseError, regionError, forestError, lightningImageError, sharpImageError, onSceneError]);
 
   const setMode = (next: ViewMode) => {
     modeRef.current = next;
@@ -515,13 +569,17 @@ function SceneContents(props: SceneContentsProps) {
       });
     } else if (target === "globe" && current === "map") {
       setMode("to-globe");
-      cancelRef.current = playReturn(view.current, {
-        instant,
-        onComplete: () => {
-          setMode("globe");
-          advanceRef.current();
+      cancelRef.current = playReturn(
+        view.current,
+        {
+          instant,
+          onComplete: () => {
+            setMode("globe");
+            advanceRef.current();
+          },
         },
-      });
+        globeCameraZ(CAMERA_FOV, size.width / size.height),
+      );
     }
   };
   useEffect(() => {
@@ -557,6 +615,10 @@ function SceneContents(props: SceneContentsProps) {
       camera.position.set(focus.x, focus.y, state.cameraZ - focus.zoom);
       camera.lookAt(focus.x, focus.y, GLOBE_RADIUS);
     } else {
+      if (modeRef.current === "globe") {
+        // Keep the whole planet on screen, also on a phone held upright or turned.
+        state.cameraZ = globeCameraZ(CAMERA_FOV, size.width / size.height);
+      }
       camera.position.set(0, 0, state.cameraZ);
       camera.lookAt(0, 0, 0);
     }
@@ -567,9 +629,12 @@ function SceneContents(props: SceneContentsProps) {
       lon: hit.lon,
       lat: hit.lat,
       // The reading of the instant on screen, so the indicator matches the picture.
-      value: activeLayer ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, frame) : null,
+      // The same blend of the two instants the picture shows.
+      value: activeLayer
+        ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, frame + (nextFrame - frame) * (frameMix.current ?? 0))
+        : null,
     }),
-    [activeLayer, data.bbox, frame],
+    [activeLayer, data.bbox, frame, nextFrame, frameMix],
   );
 
   // The pointer can deliver several moves per frame; publish the latest one once.
@@ -702,6 +767,8 @@ function SceneContents(props: SceneContentsProps) {
         segments={lite ? LITE_SEGMENTS : FULL_SEGMENTS}
         raiseRelief={!lite}
         autoRotate={autoRotate}
+        onSpin={onSpin}
+        frameMix={frameMix}
         reliefImages={reliefImages}
         dotImage={dotImage}
         // Scenes are points of the Amazon map: shown only when the Amazon is the region visited.

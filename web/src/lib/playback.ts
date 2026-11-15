@@ -11,6 +11,7 @@
 // This module is pure so it can be tested without React or Web Audio.
 
 import { advancePosition, clampPosition } from "./timeline";
+import { stepPosition } from "./timelineTrack";
 
 /** Slowest playback speed. */
 export const MIN_SPEED = 0.1;
@@ -36,6 +37,8 @@ export type PlaybackAction =
   | { type: "pause" }
   | { type: "toggle" }
   | { type: "seek"; position: number }
+  /** Moves the position by `delta` times the speed (the planet turned), starting again after the end. */
+  | { type: "step"; delta: number }
   | { type: "set-speed"; speed: number }
   | { type: "set-loop"; loop: boolean }
   | { type: "set-duration"; durationSeconds: number }
@@ -76,6 +79,8 @@ export function playbackReducer(state: PlaybackState, action: PlaybackAction): P
       return state.playing ? { ...state, playing: false } : startPlaying(state);
     case "seek":
       return { ...state, position: clampPosition(action.position) };
+    case "step":
+      return { ...state, position: stepPosition(state.position, action.delta * state.speed) };
     case "set-speed":
       return { ...state, speed: clampSpeed(action.speed) };
     case "set-loop":

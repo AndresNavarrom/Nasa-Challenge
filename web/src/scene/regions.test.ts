@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { gridBytes } from "../data/loadManifest";
 import {
   AMAZON_REGION,
   AMAZON_REGION_ID,
@@ -128,7 +129,7 @@ describe("regions", () => {
     const world = parseWorldRegions(JSON.parse(new TextDecoder().decode(await readDataFile("regions.json"))));
     expect(world.length).toBeGreaterThanOrEqual(20);
     const regions = withAmazon(world);
-    const forest = await readDataFile("forest_global.bin");
+    const forest = await gridBytes((await readDataFile("forest_global.bin.gz")).slice().buffer, "forest_global.bin.gz");
     const map = buildRegionMap(1440, 720, { width: 1440, height: 720, frames: 1, data: forest }, regions);
     const at = (lon: number, lat: number) => {
       const index = regionMapIndexAt(map, lon, lat);

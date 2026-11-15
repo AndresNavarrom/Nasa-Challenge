@@ -13,7 +13,8 @@ import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
-import { frameIndexAt } from "./lib/timeline";
+import { frameBlend, frameIndexAt, framePosition } from "./lib/timeline";
+import { SpinAccumulator, positionPerTurn } from "./lib/timelineTrack";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import { loadScenes } from "./scenes/loadScenes";
 import type { SceneDefinition, ScenesManifest } from "./scenes/types";
@@ -23,13 +24,12 @@ import {
   ListeningPointProvider,
   useListeningPoint,
 } from "./scene/listeningPoint";
-import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
+import { TIMELINE_UPDATE_HZ, TimelineProvider, useTimeline, useTimelineActions } from "./timeline/TimelineProvider";
 import { PlanetHud } from "./ui/PlanetHud";
 import { ScenePopup } from "./ui/ScenePopup";
-import { TimelineBar } from "./ui/TimelineBar";
 import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
 import { layerVoices } from "./ui/soloLayer";
-import { timelineLayer } from "./ui/timelineFormat";
+import { TimelineTrack } from "./ui/TimelineTrack";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
@@ -51,7 +51,6 @@ interface PlanetViewProps {
   data: JukeboxData;
   lite: boolean;
   audio?: ReactNode;
-  timeline?: ReactNode;
   /** The layer picker's value: a layer id or EARTH_VIEW_ID. */
   activeLayerId: string;
   onSelectLayer: (layerId: string) => void;
@@ -67,7 +66,6 @@ function PlanetView({
   data,
   lite,
   audio,
-  timeline,
   activeLayerId,
   onSelectLayer,
   onShowTour,
@@ -76,9 +74,12 @@ function PlanetView({
   onCloseScene,
   focusedScene,
 }: PlanetViewProps) {
-  // The instant on screen, tagged with its layer so a stale one is never used for another.
-  const [tracked, setTracked] = useState<{ layerId: string; frame: number } | null>(null);
+  // The pair of instants on screen and the nearest one, tagged with their layer so
+  // a stale pair is never used for another. How far the picture is between the
+  // two lives in a ref, read on every animation frame (no re-render).
+  const [tracked, setTracked] = useState<TrackedFrames | null>(null);
   const positionRef = useRef(0);
+  const frameMixRef = useRef(0);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
@@ -96,12 +97,27 @@ function PlanetView({
   // Right after a layer change the tracker has not reported yet: read the position
   // it last mirrored, so the textures are built once, at the right instant.
   const layerFrames = activeLayer?.region.frames ?? 1;
-  const frame =
+  const frames: Omit<TrackedFrames, "layerId"> =
     activeLayer === null
-      ? 0
+      ? { from: 0, to: 0, nearest: 0 }
       : tracked?.layerId === activeLayer.manifest.id
-        ? tracked.frame
-        : frameIndexAt(positionRef.current, layerFrames);
+        ? tracked
+        : framesAt(positionRef.current, layerFrames, !lite);
+  const frame = frames.nearest;
+  // The timeline plays with the planet's own turn: one turn moves it by a day of
+  // hourly data or a year of monthly data (positionPerTurn). Handed on about 30
+  // times a second; a drag, Auto-rotate off or the map view stop the turn and so
+  // the timeline. Only the actions are read here, so this view does not re-render
+  // as the timeline moves.
+  const { step } = useTimelineActions();
+  const perTurnRef = useRef(0);
+  perTurnRef.current = activeLayer ? positionPerTurn(activeLayer.manifest) : 0;
+  const spinRef = useRef<SpinAccumulator | null>(null);
+  spinRef.current ??= new SpinAccumulator(1000 / TIMELINE_UPDATE_HZ, step);
+  useEffect(() => spinRef.current?.reset(), [activeLayer]);
+  const handleSpin = useCallback((radians: number) => {
+    spinRef.current?.add((radians / (2 * Math.PI)) * perTurnRef.current, performance.now());
+  }, []);
   const selectedPoint = useListeningPoint();
   const selectedValue =
     selectedPoint && activeLayer
@@ -185,17 +201,22 @@ function PlanetView({
       <FrameTracker
         layerId={activeLayer?.manifest.id ?? ""}
         frames={layerFrames}
+        fade={!lite}
         positionRef={positionRef}
-        onFrame={setTracked}
+        mixRef={frameMixRef}
+        onFrames={setTracked}
       />
       <div className="absolute inset-0">
         <EarthScene
           data={data}
           activeLayer={activeLayer}
-          frame={frame}
+          frame={frames.from}
+          nextFrame={frames.to}
+          frameMix={frameMixRef}
           targetView={targetView}
           lite={lite}
           autoRotate={autoRotate}
+          onSpin={handleSpin}
           onRequestView={requestView}
           regions={regions}
           focusRegionId={focusRegionId}
@@ -228,7 +249,11 @@ function PlanetView({
         sceneError={sceneError}
         selectedValue={selectedValue}
         audio={audio}
-        timeline={timeline}
+        timeline={
+          activeLayer ? (
+            <TimelineControls layer={activeLayer} playing={autoRotate && mode === "globe"} />
+          ) : undefined
+        }
         onShowTour={onShowTour}
       />
       {sceneHover && !focusedScene && (
@@ -244,29 +269,55 @@ function PlanetView({
   );
 }
 
+interface TrackedFrames {
+  layerId: string;
+  /** Earlier instant of the fade (the picture's base). */
+  from: number;
+  /** Later instant the picture fades towards; equal to `from` without fading. */
+  to: number;
+  /** Instant nearest the timeline position: the one the date on the line names. */
+  nearest: number;
+}
+
+/** The pair of instants around a position (or the nearest one twice, without fading). */
+function framesAt(position: number, frames: number, fade: boolean): Omit<TrackedFrames, "layerId"> {
+  const nearest = frameIndexAt(position, frames);
+  if (!fade) return { from: nearest, to: nearest, nearest };
+  const { from, to } = frameBlend(position, frames);
+  return { from, to, nearest };
+}
+
 /**
- * Turns the shared timeline position into the instant of the active layer that
- * is on screen (the same one the timeline bar's date names). It reads the clock
- * about 30 times a second but reports only when the instant changes, so the
- * planet view re-renders once per instant, not on every clock tick.
+ * Turns the shared timeline position into the instants of the active layer on
+ * screen: the pair the picture fades between and the nearest one (the date on
+ * the line). It reads the clock about 30 times a second, puts how far it is
+ * between the pair in `mixRef` (read by the shader on every animation frame) and
+ * reports only when an instant changes, so the planet view re-renders a few
+ * times per instant, not on every clock tick. In lite mode it does not fade:
+ * the nearest instant is shown alone.
  */
 function FrameTracker({
   layerId,
   frames,
+  fade,
   positionRef,
-  onFrame,
+  mixRef,
+  onFrames,
 }: {
   layerId: string;
   frames: number;
+  fade: boolean;
   positionRef: { current: number };
-  onFrame: (tracked: { layerId: string; frame: number }) => void;
+  mixRef: { current: number };
+  onFrames: (tracked: TrackedFrames) => void;
 }) {
   const { position } = useTimeline();
   positionRef.current = position;
-  const frame = frameIndexAt(position, frames);
+  mixRef.current = fade ? frameBlend(position, frames).mix : 0;
+  const { from, to, nearest } = framesAt(position, frames, fade);
   useEffect(() => {
-    onFrame({ layerId, frame });
-  }, [layerId, frame, onFrame]);
+    onFrames({ layerId, from, to, nearest });
+  }, [layerId, from, to, nearest, onFrames]);
   return null;
 }
 
@@ -274,15 +325,18 @@ function FrameTracker({
  * Feeds the sound engine from the point under the cursor and the shared
  * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
  * ListeningPointProvider, so the scene publishes the point without knowing
- * about audio. The timeline is static: it starts at 0 and only the Time
- * slider of the timeline bar moves it.
+ * about audio. The timeline moves with the planet's turn and with the line
+ * under the planet.
  */
 function AudioListener({
   data,
   engine,
+  fade,
 }: {
   data: JukeboxData;
   engine: SoundEngine;
+  /** Blend the two instants around the position like the picture does (off in lite mode). */
+  fade: boolean;
 }) {
   const point = useListeningPoint();
   const { position } = useTimeline();
@@ -295,35 +349,38 @@ function AudioListener({
       return;
     }
     for (const layer of data.layers) {
-      // Shared normalized position -> the instant of this layer on screen (the
-      // nearest one, like the picture and the probe), so what is heard is what is
-      // seen. Static layers have one frame, so this is 0 and sampleLayerAt ignores
-      // time for them.
-      const frame = frameIndexAt(position, layer.region.frames);
+      // Shared normalized position -> the same blend of the two instants around
+      // it that the picture fades between (the nearest instant alone in lite
+      // mode), so what is heard is what is seen. Static layers have one frame,
+      // so this is 0 and sampleLayerAt ignores time for them.
+      const frame = fade
+        ? framePosition(position, layer.region.frames)
+        : frameIndexAt(position, layer.region.frames);
       engine.setLayerIntensity(
         layer.manifest.id,
         sampleLayerAt(layer, data.bbox, point.lon, point.lat, frame),
       );
     }
     engine.setPan(point.screenX);
-  }, [engine, data, point, position]);
+  }, [engine, data, point, position, fade]);
 
   return null;
 }
 
 /**
- * The timeline bar bound to the shared clock. Only this component reads the
- * clock, so moving the Time slider re-renders it alone, not the planet view
- * around it.
+ * The timeline line bound to the shared clock. Only this component reads the
+ * clock, so the moving playhead re-renders it alone, not the planet view around it.
  */
-function TimelineControls({ layer }: { layer: LoadedLayer }) {
+function TimelineControls({ layer, playing }: { layer: LoadedLayer; playing: boolean }) {
   const timeline = useTimeline();
   return (
-    <TimelineBar
-      className="w-56"
+    <TimelineTrack
       position={timeline.position}
       layer={layer}
+      playing={playing}
       onSeek={timeline.seek}
+      speed={timeline.speed}
+      onSpeed={timeline.setSpeed}
     />
   );
 }
@@ -367,8 +424,6 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const [openScene, setOpenScene] = useState<SceneDefinition | null>(null);
   const [sceneAudioError, setSceneAudioError] = useState<string | null>(null);
   const closeScene = useCallback(() => setOpenScene(null), []);
-  // The timeline bar only for a picked layer that changes over time (smoke, CO2).
-  const timedLayer = useMemo(() => timelineLayer(data.layers, activeLayerId), [data, activeLayerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -437,8 +492,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
       <PlanetView
         data={data}
         lite={lite}
-        audio={<AudioStart engine={engine} className="w-56" />}
-        timeline={timedLayer ? <TimelineControls layer={timedLayer} /> : undefined}
+        audio={<AudioStart engine={engine} className="w-full sm:w-56" />}
         activeLayerId={activeLayerId}
         onSelectLayer={setActiveLayerId}
         onShowTour={showTour}
@@ -447,7 +501,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         onCloseScene={closeScene}
         focusedScene={openScene}
       />
-      <AudioListener data={data} engine={engine} />
+      <AudioListener data={data} engine={engine} fade={!lite} />
       {openScene && (
         <ScenePopup scene={openScene} onClose={closeScene} audioError={sceneAudioError} />
       )}

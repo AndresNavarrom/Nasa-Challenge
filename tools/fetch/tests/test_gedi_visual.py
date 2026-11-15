@@ -190,10 +190,26 @@ def test_a_missing_input_stops_with_a_clear_message(tmp_path, capsys):
     tif, fill, data_dir = write_inputs(tmp_path)
     (data_dir / "forest_global.bin").unlink()
 
-    with pytest.raises(ConversionError, match=r"missing input: forest grid .*forest_global\.bin.*prep"):
+    with pytest.raises(ConversionError, match=r"missing input: forest grid .*forest_global\.bin.*forest grid from .*prep"):
         run(tif, fill, data_dir)
 
     assert main(["--tif", str(tmp_path / "absent.tif"), "--fill", str(fill), "--data-dir", str(data_dir)]) == 1
     message = capsys.readouterr().err
     assert "gedi_visual: missing input: GEDI L3 GeoTIFF" in message and "absent.tif" in message
     assert not any(data_dir.glob("forest-height-*"))  # nothing half written
+
+
+def test_reads_the_gzip_grid_named_in_the_manifest(tmp_path):
+    import gzip
+
+    tif, fill, data_dir = write_inputs(tmp_path)
+    plain = (data_dir / "forest_global.bin").read_bytes()
+    (data_dir / "forest_global.bin").unlink()
+    (data_dir / "forest_global.bin.gz").write_bytes(gzip.compress(plain))
+    manifest = json.loads((data_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest["layers"][0]["global"]["file"] = "forest_global.bin.gz"
+    (data_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    written = run(tif, fill, data_dir, global_width=72, region_cell=1.0)
+
+    assert set(written) == {OUTPUT_8K, OUTPUT_4K, OUTPUT_REGION}
