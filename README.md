@@ -3,8 +3,8 @@
 Proof of concept for the NASA Space Apps Challenge 2026 challenge
 "The Earth Information Jukebox" (team Sagitta).
 
-The goal is a local web app that opens on a 3D planet with three NASA Earth
-Information Center layers (forest height, wildfire smoke, CO2). Each layer gets
+The goal is a local web app that opens on a 3D planet with four NASA Earth
+science layers (forest height, wildfire smoke, CO2, lightning). Each layer gets
 its own voice, generated in real time in the browser, and focusing the Amazon
 flattens the planet into a detailed regional map. The story: the Amazon as the
 lungs of the world — how it works, why it matters, what affects it.
@@ -15,17 +15,19 @@ This repository is the **shared base** of the build. What is in place:
 
 | Part | Where | State |
 |---|---|---|
-| Data preparation (NASA frames → grids, textures, manifest) | `tools/prep/`, `tools/fetch-frames.sh`, `data/prep-config.json` | Done, tested |
-| Prepared data from real NASA frames | `web/public/data/` | Done (1.2 MB) |
+| Data download and conversion (GEDI, GEOS-CF, SVS frames) | `tools/fetch/`, `tools/fetch-frames.sh` | Done, tested |
+| Data preparation (sources → grids, textures, manifest) | `tools/prep/`, `data/prep-config.json` | Done, tested |
+| Prepared data (four layers and the planet images) | `web/public/data/` | Done (about 49 MB) |
 | Data types and loader | `web/src/data/` | Done, tested |
 | Interpolation and timeline | `web/src/lib/` | Done, tested |
-| Value → sound mapping (pure functions) | `web/src/audio/mapping.ts` | Done, tested |
-| Sound engine (Web Audio) | `web/src/audio/engine.ts` | To build |
+| Value → sound mapping and sound engine (Web Audio) | `web/src/audio/` | Done, tested |
 | Local server (Axum) | `server/` | Done, tested |
-| Planet, Amazon map, transition, panels, story mode, accessibility | `web/src/scene/`, `web/src/ui/` | To build (`App.tsx` is a starting shell that lists the loaded layers) |
+| Planet, Amazon map and transition | `web/src/scene/` | Done, tested |
+| Side panel, timeline bar, story mode, accessibility | `web/src/ui/` | In progress |
 | Docker containers to run, test and prepare the data | `docker-compose.yml`, `web/Dockerfile`, `tools/prep/Dockerfile` | Done |
 | Final app container (built interface + local server) | `Dockerfile`, service `app` | Done |
-| `run-demo.sh`, demo checklist, submission drafts | — | To build |
+| Demo launcher | `run-demo.sh`, `run-demo.ps1` | Done |
+| Demo checklist, submission drafts | `docs/DEMO-CHECKLIST.md`, `docs/SUBMISSION.md` | Drafts |
 
 ## Project layout
 
@@ -35,6 +37,8 @@ tools/prep/       Rust program: NASA frames -> intensity grids + textures + mani
 tools/fetch-frames.sh  downloads the NASA frames into data/raw/
 server/           Rust (Axum) static server for 127.0.0.1: serves web/dist
 Dockerfile        final app image: built interface + release server binary
+run-demo.sh       demo launcher (run-demo.ps1 on Windows PowerShell)
+docs/             demo checklist and submission drafts
 data/             prep-config.json, SOURCES.md, raw/ (downloaded frames, not versioned)
 web/public/data/  prepared data shipped with the app
 docker-compose.yml  services to run, test and prepare the data in containers
@@ -62,6 +66,20 @@ other service sits behind a profile (so that `docker compose up` never starts
 them by accident).
 
 ### 2. Run the app (the demo)
+
+The quickest way, which also checks that Docker is running and the image is
+built, waits for the app and opens the browser:
+
+```bash
+./run-demo.sh --build     # once, with internet
+./run-demo.sh             # every time after, works offline; --stop to stop it
+```
+
+On Windows PowerShell: `.\run-demo.ps1 -Build`, then `.\run-demo.ps1` (and
+`-Stop`). If scripts are blocked, run
+`powershell -ExecutionPolicy Bypass -File .\run-demo.ps1`.
+
+The same with Docker Compose directly:
 
 ```bash
 docker compose build app        # needs internet; again after any change to web/ or server/
@@ -252,22 +270,27 @@ by instant, then row (north first), then column (west first).
 
 See [`data/SOURCES.md`](data/SOURCES.md) for every file and link.
 
-- Forest height: GEDI Forest Height, [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950)
-- Wildfire smoke: Air Quality Model Runs (GEOS-CF), [NASA SVS 5533](https://svs.gsfc.nasa.gov/5533)
-- CO2: DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196), 5760 x 3240 frames of the orbit animation
-- Backdrop of the planet: [NASA SVS 3615](https://svs.gsfc.nasa.gov/3615)
+| Layer | Source | Coverage | What the value is |
+|---|---|---|---|
+| Forest height | [GEDI L3 Gridded Land Surface Metrics V3](https://doi.org/10.3334/ORNLDAAC/2525) (NASA GEDI, ORNL DAAC), filled with [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950) where GEDI has no data | Global, April 2019 - July 2025 | **Measurement** on a fixed scale: 0 to 50 m canopy height |
+| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) surface PM2.5 (NASA GMAO model analysis) | Global, 1 September 2026, 24 hourly means | **Model value** on a fixed scale: 0 to 150 µg/m³ |
+| Atmospheric CO2 | DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196), 5760 x 3240 EXR frames | **Global**: the Americas and the Atlantic animated, 23 - 25 February 2020 every 6 h; elsewhere a fixed mosaic, 14 January - 3 March 2020 | **Relative intensity** read from the colours of the visualization, not ppm |
+| Lightning | Lightning Events Detected from the ISS 2017-2023, [NASA SVS 5011](https://svs.gsfc.nasa.gov/5011) | About 55° N to 55° S, 2017 - 2023 accumulated | **Relative frequency** read from the visualization, not a flash count |
 
-**The values are relative intensities read from the colours of rendered
-visualization frames, not physical measurements.** Globe views were placed on
-the map by hand and are accurate to roughly 1 to 2 degrees; the CO2 globe views
-were fitted to real coastlines (`tools/fetch/co2_calibrate.py`). CO2 is global
-but a mosaic: SVS 5196 is only published as a turning globe, so over the
-Americas and the Atlantic it moves with the timeline (23 to 25 February 2020)
-and elsewhere each region shows its own fixed date (14 January to 3 March 2020).
+Backdrop of the planet: [Natural Earth I](https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/)
+(public domain); it carries no data values.
+
+**Forest height and smoke are measured or modelled values on fixed scales.
+CO2 and lightning are relative values read from rendered NASA visualizations,
+not physical measurements.** CO2 is global but a mosaic: SVS 5196 is only
+published as a turning globe, so only the Americas and the Atlantic move with the timeline and elsewhere each
+region shows its own fixed date. The globe views were fitted to real coastlines
+(`tools/fetch/co2_calibrate.py`). CO2 is presented as global context, not as a
+measured effect of what happens in the Amazon.
 
 ## Use of AI
 
 An AI coding assistant (Claude Code) generated code, data-preparation scripts
 and documentation drafts in this repository under the team's direction. The
 team reviews and is responsible for the result. No AI-generated images, video
-or audio are included; the data comes from the NASA visualizations listed above.
+or audio are included; the data comes from the NASA sources listed above.
