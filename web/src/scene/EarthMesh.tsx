@@ -344,7 +344,9 @@ const FRAGMENT_SHADER = /* glsl */ `
       float here = regionAt(maskUv);
       if (here > 0.5) {
         bool hovered = abs(here - uHoverRegion) < 0.5;
-        vec2 reach = (abs(duvx) + abs(duvy)) * (hovered ? 2.2 : 1.5);
+        // At most one degree: near the planet's edge the screen derivatives grow
+        // without bound and would paint whole bands of the region as border.
+        vec2 reach = min((abs(duvx) + abs(duvy)) * (hovered ? 2.2 : 1.5), vec2(1.0 / 360.0, 1.0 / 180.0));
         float outside = 0.0;
         outside += step(0.5, abs(regionAt(maskUv + vec2(reach.x, 0.0)) - here));
         outside += step(0.5, abs(regionAt(maskUv - vec2(reach.x, 0.0)) - here));
