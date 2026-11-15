@@ -1,7 +1,9 @@
 // Shapes of the prepared data shipped under web/public/data/.
 // Written by tools/prep (Rust) and read by loadManifest.ts.
 
-export const LAYER_IDS = ["forest", "smoke", "co2"] as const;
+// Keep in step with LAYER_IDS in tools/prep/src/config.rs. `co2` stays accepted
+// although the data file no longer lists it.
+export const LAYER_IDS = ["forest", "smoke", "co2", "lightning"] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 
 /** One intensity grid file: `frames * height * width` bytes, values 0..255. */

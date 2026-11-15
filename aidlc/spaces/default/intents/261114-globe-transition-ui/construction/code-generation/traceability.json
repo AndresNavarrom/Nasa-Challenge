@@ -1,0 +1,30 @@
+{
+  "stage": "code-generation",
+  "upstream_ids": [
+    "FR1.1", "FR1.2", "FR1.3", "FR1.4",
+    "FR2.1", "FR2.2", "FR3",
+    "FR4.1", "FR4.2", "FR4.3", "FR4.4",
+    "FR5.1", "FR5.2", "FR5.3",
+    "NFR1", "NFR2", "NFR3", "NFR4"
+  ],
+  "coverage": [
+    { "id": "FR1.1", "status": "OK", "target": "web/src/scene/EarthMesh.tsx" },
+    { "id": "FR1.2", "status": "OK", "target": "web/src/scene/layerTexture.ts" },
+    { "id": "FR1.3", "status": "OK", "target": "web/src/scene/layerTexture.ts" },
+    { "id": "FR1.4", "status": "OK", "target": "web/src/ui/PlanetHud.tsx" },
+    { "id": "FR2.1", "status": "OK", "target": "web/src/scene/FocusTransition.ts" },
+    { "id": "FR2.2", "status": "OK", "target": "web/src/scene/FocusTransition.ts" },
+    { "id": "FR3", "status": "OK", "target": "web/src/scene/EarthMesh.tsx" },
+    { "id": "FR4.1", "status": "OK", "target": "web/src/scene/geo.ts" },
+    { "id": "FR4.2", "status": "OK", "target": "web/src/scene/geo.ts" },
+    { "id": "FR4.3", "status": "OK", "target": "web/src/scene/listeningPoint.tsx" },
+    { "id": "FR4.4", "status": "OK", "target": "web/src/ui/PlanetHud.tsx" },
+    { "id": "FR5.1", "status": "N/A", "target": "La capa aerosol y el cambio del formato de datos los entrega Andres Navarro (respuesta Q4 de requirements-analysis-questions.md); este paso no los construye" },
+    { "id": "FR5.2", "status": "OK", "target": "web/src/scene/EarthScene.tsx" },
+    { "id": "FR5.3", "status": "OK", "target": "web/src/App.tsx" },
+    { "id": "NFR1", "status": "OK", "target": "web/src/ui/PlanetHud.tsx" },
+    { "id": "NFR2", "status": "OK", "target": "docs/PLANET-CHECKLIST.md" },
+    { "id": "NFR3", "status": "OK", "target": "web/src/scene/geo.test.ts" },
+    { "id": "NFR4", "status": "N/A", "target": "Este paso no agrega datos; el tamaño depende de la capa aerosol que entrega Andres Navarro" }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "stage": "code-generation",
+  "upstream_ids": [
+    "FR1.1",
+    "FR1.2",
+    "FR1.3",
+    "FR2.1",
+    "FR2.2",
+    "FR2.3",
+    "FR3",
+    "FR4.1",
+    "FR4.2",
+    "FR4.3",
+    "NFR1",
+    "NFR2",
+    "NFR3",
+    "NFR4"
+  ],
+  "coverage": [
+    { "id": "FR1.1", "status": "OK", "target": "tools/fetch/fetch-gedi.sh" },
+    { "id": "FR1.2", "status": "OK", "target": "tools/fetch/fetch-gedi.sh" },
+    { "id": "FR1.3", "status": "OK", "target": "docker-compose.yml" },
+    { "id": "FR2.1", "status": "OK", "target": "tools/fetch/gedi_l3_to_png.py" },
+    { "id": "FR2.2", "status": "OK", "target": "tools/fetch/gedi_l3_to_png.py" },
+    { "id": "FR2.3", "status": "OK", "target": "tools/fetch/gedi_l3_to_png.py" },
+    { "id": "FR3", "status": "OK", "target": "tools/prep/src/pipeline.rs" },
+    { "id": "FR4.1", "status": "OK", "target": "web/public/data/manifest.json" },
+    { "id": "FR4.2", "status": "OK", "target": "tools/fetch-frames.sh" },
+    { "id": "FR4.3", "status": "OK", "target": "tools/prep/src/pipeline.rs" },
+    { "id": "NFR1", "status": "OK", "target": "docker-compose.yml" },
+    { "id": "NFR2", "status": "OK", "target": "tools/fetch/gedi_l3_to_png.py" },
+    { "id": "NFR3", "status": "OK", "target": "tools/fetch/tests/test_gedi_l3_to_png.py" },
+    { "id": "NFR4", "status": "OK", "target": "data/prep-config.json" }
+  ]
+}
