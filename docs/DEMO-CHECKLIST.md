@@ -35,7 +35,8 @@ count, who tested). Planet-specific checks during development are in
 
 - [ ] **Start screen**: the "Start listening" button unlocks audio; no silence on first interaction
 - [ ] **Layers are recognisable (FR3)**: with eyes closed, a person outside the team says which layer is playing and whether its value is high or low, in **4 of 5** tries. Person 1: __/5 · Person 2: __/5
-- [ ] **Mix without clipping (FR4)**: all three layers active for **1 minute**; the output meter never reaches the maximum and no active layer drops out
+- [ ] **Mix without clipping (FR4)**: all four layers active for **1 minute**; the output meter never reaches the maximum and no active layer drops out
+- [ ] **Listen to checkboxes**: unticking a layer silences only its voice; ticking it brings it back
 - [ ] **Latency (NFR2)**: from moving the cursor or clicking to the sound changing, **100 ms or less**: ______ ms
 - [ ] **No clicks**: moving the cursor across the edge of the Amazon rectangle gives no audible jump
 - [ ] **Left / right (FR3.4)**: moving the point across the screen moves the sound between the speakers

@@ -23,11 +23,11 @@ repository README).
 
 TODO (Danna): final wording, about 100–150 words.
 
-> Earth Jukebox turns NASA Earth Information Center visualizations into music
-> you can explore. It opens on a 3D planet; each data layer has its own voice,
-> generated live in the browser: forest height sets the notes and harmony,
-> wildfire smoke makes the sound rougher and darker, and carbon dioxide sets a
-> breathing pulse. Moving over the planet or focusing on the Amazon — where the
+> Earth Jukebox turns NASA Earth science data into music you can explore. It
+> opens on a 3D planet; each data layer has its own voice, generated live in
+> the browser: forest height measured by GEDI sets the notes and harmony,
+> wildfire smoke makes the sound rougher and darker, carbon dioxide sets a
+> breathing pulse and lightning adds percussion. Moving over the planet or focusing on the Amazon — where the
 > planet flattens into a detailed regional map — lets you hear how the forest,
 > the smoke that threatens it and the CO2 around it change from place to place
 > and over time. The story it tells: the Amazon as the lungs of the world, how
@@ -39,10 +39,11 @@ TODO (Danna): final wording, about 100–150 words.
 
 TODO: confirm against the final app.
 
-- A 3D planet with three NASA layers: forest height (GEDI), wildfire smoke
-  (GEOS-CF) and carbon dioxide (DYAMOND).
-- Each layer sounds in real time where the cursor is; the layers can be turned
-  on and off and heard together.
+- A 3D planet with four NASA layers: forest height (GEDI), wildfire smoke
+  (GEOS-CF), carbon dioxide (DYAMOND) and lightning (LIS on the ISS).
+- Each layer sounds in real time where the cursor is; the layers can be heard
+  together, and the "Listen to" checkboxes turn each voice on and off.
+- A short welcome tour explains the controls the first time the app opens.
 - Focusing on the Amazon turns the planet and flattens it into a regional map.
 - A shared timeline plays the data like a song; a story mode walks through the
   three ideas in under a minute.
@@ -51,20 +52,25 @@ TODO: confirm against the final app.
 
 ### How it works
 
-- The NASA Scientific Visualization Studio frames are converted ahead of time,
-  by a Rust tool, into grids of **relative intensities from 0 to 1**, read from
-  each visualization's colour bar or, where there is none, from the pixel's
-  colour. These are relative intensities, not physical measurements.
+- The NASA data is turned ahead of time, by Python and Rust tools, into grids
+  of values from 0 to 1:
+  - **forest height** is the canopy height measured by GEDI, on a fixed scale
+    of 0 to 50 m (NASA SVS 4950 fills the gaps where GEDI has no measurement);
+  - **wildfire smoke** is surface PM2.5 from the GEOS-CF model, on a fixed
+    scale of 0 to 150 µg/m³;
+  - **CO2** and **lightning** are relative values read from the colours of
+    NASA visualizations (an intensity and a frequency), not physical
+    measurements.
 - The browser interpolates those grids in space (and in time for smoke and
   CO2) and maps each value to sound with the Web Audio API: pitch within a
-  five-note scale, roughness and filter, breathing rate, stereo position and
-  volume.
+  five-note scale, roughness and filter, breathing rate, percussion for
+  lightning, stereo position and volume.
 - The interface is React with three.js for the planet and GSAP for the
   transition. A small Rust (Axum) server serves everything from the laptop, so
   the whole demo runs **without internet**, packaged in Docker.
-- Smoke and CO2 only have usable data over the Amazon, so on the planet they
-  are seen and heard over that region only. CO2 is presented as global context,
-  not as a measured effect of what happens in the Amazon.
+- CO2 only has usable data over the Amazon, so on the planet it is seen and
+  heard over that region only. It is presented as global context, not as a
+  measured effect of what happens in the Amazon.
 
 ### Benefits
 
@@ -81,10 +87,11 @@ TODO (Danna).
 
 ### Tools, languages and hardware
 
-- Languages: TypeScript, Rust
-- Interface: React, Tailwind CSS, three.js with react-three-fiber, GSAP, Vite
+- Languages: TypeScript, Rust, Python
+- Interface: React, Tailwind CSS, three.js with react-three-fiber, GSAP, driver.js (welcome tour), Vite
 - Sound: Web Audio API
-- Data preparation: Rust; ffmpeg to extract video frames
+- Data download and conversion: Python (NumPy, pyproj, tifffile, Pillow); ffmpeg to extract video frames
+- Data preparation: Rust
 - Local server: Rust with Axum and Tokio
 - Tests: Vitest, cargo test
 - Packaging: Docker, Docker Compose
@@ -104,14 +111,15 @@ The repository states the same in its README (FR10.4).
 
 ## NASA data
 
-| Layer | NASA source | Link |
+| Layer | Source | Link |
 |---|---|---|
-| Forest height | GEDI Forest Height (data April 2019 – April 2020), NASA SVS 4950 | https://svs.gsfc.nasa.gov/4950 |
-| Wildfire smoke | Air Quality Model Runs, GEOS-CF (July – August 2024), NASA SVS 5533, Earth Information Center hyperwall version | https://svs.gsfc.nasa.gov/5533 |
-| Carbon dioxide | DYAMOND Global Carbon Dioxide (January – March 2020), NASA SVS 5196 | https://svs.gsfc.nasa.gov/5196 |
-| Base image of the planet | Equirectangular Projected Earth, NASA SVS 3615 (backdrop only, no data values) | https://svs.gsfc.nasa.gov/3615 |
+| Forest height | GEDI L3 Gridded Land Surface Metrics V3, mean canopy height (NASA GEDI, ORNL DAAC), April 2019 – July 2025; gaps filled with GEDI Forest Height, NASA SVS 4950 | https://doi.org/10.3334/ORNLDAAC/2525 · https://svs.gsfc.nasa.gov/4950 |
+| Wildfire smoke | GEOS-CF v2 analysis, surface PM2.5 (NASA GMAO), 1 September 2026, 24 hourly means | https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ |
+| Carbon dioxide | DYAMOND Global Carbon Dioxide, NASA SVS 5196, 23 – 25 February 2020 | https://svs.gsfc.nasa.gov/5196 |
+| Lightning | Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011 | https://svs.gsfc.nasa.gov/5011 |
+| Base image of the planet | Natural Earth I with Shaded Relief and Water (public domain; backdrop only, no data values) | https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/ |
 
-How each frame becomes a value, and the limits of that method, are in
+How each source becomes a value, and the limits of each method, are in
 [`data/SOURCES.md`](../data/SOURCES.md).
 
 ## References
