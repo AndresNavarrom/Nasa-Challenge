@@ -1,6 +1,7 @@
 // Minimal controls over the 3D view until the side panel of plan Step 13:
 // "Amazon" and "Back to Earth" (FR2.1, FR2.2), a temporary active-layer picker
-// (FR1.4), the "Listen to" checkboxes that choose which layers sound, the "?"
+// (FR1.4), the "Auto-rotate" switch that starts and stops the planet's own
+// turn, the "Listen to" checkboxes that choose which layers sound, the "?"
 // button that repeats the guided tour, the longitude/latitude/value indicator
 // (FR4.4) and a frames-per-second counter (NFR1).
 
@@ -17,6 +18,9 @@ export interface PlanetHudProps {
   layers: LoadedLayer[];
   activeLayerId: string;
   onSelectLayer: (layerId: string) => void;
+  /** Whether the planet turns by itself on the planet view (the "Auto-rotate" switch). */
+  autoRotate: boolean;
+  onToggleAutoRotate: (on: boolean) => void;
   mode: ViewMode;
   onAmazon: () => void;
   onBackToEarth: () => void;
@@ -78,6 +82,8 @@ export function PlanetHud(props: PlanetHudProps) {
     layers,
     activeLayerId,
     onSelectLayer,
+    autoRotate,
+    onToggleAutoRotate,
     mode,
     onAmazon,
     onBackToEarth,
@@ -130,6 +136,18 @@ export function PlanetHud(props: PlanetHudProps) {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="mt-2 flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="planet-hud-auto-rotate"
+              className="h-4 w-4 cursor-pointer accent-emerald-600 [color-scheme:dark]"
+              checked={autoRotate}
+              onChange={(event) => onToggleAutoRotate(event.target.checked)}
+            />
+            <span className={autoRotate ? "text-slate-300" : "text-slate-400"}>
+              Auto-rotate
+            </span>
           </label>
           {activeLayer && activeLayer.manifest.dates.length > 1 && (
             <p className="mt-1 text-xs text-slate-400">
