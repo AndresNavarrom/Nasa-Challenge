@@ -15,6 +15,8 @@ import type { JukeboxData } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
 import { framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
+import { loadScenes } from "./scenes/loadScenes";
+import type { SceneDefinition, ScenesManifest } from "./scenes/types";
 import type { ViewMode } from "./scene/FocusTransition";
 import {
   ListeningPointProvider,
@@ -23,6 +25,7 @@ import {
 import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
 import { allHeard, isHeard, withHeard, type HeardLayers } from "./ui/heardLayers";
 import { PlanetHud } from "./ui/PlanetHud";
+import { ScenePopup } from "./ui/ScenePopup";
 import { TimelineBar } from "./ui/TimelineBar";
 import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
 import { startTour } from "./ui/tour";
@@ -46,6 +49,9 @@ interface PlanetViewProps {
   heard?: HeardLayers;
   onToggleHeard?: (layerId: string, on: boolean) => void;
   onShowTour?: () => void;
+  scenes?: ScenesManifest | null;
+  onSceneSelect?: (scene: SceneDefinition) => void;
+  onCloseScene?: () => void;
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
@@ -57,6 +63,9 @@ function PlanetView({
   heard,
   onToggleHeard,
   onShowTour,
+  scenes,
+  onSceneSelect,
+  onCloseScene,
 }: PlanetViewProps) {
   const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
@@ -71,7 +80,10 @@ function PlanetView({
     [data, activeLayerId],
   );
   const showAmazon = useCallback(() => setTargetView("map"), []);
-  const showEarth = useCallback(() => setTargetView("globe"), []);
+  const showEarth = useCallback(() => {
+    onCloseScene?.();
+    setTargetView("globe");
+  }, [onCloseScene]);
 
   if (data.layers.length === 0) {
     return (
@@ -98,6 +110,8 @@ function PlanetView({
           onProbe={setProbe}
           onFps={setFps}
           onSceneError={setSceneError}
+          scenes={scenes?.scenes}
+          onSceneSelect={onSceneSelect}
         />
       </div>
       <PlanetHud
@@ -217,6 +231,64 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const [heard, setHeard] = useState<HeardLayers>(() => allHeard(data.layers.map((layer) => layer.manifest.id)));
   const toggleHeard = useCallback((layerId: string, on: boolean) => setHeard((current) => withHeard(current, layerId, on)), []);
   const showTour = useGuidedTour();
+  const [scenes, setScenes] = useState<ScenesManifest | null>(null);
+  const [openScene, setOpenScene] = useState<SceneDefinition | null>(null);
+  const [sceneAudioError, setSceneAudioError] = useState<string | null>(null);
+  const closeScene = useCallback(() => setOpenScene(null), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadScenes()
+      .then((manifest) => {
+        if (!cancelled) setScenes(manifest);
+      })
+      .catch((cause: unknown) => {
+        console.warn("Earth Jukebox could not load its scenes:", cause);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Scene audio: ARPA and the loop start together; the loop fades in over 0.5 s
+  // while ARPA keeps playing over it. Closing or switching stops both.
+  useEffect(() => {
+    if (!openScene) {
+      engine.stopSceneAudio();
+      engine.setDataVoiceDuck(1);
+      return;
+    }
+    let cancelled = false;
+    setSceneAudioError(null);
+    const start = async (): Promise<void> => {
+      try {
+        if (engine.state === "idle") await engine.start();
+        if (cancelled) return;
+        engine.setDataVoiceDuck(0.3);
+        const transition = `./${scenes?.transition.file ?? "audio/samples/arpa.ogg"}`;
+        await Promise.all([
+          engine.playSceneTransition(transition),
+          engine.playSceneLoop(`./${openScene.loop}`, {
+            gain: openScene.loopGain,
+            fadeInSeconds: 0.5,
+          }),
+        ]);
+      } catch (cause) {
+        if (cancelled) return;
+        engine.stopSceneAudio();
+        engine.setDataVoiceDuck(1);
+        setSceneAudioError(
+          `The scene sound could not start: ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      engine.stopSceneAudio();
+      engine.setDataVoiceDuck(1);
+    };
+  }, [engine, openScene, scenes]);
 
   // A layer that is not heard keeps its data and drawing; only its voice goes quiet.
   useEffect(() => {
@@ -235,8 +307,14 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         heard={heard}
         onToggleHeard={toggleHeard}
         onShowTour={showTour}
+        scenes={scenes}
+        onSceneSelect={setOpenScene}
+        onCloseScene={closeScene}
       />
       <AudioListener data={data} engine={engine} />
+      {openScene && (
+        <ScenePopup scene={openScene} onClose={closeScene} audioError={sceneAudioError} />
+      )}
     </>
   );
 }

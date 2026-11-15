@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "generatedBy": "tools/scenes/prepare.py",
+  "transition": {
+    "id": "arpa",
+    "file": "audio/samples/arpa.ogg"
+  },
+  "scenes": [
+    {
+      "id": "birds",
+      "title": "Birds of the Amazon Rainforest",
+      "description": "Aves: The Amazon is one of the most biodiverse regions in the world, home to more than 1,300 bird species, representing one-third of all bird species on the planet.",
+      "lon": -68.546,
+      "lat": -3.398,
+      "image": "scenes/birds/birds.jpg",
+      "imageAlt": "Birds in the Amazon forest",
+      "loop": "scenes/birds/birds.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
+    },
+    {
+      "id": "river",
+      "title": "The Amazon River",
+      "description": "The Amazon River is the largest river in the world by water discharge, flowing for approximately 6.400 kilometers across South America, It is home to an extraordinary variety of aquatic species and plays a crucial role in the ecosystem.",
+      "lon": -73.246,
+      "lat": -0.868,
+      "image": "scenes/river/river.jpg",
+      "imageAlt": "The Amazon River seen from the International Space Station",
+      "loop": "scenes/river/river.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
+    }
+  ]
+}

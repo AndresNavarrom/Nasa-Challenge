@@ -75,7 +75,7 @@ describe("sound engine", () => {
     const timbre = smokeToTimbre(0.9);
     expect(scheduled(context.filters[1]!.frequency)).toBeCloseTo(timbre.filterCutoffHz, 6);
     expect(scheduled(context.oscillators[3]!.frequency)).toBeCloseTo(timbre.roughnessRateHz, 6);
-    expect(scheduled(context.gains[4]!.gain)).toBeCloseTo(timbre.noiseMix, 6);
+    expect(scheduled(context.gains[5]!.gain)).toBeCloseTo(timbre.noiseMix, 6);
     expect(scheduled(layerVoiceGain(context, 1).gain)).toBeGreaterThan(0);
     engine.dispose();
   });
@@ -398,6 +398,79 @@ describe("sound engine", () => {
     context.outputLatency = 0.02;
     await engine.start();
     expect(engine.getLatencyMs()).toBeCloseTo(30, 6);
+    engine.dispose();
+  });
+
+  it("starts ARPA and the scene loop together, with a 0.5 s fade", async () => {
+    const context = new FakeAudioContext();
+    const fetchSample = vi.fn(async () => new ArrayBuffer(8));
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: null,
+      fetchSample,
+    });
+    await engine.start();
+    const sourcesBefore = context.bufferSources.length;
+
+    await Promise.all([
+      engine.playSceneTransition("arpa.ogg"),
+      engine.playSceneLoop("birds.ogg", { gain: 0.8, fadeInSeconds: 0.5 }),
+    ]);
+
+    expect(fetchSample).toHaveBeenCalledTimes(2);
+    expect(context.bufferSources).toHaveLength(sourcesBefore + 2);
+    const loop = context.bufferSources.at(-1)!;
+    expect(loop.loop).toBe(true);
+    const loopGain = context.gains.at(-1)!;
+    const ramps = loopGain.gain.events.filter((event) => event.method === "linearRampToValueAtTime");
+    expect(ramps.at(-1)?.target).toBeCloseTo(0.8, 6);
+    expect(
+      context.gains.some((gain) =>
+        gain.gain.events.some(
+          (event) => event.method === "linearRampToValueAtTime" && Math.abs(event.target - 0.9) < 1e-6,
+        ),
+      ),
+    ).toBe(true);
+
+    engine.dispose();
+  });
+
+  it("ducks the data voice bus without touching the scene bus", async () => {
+    const context = new FakeAudioContext();
+    const engine = createSoundEngine({ context: context.asAudioContext(), lightningSampleUrl: null });
+    await engine.start();
+    const dataBus = context.gains[0]!;
+
+    engine.setDataVoiceDuck(0.3, 0.2);
+    const duck = dataBus.gain.events.at(-1);
+    expect(duck?.method).toBe("linearRampToValueAtTime");
+    expect(duck?.target).toBeCloseTo(0.3, 6);
+
+    engine.setDataVoiceDuck(1, 0.2);
+    expect(dataBus.gain.events.at(-1)?.target).toBeCloseTo(1, 6);
+    engine.dispose();
+  });
+
+  it("stops the transition and the scene loop when the popup closes", async () => {
+    const context = new FakeAudioContext();
+    const fetchSample = vi.fn(async () => new ArrayBuffer(8));
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: null,
+      fetchSample,
+    });
+    await engine.start();
+    const before = context.bufferSources.length;
+    await Promise.all([
+      engine.playSceneTransition("arpa.ogg"),
+      engine.playSceneLoop("birds.ogg"),
+    ]);
+    const transition = context.bufferSources[before]!;
+    const loop = context.bufferSources[before + 1]!;
+
+    engine.stopSceneAudio();
+    expect(transition.stop).toHaveBeenCalled();
+    expect(loop.stop).toHaveBeenCalled();
     engine.dispose();
   });
 

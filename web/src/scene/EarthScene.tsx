@@ -24,6 +24,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import type { JukeboxData, LoadedLayer } from "../data/types";
+import type { SceneDefinition } from "../scenes/types";
 import { sampleLayerAt } from "../lib/interpolate";
 import { FOREST_HEIGHT_IMAGES, REGION_BASE_IMAGE, REGION_FOREST_HEIGHT_IMAGE, pickBaseImage, pickImage } from "./baseImage";
 import { dotImageFor } from "./dotImage";
@@ -63,6 +64,9 @@ export interface EarthSceneProps {
   onFps: (fps: number) => void;
   /** A problem that leaves the view usable (for example a base image missing). */
   onSceneError: (message: string | null) => void;
+  /** Clickable scene points on the Amazon map. */
+  scenes?: SceneDefinition[];
+  onSceneSelect?: (scene: SceneDefinition) => void;
 }
 
 const CAMERA_FOV = 45;
@@ -190,8 +194,20 @@ interface SceneContentsProps extends EarthSceneProps {
 }
 
 function SceneContents(props: SceneContentsProps) {
-  const { data, activeLayer, targetView, lite, onRequestView, onModeChange, onProbe, onFps, onSceneError, setListeningPoint } =
-    props;
+  const {
+    data,
+    activeLayer,
+    targetView,
+    lite,
+    onRequestView,
+    onModeChange,
+    onProbe,
+    onFps,
+    onSceneError,
+    scenes,
+    onSceneSelect,
+    setListeningPoint,
+  } = props;
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
@@ -453,6 +469,8 @@ function SceneContents(props: SceneContentsProps) {
         raiseRelief={!lite}
         reliefImages={reliefImages}
         dotImage={dotImage}
+        scenes={scenes}
+        onSceneSelect={onSceneSelect}
         onHover={handleHover}
         onGlobeClick={handleGlobeClick}
       />

@@ -29,6 +29,16 @@ export interface SoundEngine {
   getOutputLevel(): number;
   /** Device latency reported by the context, in milliseconds (base + output). */
   getLatencyMs(): number;
+  /** Plays the scene transition one-shot (ARPA). */
+  playSceneTransition(url: string): Promise<void>;
+  /** Starts or replaces the scene loop; it fades from 0 to `gain`. */
+  playSceneLoop(url: string, options?: { gain?: number; fadeInSeconds?: number }): Promise<void>;
+  /** Stops the scene loop with a short fade. */
+  stopSceneLoop(options?: { fadeOutSeconds?: number }): void;
+  /** Stops the transition and the loop (closing the popup). */
+  stopSceneAudio(): void;
+  /** Ducks the data voices; 1 restores them. */
+  setDataVoiceDuck(amount: number, seconds?: number): void;
   dispose(): void;
 }
 
@@ -69,6 +79,9 @@ const FOREST_LOWPASS_HZ = 4000;
 const SMOKE_TONE_HZ = 180;
 const CO2_NOISE_MIX = 0.5;
 const NOISE_SECONDS = 2;
+const SCENE_TRANSITION_GAIN = 0.9;
+const SCENE_FADE_IN_SECONDS = 0.5;
+const SCENE_FADE_OUT_SECONDS = 0.3;
 
 /**
  * Per-layer output trim. The smoke voice is mostly filtered noise and a low
@@ -122,7 +135,10 @@ interface LightningVoice {
 
 interface EngineGraph {
   noise: AudioBufferSourceNode;
+  /** Layer voices (forest, smoke, CO2, lightning) connect here. */
   bus: GainNode;
+  /** Scene transition and loop connect here, so they are not ducked with the data. */
+  sceneBus: GainNode;
   limiter: DynamicsCompressorNode;
   master: GainNode;
   analyser: AnalyserNode;
@@ -171,6 +187,13 @@ export class WebAudioSoundEngine implements SoundEngine {
   };
   private levelBuffer: Float32Array | undefined;
   private suspendTimer: ReturnType<typeof setTimeout> | undefined;
+  private dataDuck = 1;
+  private transitionSource: AudioBufferSourceNode | null = null;
+  private transitionGain: GainNode | null = null;
+  private sceneLoopSource: AudioBufferSourceNode | null = null;
+  private sceneLoopGain: GainNode | null = null;
+  private readonly sceneBuffers = new Map<string, AudioBuffer>();
+  private readonly sceneLoads = new Map<string, Promise<AudioBuffer>>();
   private lightningTimer: ReturnType<typeof setTimeout> | undefined;
   private lightningRateHz = 0;
   private lightningNextHitAt = 0;
@@ -193,6 +216,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     } else if (this.currentState === "running") {
       this.currentState = "suspended";
       this.clearLightning();
+      this.stopSceneAudio();
     }
   };
 
@@ -249,6 +273,8 @@ export class WebAudioSoundEngine implements SoundEngine {
     master.setValueAtTime(0, now);
     master.linearRampToValueAtTime(this.volume, now + START_FADE_SECONDS);
 
+    graph.bus.gain.cancelScheduledValues(now);
+    graph.bus.gain.setValueAtTime(this.dataDuck, now);
     this.currentState = "running";
     for (const layer of LAYER_IDS) {
       this.layers[layer].lastUpdateTime = now;
@@ -268,6 +294,8 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.currentState = "suspended";
     this.clearSettleTimers();
     this.clearLightning();
+    this.stopSceneAudio();
+    this.setDataVoiceDuck(1, 0.1);
 
     this.clearSuspendTimer();
     this.suspendTimer = setTimeout(() => {
@@ -332,7 +360,11 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.clearSuspendTimer();
     this.clearSettleTimers();
     this.clearLightning();
+    this.stopSceneAudio();
     this.currentState = "idle";
+    this.dataDuck = 1;
+    this.sceneBuffers.clear();
+    this.sceneLoads.clear();
 
     const graph = this.graph;
     if (graph) {
@@ -381,6 +413,7 @@ export class WebAudioSoundEngine implements SoundEngine {
         graph.lightning.gain,
         graph.lightning.panner,
         graph.bus,
+        graph.sceneBus,
         graph.limiter,
         graph.master,
         graph.analyser,
@@ -533,7 +566,10 @@ export class WebAudioSoundEngine implements SoundEngine {
     if (!context) throw new Error("Sound engine: the audio context is missing.");
 
     const bus = context.createGain();
-    bus.gain.value = 1;
+    bus.gain.value = this.dataDuck;
+
+    const sceneBus = context.createGain();
+    sceneBus.gain.value = 1;
 
     const limiter = context.createDynamicsCompressor();
     limiter.threshold.value = -10;
@@ -550,6 +586,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     analyser.smoothingTimeConstant = 0.6;
 
     bus.connect(limiter);
+    sceneBus.connect(limiter);
     limiter.connect(master);
     master.connect(analyser);
     analyser.connect(context.destination);
@@ -560,7 +597,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     const co2 = this.buildCo2Voice(context, bus, noise);
     const lightning = this.buildLightningVoice(context, bus);
 
-    this.graph = { noise, bus, limiter, master, analyser, forest, smoke, co2, lightning };
+    this.graph = { noise, bus, sceneBus, limiter, master, analyser, forest, smoke, co2, lightning };
   }
 
   /** One looping white-noise buffer shared by the smoke and CO2 voices. */
@@ -925,6 +962,159 @@ export class WebAudioSoundEngine implements SoundEngine {
     };
     source.onended = cleanup;
     this.lightningHits.add(hit);
+  }
+
+  async playSceneTransition(url: string): Promise<void> {
+    const buffer = await this.loadSceneBuffer(url);
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph || this.currentState !== "running") return;
+
+    this.stopSceneTransition(0.05);
+    const now = context.currentTime;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    const gain = context.createGain();
+    source.connect(gain);
+    gain.connect(graph.sceneBus);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(SCENE_TRANSITION_GAIN, now + 0.01);
+    source.start(now);
+    this.transitionSource = source;
+    this.transitionGain = gain;
+    source.onended = () => {
+      if (this.transitionSource === source) {
+        this.transitionSource = null;
+        this.transitionGain = null;
+      }
+      try {
+        source.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        gain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    };
+  }
+
+  async playSceneLoop(
+    url: string,
+    options: { gain?: number; fadeInSeconds?: number } = {},
+  ): Promise<void> {
+    const buffer = await this.loadSceneBuffer(url);
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph || this.currentState !== "running") return;
+
+    this.stopSceneLoop({ fadeOutSeconds: SCENE_FADE_OUT_SECONDS });
+    const now = context.currentTime;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = context.createGain();
+    source.connect(gain);
+    gain.connect(graph.sceneBus);
+    const target = clampUnit(options.gain ?? 1);
+    const fade = Math.max(0.01, options.fadeInSeconds ?? SCENE_FADE_IN_SECONDS);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(target, now + fade);
+    source.start(now);
+    this.sceneLoopSource = source;
+    this.sceneLoopGain = gain;
+    source.onended = () => {
+      if (this.sceneLoopSource === source) {
+        this.sceneLoopSource = null;
+        this.sceneLoopGain = null;
+      }
+      try {
+        source.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        gain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    };
+  }
+
+  stopSceneLoop(options: { fadeOutSeconds?: number } = {}): void {
+    const source = this.sceneLoopSource;
+    const gain = this.sceneLoopGain;
+    if (!source || !gain || !this.context) return;
+    const now = this.context.currentTime;
+    const fade = Math.max(0.01, options.fadeOutSeconds ?? SCENE_FADE_OUT_SECONDS);
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(0, now + fade);
+    this.sceneLoopSource = null;
+    this.sceneLoopGain = null;
+    try {
+      source.stop(now + fade + 0.02);
+    } catch {
+      // Already stopped.
+    }
+  }
+
+  stopSceneAudio(): void {
+    this.stopSceneTransition(0.1);
+    this.stopSceneLoop({ fadeOutSeconds: SCENE_FADE_OUT_SECONDS });
+  }
+
+  setDataVoiceDuck(amount: number, seconds = 0.2): void {
+    this.dataDuck = clampUnit(amount);
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph || this.currentState !== "running") return;
+    const now = context.currentTime;
+    const fade = Math.max(0.01, seconds);
+    graph.bus.gain.cancelScheduledValues(now);
+    graph.bus.gain.setValueAtTime(graph.bus.gain.value, now);
+    graph.bus.gain.linearRampToValueAtTime(this.dataDuck, now + fade);
+  }
+
+  private stopSceneTransition(fadeOutSeconds: number): void {
+    const source = this.transitionSource;
+    const gain = this.transitionGain;
+    if (!source || !gain || !this.context) return;
+    const now = this.context.currentTime;
+    const fade = Math.max(0.01, fadeOutSeconds);
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(0, now + fade);
+    this.transitionSource = null;
+    this.transitionGain = null;
+    try {
+      source.stop(now + fade + 0.02);
+    } catch {
+      // Already stopped.
+    }
+  }
+
+  private loadSceneBuffer(url: string): Promise<AudioBuffer> {
+    const cached = this.sceneBuffers.get(url);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.sceneLoads.get(url);
+    if (pending) return pending;
+    const context = this.context;
+    if (!context) return Promise.reject(new Error("The sound engine is not started."));
+    const promise = this.fetchSample(url)
+      .then((data) => context.decodeAudioData(data.slice(0)))
+      .then((buffer) => {
+        this.sceneBuffers.set(url, buffer);
+        this.sceneLoads.delete(url);
+        return buffer;
+      })
+      .catch((cause: unknown) => {
+        this.sceneLoads.delete(url);
+        throw cause;
+      });
+    this.sceneLoads.set(url, promise);
+    return promise;
   }
 
   private clearSuspendTimer(): void {

@@ -1,8 +1,8 @@
 # Scenes — plan
 
-Status: plan only; no implementation yet.
-Feature branch: `scenes` (based on `main` at the time of writing).
-Assets: `data/scenes/` (untracked source).
+Status: implemented on `scenes`; coordinates for birds and river are filled.
+Feature branch: `scenes` (merged with `audio-samples` for the ARPA asset).
+Assets: `data/scenes/` (source) and `web/public/scenes/` (published).
 
 ## Goal
 
@@ -259,11 +259,17 @@ The scene loops are already 48 kHz stereo OGG and can be used directly.
 
 Total: roughly **10–12 h**; the audio and marker pieces can be developed in parallel.
 
+## Implementation notes
+
+- Coordinates are filled: birds `(-68.546, -3.398)`, river `(-73.246, -0.868)`.
+- `tools/scenes/prepare.py` validates them against the Amazon box and publishes
+  `web/public/scenes/` (`scenes-prep` Docker service).
+- Markers are R3F rings on the flattened map; the popup is a centred DOM dialog.
+- `ARPA` and the loop start together; the loop fades 0 → `loopGain` over 0.5 s
+  while ARPA keeps playing. Data voices duck to 30 %.
+- `audio-samples` is merged, so `web/public/audio/samples/arpa.ogg` is present.
+
 ## Open decisions
 
-- **Ducking:** 25–30 % for the data voices while a scene is open; confirm the amount.
-- **Markers:** Amazon map only for this iteration, or also on the planet.
-- **Popup placement:** bottom-right panel (consistent with sound/timeline) or a
-  centred modal.
-- **Credits:** provide image and audio sources/licences for the two scenes.
-- **ARPA dependency:** merge PR #15 or keep a copy in the scenes payload.
+- **Credits:** still missing the image and audio sources/licences for the two
+  scenes (`imageCredit`/`audioCredit` in `data/scenes/scenes.json`).

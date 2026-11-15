@@ -46,6 +46,8 @@ import {
   type Texture,
 } from "three";
 import type { BoundingBox } from "../data/types";
+import type { SceneDefinition } from "../scenes/types";
+import { SceneMarkers } from "./SceneMarkers";
 import type { ViewMode, ViewState } from "./FocusTransition";
 import {
   GLOBE_RADIUS,
@@ -123,6 +125,9 @@ export interface EarthMeshProps {
    * and it has loaded; null otherwise, and the layer then comes from its grids.
    */
   dotImage: DotImage | null;
+  /** Clickable scene points; shown only on the flattened Amazon map. */
+  scenes?: SceneDefinition[];
+  onSceneSelect?: (scene: SceneDefinition) => void;
   onHover: (hit: GlobeHit | null) => void;
   onGlobeClick: (lon: number, lat: number) => void;
 }
@@ -411,6 +416,8 @@ export function EarthMesh({
   raiseRelief,
   reliefImages,
   dotImage,
+  scenes,
+  onSceneSelect,
   onHover,
   onGlobeClick,
 }: EarthMeshProps) {
@@ -696,10 +703,15 @@ export function EarthMesh({
       )}
 
       {mode === "map" && (
-        <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove} onPointerOut={handleOut}>
-          <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
+        <>
+          <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove} onPointerOut={handleOut}>
+            <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+          {scenes && scenes.length > 0 && onSceneSelect && (
+            <SceneMarkers scenes={scenes} bbox={bbox} onSelect={onSceneSelect} />
+          )}
+        </>
       )}
     </>
   );
