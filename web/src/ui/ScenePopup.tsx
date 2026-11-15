@@ -66,7 +66,7 @@ export function ScenePopup({
       aria-labelledby="scene-popup-title"
       data-testid="scene-popup"
       onClick={requestClose}
-      className={`fixed inset-1 z-30 overflow-hidden rounded-xl bg-slate-950/80 shadow-2xl transition-opacity duration-300 sm:inset-1.5 ${
+      className={`fixed inset-3 z-30 overflow-hidden rounded-xl bg-slate-950/80 shadow-2xl transition-opacity duration-300 sm:inset-4 ${
         shown ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
@@ -74,11 +74,11 @@ export function ScenePopup({
         src={`./${scene.image}`}
         alt={scene.imageAlt}
         data-testid="scene-popup-image"
-        className={`absolute inset-0 h-full w-full border-4 border-slate-950 object-cover transition-transform duration-500 ${
+        className={`absolute inset-0 h-full w-full border-8 border-gray-700 object-cover transition-transform duration-500 ${
           shown ? "scale-100" : "scale-105"
         }`}
       />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-slate-950/20" />
+      <div className="pointer-events-none absolute inset-0" />
       <div
         className="absolute right-4 top-4 z-10 max-h-[calc(100%-2rem)] w-full max-w-md overflow-auto rounded-xl bg-slate-950/80 p-5 pr-14 text-slate-100 shadow-xl backdrop-blur"
         onClick={(event) => event.stopPropagation()}
