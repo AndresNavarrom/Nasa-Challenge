@@ -162,6 +162,11 @@ export interface ReliefImages {
   region: Texture;
   /** Colour ramp of the layer (its stops and presence go to the shader). */
   ramp: ColorRamp;
+  /**
+   * True for heights (the forest): shaded relief and raised height. False for any
+   * other value drawn sharp (CO2): colour and presence only, the surface stays flat.
+   */
+  relief: boolean;
 }
 
 export interface DotImage {
@@ -571,10 +576,11 @@ export function EarthMesh({
     uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
     uniforms.uLayerOpacity.value = layerTextures.opacity;
     uniforms.uBaseDim.value = layerTextures.baseDim;
-    // A relief layer draws from the sharp forest images once they are there,
-    // from its own grids before that or when they failed to load.
-    const relief = layerTextures.heightRegion !== null;
-    const sharp = relief && reliefImages !== null;
+    // A layer with sharp images (the forest heights, CO2) draws from them once they
+    // are there, from its own grids before that or when they failed to load. Only
+    // heights are shaded and raised.
+    const sharp = reliefImages !== null;
+    const relief = sharp ? reliefImages.relief : layerTextures.heightRegion !== null;
     const heightGlobal = sharp ? reliefImages.global : layerTextures.heightGlobal;
     const heightRegion = sharp ? reliefImages.region : layerTextures.heightRegion;
     uniforms.uHeightGlobal.value = heightGlobal;
@@ -616,6 +622,8 @@ export function EarthMesh({
 
     // Raised height: sample one mean height per vertex (the mesh has `segments.width` columns over 360 degrees).
     uniforms.uLift.value = relief && raiseRelief ? RELIEF_LIFT : 0;
+    // Shaded relief only for heights; other sharp values (CO2) keep the surface evenly lit.
+    uniforms.uReliefShade.value = relief ? RELIEF_SHADE : 0;
     const vertexSpacing = 360 / segments.width;
     uniforms.uLiftLodGlobal.value = lodForSpacing(vertexSpacing, globalCell);
     uniforms.uLiftLodRegion.value = lodForSpacing(vertexSpacing, regionCell);

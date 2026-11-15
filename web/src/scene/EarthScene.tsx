@@ -350,6 +350,8 @@ function SceneContents(props: SceneContentsProps) {
   const [forestGlobalError, setForestGlobalError] = useState<string | null>(null);
   const [forestRegionError, setForestRegionError] = useState<string | null>(null);
   const [lightningError, setLightningError] = useState<string | null>(null);
+  const [sharpGlobalError, setSharpGlobalError] = useState<string | null>(null);
+  const [sharpRegionError, setSharpRegionError] = useState<string | null>(null);
 
   const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
   const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
@@ -396,13 +398,43 @@ function SceneContents(props: SceneContentsProps) {
     setForestRegionError,
     configureRegionHeight,
   );
-  const reliefImages = useMemo<ReliefImages | null>(
+  const forestImages = useMemo<ReliefImages | null>(
     () =>
       forestActive && forestGlobal && forestRegion
-        ? { global: forestGlobal, region: forestRegion, ramp: rampFor(SHARP_RELIEF_LAYER) }
+        ? { global: forestGlobal, region: forestRegion, ramp: rampFor(SHARP_RELIEF_LAYER), relief: true }
         : null,
     [forestActive, forestGlobal, forestRegion],
   );
+
+  // Sharp images that tools/prep made for the active layer (CO2): one per instant,
+  // only the instant on screen is loaded. Until both are there, or if one fails,
+  // the layer is drawn from its grids. The forest keeps its own height images.
+  const sharp = activeLayer && !forestActive ? activeLayer.manifest.sharp : undefined;
+  const sharpFrame = activeLayer ? Math.min(frame, activeLayer.region.frames - 1) : 0;
+  const sharpGlobalFile = sharp?.global && sharp.region ? (sharp.global.files[sharpFrame] ?? null) : null;
+  const sharpRegionFile = sharp?.global && sharp.region ? (sharp.region.files[sharpFrame] ?? null) : null;
+  const sharpGlobalUrl = sharpGlobalFile ? `${data.baseUrl}${sharpGlobalFile}` : null;
+  const sharpRegionUrl = sharpRegionFile ? `${data.baseUrl}${sharpRegionFile}` : null;
+  const sharpGlobal = useImageTexture(
+    sharpGlobalUrl,
+    `The sharp image of this layer (${sharpGlobalUrl}) could not be loaded, so it is drawn from the coarser grid. Everything else still works.`,
+    setSharpGlobalError,
+    configureGlobalHeight,
+  );
+  const sharpRegion = useImageTexture(
+    sharpRegionUrl,
+    `The sharp Amazon image of this layer (${sharpRegionUrl}) could not be loaded, so it is drawn from the coarser grid. Everything else still works.`,
+    setSharpRegionError,
+    configureRegionHeight,
+  );
+  const layerSharpImages = useMemo<ReliefImages | null>(
+    () =>
+      activeLayer && sharpGlobal && sharpRegion
+        ? { global: sharpGlobal, region: sharpRegion, ramp: rampFor(activeLayer.manifest.id), relief: false }
+        : null,
+    [activeLayer, sharpGlobal, sharpRegion],
+  );
+  const reliefImages = forestImages ?? layerSharpImages;
 
   // Sharp lightning dots: requested the first time lightning is shown, then kept
   // (same rule as the forest images), so start-up does not wait for them.
@@ -475,9 +507,10 @@ function SceneContents(props: SceneContentsProps) {
   const forestError = forestActive ? (forestGlobalError ?? forestRegionError) : null;
   // Likewise the lightning image banner, only while lightning is on screen.
   const lightningImageError = lightningActive ? lightningError : null;
+  const sharpImageError = sharpGlobalUrl ? (sharpGlobalError ?? sharpRegionError) : null;
   useEffect(() => {
-    onSceneError(layerError ?? baseError ?? regionError ?? forestError ?? lightningImageError ?? null);
-  }, [layerError, baseError, regionError, forestError, lightningImageError, onSceneError]);
+    onSceneError(layerError ?? baseError ?? regionError ?? forestError ?? lightningImageError ?? sharpImageError ?? null);
+  }, [layerError, baseError, regionError, forestError, lightningImageError, sharpImageError, onSceneError]);
 
   const setMode = (next: ViewMode) => {
     modeRef.current = next;
