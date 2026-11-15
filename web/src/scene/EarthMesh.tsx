@@ -19,6 +19,11 @@
 // from the height. Until they load, or if they fail, it uses the 0.25 degree
 // grids of the data file instead.
 //
+// Lightning is drawn like NASA SVS 5011 from the sharp dots image
+// (lightning-4k.png): colour from the lightning stops, presence from the value
+// and a soft glow from a coarser mipmap level, over the planet dimmed to grey.
+// Until it loads, or if it fails, it uses the grids of the data file instead.
+//
 // Picking (FR4.1, FR4.2): an invisible sphere while on the planet and an
 // invisible plane while on the map; nothing is picked during the transition.
 
@@ -33,11 +38,11 @@ import {
   Matrix4,
   ShaderMaterial,
   Vector2,
+  Vector3,
   Vector4,
   type Group,
   type IUniform,
   type Mesh,
-  type Vector3,
   type Texture,
 } from "three";
 import type { BoundingBox } from "../data/types";
@@ -53,6 +58,7 @@ import {
   planeUvToLonLat,
   spherePointToLonLat,
 } from "./geo";
+import { glowColor, type DotImageStyle } from "./dotImage";
 import type { ColorRamp, LayerTextures } from "./layerTexture";
 import {
   SHADER_STOPS,
@@ -112,6 +118,11 @@ export interface EarthMeshProps {
    * the relief then comes from the layer's grids (layerTextures.height*).
    */
   reliefImages: ReliefImages | null;
+  /**
+   * Sharp dots image (lightning-4k.png) when the active layer is drawn from one
+   * and it has loaded; null otherwise, and the layer then comes from its grids.
+   */
+  dotImage: DotImage | null;
   onHover: (hit: GlobeHit | null) => void;
   onGlobeClick: (lon: number, lat: number) => void;
 }
@@ -121,6 +132,13 @@ export interface ReliefImages {
   region: Texture;
   /** Colour ramp of the layer (its stops and presence go to the shader). */
   ramp: ColorRamp;
+}
+
+export interface DotImage {
+  /** Whole planet, one channel, north row first, with mipmaps. */
+  texture: Texture;
+  /** Ramp (stops and presence on the image's scale) and glow. */
+  style: DotImageStyle;
 }
 
 // Height of a relief layer (0..1) at a texture coordinate of the planet: the
@@ -182,6 +200,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform bool uHasGlobal;
   uniform sampler2D uLayerRegion;
   uniform float uLayerOpacity;
+  uniform float uBaseDim;
   // uBbox comes with HEIGHT_AT below.
   uniform float uReliefShade;
   // Texels of the height textures, and the shading step and its mipmap level, in
@@ -195,7 +214,13 @@ const FRAGMENT_SHADER = /* glsl */ `
   // Colour from the height itself (sharp forest images): GEDI colour bar and presence alpha.
   uniform bool uColorFromHeight;
   uniform vec3 uColorbar[11];
-  uniform vec2 uPresence; // start, fade on the 0..1 height scale
+  uniform vec2 uPresence; // start, fade on the 0..1 height (or dots image) scale
+  // Sharp dots image (lightning): its value takes the colour bar and presence above.
+  uniform sampler2D uDotImage;
+  uniform bool uHasDotImage;
+  uniform float uGlow; // strength of the glow around the dots
+  uniform float uGlowBias; // mipmap levels above the drawn one where the glow is read
+  uniform vec3 uGlowColor;
   varying vec2 vUv;
   varying float vShade;
   ${HEIGHT_AT}
@@ -245,17 +270,32 @@ const FRAGMENT_SHADER = /* glsl */ `
     vec2 regionScale = vec2(360.0 / (uBbox.z - uBbox.x), 180.0 / (uBbox.w - uBbox.y));
     float lodGlobal = lodOf(duvx, duvy, uHeightSizeGlobal);
     float lodRegion = lodOf(duvx * regionScale, duvy * regionScale, uHeightSizeRegion);
+    // Dots image: sampled under a uniform condition only, so the GPU picks the
+    // mipmap level and filters anisotropically (sharp up close, steady when turning).
+    float dotValue = 0.0;
+    float dotGlow = 0.0;
+    if (uHasDotImage) {
+      vec2 dotUv = vec2(vUv.x, 1.0 - vUv.y);
+      dotValue = texture2D(uDotImage, dotUv).r;
+      dotGlow = texture2D(uDotImage, dotUv, uGlowBias).r;
+    }
     vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
     if (inRegion && uHasRegionBase) {
       // Same calculation as regionUv() in geo.ts: v grows northwards like an image texture.
       vec2 cropUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (lat - uBbox.y) / (uBbox.w - uBbox.y));
       color = texture2D(uRegionBase, cropUv).rgb;
     }
+    // Some layers (lightning, like NASA SVS 5011) dim the planet to dark grey so they stand out.
+    float grey = dot(color, vec3(0.299, 0.587, 0.114));
+    color = mix(color, vec3(grey * 0.5), uBaseDim);
     vec4 overlay = vec4(0.0);
     if (uColorFromHeight) {
       // Sharp forest images: colour and presence straight from the height.
       float h = heightAt(vUv, lodGlobal, lodRegion);
       overlay = vec4(colorbar(h), clamp((h - uPresence.x) / uPresence.y, 0.0, 1.0));
+    } else if (uHasDotImage) {
+      // Sharp lightning dots, on the planet and in the Amazon alike (the image is finer than the regional grid).
+      overlay = vec4(colorbar(dotValue), clamp((dotValue - uPresence.x) / uPresence.y, 0.0, 1.0));
     } else if (inRegion) {
       // Inside the Amazon: the detailed regional grid (north row first).
       vec2 regionUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
@@ -267,6 +307,8 @@ const FRAGMENT_SHADER = /* glsl */ `
     color = mix(color, overlay.rgb, layerAmount);
     // The relief shading applies where the layer is drawn, not to the base image around it.
     color *= mix(1.0, reliefShade(inRegion, lodGlobal, lodRegion, regionScale), layerAmount);
+    // Soft glow where the dots are dense (0 without a dots image).
+    color += uGlowColor * (dotGlow * uGlow);
     gl_FragColor = vec4(color * vShade, 1.0);
   }
 `;
@@ -325,6 +367,7 @@ interface Uniforms {
   uLayerRegion: IUniform<Texture | null>;
   uBbox: IUniform<Vector4>;
   uLayerOpacity: IUniform<number>;
+  uBaseDim: IUniform<number>;
   uHeightGlobal: IUniform<Texture | null>;
   uHeightRegion: IUniform<Texture | null>;
   uHasHeight: IUniform<boolean>;
@@ -342,6 +385,11 @@ interface Uniforms {
   uColorFromHeight: IUniform<boolean>;
   uColorbar: IUniform<Float32Array>;
   uPresence: IUniform<Vector2>;
+  uDotImage: IUniform<Texture | null>;
+  uHasDotImage: IUniform<boolean>;
+  uGlow: IUniform<number>;
+  uGlowBias: IUniform<number>;
+  uGlowColor: IUniform<Vector3>;
 }
 
 /** Width and height in texels of a loaded texture (image or data), null when unknown. */
@@ -362,6 +410,7 @@ export function EarthMesh({
   segments,
   raiseRelief,
   reliefImages,
+  dotImage,
   onHover,
   onGlobeClick,
 }: EarthMeshProps) {
@@ -390,6 +439,7 @@ export function EarthMesh({
       uLayerRegion: { value: null },
       uBbox: { value: new Vector4() },
       uLayerOpacity: { value: 0.8 },
+      uBaseDim: { value: 0 },
       uHeightGlobal: { value: null },
       uHeightRegion: { value: null },
       uHasHeight: { value: false },
@@ -407,6 +457,11 @@ export function EarthMesh({
       uColorFromHeight: { value: false },
       uColorbar: { value: new Float32Array(SHADER_STOPS * 3) },
       uPresence: { value: new Vector2(0, 1) },
+      uDotImage: { value: null },
+      uHasDotImage: { value: false },
+      uGlow: { value: 0 },
+      uGlowBias: { value: 0 },
+      uGlowColor: { value: new Vector3() },
     }),
     [],
   );
@@ -432,6 +487,7 @@ export function EarthMesh({
     uniforms.uLayerRegion.value = layerTextures.region;
     uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
     uniforms.uLayerOpacity.value = layerTextures.opacity;
+    uniforms.uBaseDim.value = layerTextures.baseDim;
     // A relief layer draws from the sharp forest images once they are there,
     // from its own grids before that or when they failed to load.
     const relief = layerTextures.heightRegion !== null;
@@ -446,6 +502,17 @@ export function EarthMesh({
     if (sharp) {
       uniforms.uColorbar.value = shaderColorbar(reliefImages.ramp);
       uniforms.uPresence.value.set(...shaderPresence(reliefImages.ramp));
+    }
+    // A layer with a dots image (lightning) draws from it once it is there, from its grids before that.
+    const dots = sharp ? null : dotImage;
+    uniforms.uDotImage.value = dots?.texture ?? null;
+    uniforms.uHasDotImage.value = dots !== null;
+    uniforms.uGlow.value = dots?.style.glow.strength ?? 0;
+    uniforms.uGlowBias.value = dots?.style.glow.lodBias ?? 0;
+    if (dots) {
+      uniforms.uColorbar.value = shaderColorbar(dots.style.ramp);
+      uniforms.uPresence.value.set(...shaderPresence(dots.style.ramp));
+      uniforms.uGlowColor.value.set(...glowColor(dots.style.ramp));
     }
 
     // Texel sizes in degrees (global textures cover 360 x 180, the Amazon ones the rectangle).
@@ -469,7 +536,7 @@ export function EarthMesh({
     const vertexSpacing = 360 / segments.width;
     uniforms.uLiftLodGlobal.value = lodForSpacing(vertexSpacing, globalCell);
     uniforms.uLiftLodRegion.value = lodForSpacing(vertexSpacing, regionCell);
-  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, reliefImages, bbox, raiseRelief, segments.width]);
+  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, reliefImages, dotImage, bbox, raiseRelief, segments.width]);
 
   // Dragging follows the pointer anywhere on the page once it started on the planet.
   useEffect(() => {
