@@ -13,7 +13,7 @@ import type { ViewMode } from "../scene/FocusTransition";
 import { useTimeline } from "../timeline/TimelineProvider";
 import { sampleLayerAt } from "../lib/interpolate";
 import type { SoundEngine } from "./engine";
-import { buildOverviewColumns, type VisibleField } from "./overview";
+import { OVERVIEW_INSTRUMENTS, buildOverviewColumns, type VisibleField } from "./overview";
 
 /** How often the visible field is turned into sounding columns. */
 const OVERVIEW_UPDATE_MS = 100;
@@ -75,8 +75,10 @@ export function DataAudio({
       const frame = fade
         ? framePosition(positionRef.current, activeLayer.region.frames)
         : frameIndexAt(positionRef.current, activeLayer.region.frames);
-      const columns = buildOverviewColumns(field, (lon, lat) =>
-        sampleLayerAt(activeLayer, data.bbox, lon, lat, frame),
+      const columns = buildOverviewColumns(
+        field,
+        (lon, lat) => sampleLayerAt(activeLayer, data.bbox, lon, lat, frame),
+        OVERVIEW_INSTRUMENTS[activeLayer.manifest.id].scale,
       );
       engine.setOverview(activeLayer.manifest.id, columns);
     };

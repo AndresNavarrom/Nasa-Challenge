@@ -9,7 +9,12 @@
 // tested without Web Audio.
 
 import type { LayerId } from "../data/types";
-import { PENTATONIC_SEMITONES, clampUnit, positionToPan } from "./mapping";
+import {
+  MAJOR_PENTATONIC_SEMITONES,
+  MINOR_PENTATONIC_SEMITONES,
+  clampUnit,
+  positionToPan,
+} from "./mapping";
 
 /** Screen grid sampled over the visible globe: 12 columns x 6 rows = 72 cells. */
 export const OVERVIEW_COLUMNS = 12;
@@ -18,6 +23,14 @@ export const OVERVIEW_ROWS = 6;
 /** Lowest overview note and number of scale steps from pole to equator. */
 export const OVERVIEW_BASE_HZ = 110;
 export const OVERVIEW_PITCH_STEPS = 10;
+
+/**
+ * A cell sounds only when its value reaches this fraction of the average of the
+ * visible field. 1 means "at or above the visible average"; lower values let
+ * more of the field through. This is a relative threshold, never an absolute
+ * intensity level.
+ */
+export const OVERVIEW_TRIGGER_RATIO = 0.2;
 
 /**
  * The instrument of each layer in the overview. Everything that shapes the
@@ -33,6 +46,8 @@ export interface OverviewInstrument {
   gain: number;
   detuneCents: number;
   octave: number;
+  /** Semitone offsets of the scale this layer sings on. */
+  scale: readonly number[];
 }
 
 export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
@@ -45,6 +60,7 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     gain: 0.8,
     detuneCents: 0,
     octave: 0,
+    scale: MAJOR_PENTATONIC_SEMITONES,
   },
   smoke: {
     wave: "sawtooth",
@@ -55,6 +71,7 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     gain: 0.65,
     detuneCents: -5,
     octave: 0,
+    scale: MAJOR_PENTATONIC_SEMITONES,
   },
   co2: {
     wave: "sawtooth",
@@ -64,7 +81,8 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     releaseSeconds: 0.4,
     gain: 0.65,
     detuneCents: 5,
-    octave: -1,
+    octave: 1,
+    scale: MINOR_PENTATONIC_SEMITONES,
   },
   lightning: {
     wave: "square",
@@ -75,6 +93,7 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     gain: 0.55,
     detuneCents: 12,
     octave: 1,
+    scale: MAJOR_PENTATONIC_SEMITONES,
   },
 };
 
@@ -107,19 +126,41 @@ export interface OverviewColumn {
   cells: OverviewCell[];
 }
 
-/** Pitch of an absolute latitude on the pentatonic overview scale: poles low, equator high. */
-export function overviewPitchHz(latitude: number, octave = 0): number {
+/** Pitch of an absolute latitude on an overview scale: poles low, equator high. */
+export function overviewPitchHz(
+  latitude: number,
+  scale: readonly number[] = MAJOR_PENTATONIC_SEMITONES,
+  octave = 0,
+): number {
   const amount = clampUnit(Math.abs(latitude) / 90);
   const step = Math.round(amount * OVERVIEW_PITCH_STEPS);
-  const note = PENTATONIC_SEMITONES[step % PENTATONIC_SEMITONES.length] ?? 0;
-  const scaleOctave = Math.floor(step / PENTATONIC_SEMITONES.length);
+  const notes = scale.length > 0 ? scale : MAJOR_PENTATONIC_SEMITONES;
+  const note = notes[step % notes.length] ?? 0;
+  const scaleOctave = Math.floor(step / notes.length);
   return OVERVIEW_BASE_HZ * 2 ** ((scaleOctave * 12 + note) / 12 + octave);
 }
 
-/** Value 0..1 to a row gain; null, NaN and non-positive values are silent. */
-export function overviewGain(value: number | null): number {
+/**
+ * Value 0..1 to a row gain. `threshold` is relative to the visible field: values
+ * below it are silent. Null, NaN and non-positive values are always silent.
+ */
+export function overviewGain(value: number | null, threshold = 0): number {
   if (value === null || !Number.isFinite(value) || value <= 0) return 0;
-  return clampUnit(value) ** 0.7;
+  const amount = clampUnit(value);
+  if (amount < clampUnit(threshold)) return 0;
+  return amount ** 0.7;
+}
+
+/** Average of the valid cells in the visible field; 0 when nothing is visible. */
+export function visibleAverage(values: readonly (number | null)[]): number {
+  let sum = 0;
+  let count = 0;
+  for (const value of values) {
+    if (value === null || !Number.isFinite(value)) continue;
+    sum += clampUnit(value);
+    count += 1;
+  }
+  return count === 0 ? 0 : sum / count;
 }
 
 /**
@@ -129,12 +170,27 @@ export function overviewGain(value: number | null): number {
 export function buildOverviewColumns(
   field: VisibleField,
   sample: (lon: number, lat: number) => number | null,
+  scale: readonly number[] = MAJOR_PENTATONIC_SEMITONES,
 ): OverviewColumn[] {
-  return field.map((column) => ({
+  const values = field.map((column) =>
+    column.cells.map((cell) => {
+      if (!cell) return null;
+      const value = sample(cell.lon, cell.lat);
+      return value === null || !Number.isFinite(value)
+        ? null
+        : clampUnit(value);
+    }),
+  );
+  const threshold = visibleAverage(values.flat()) * OVERVIEW_TRIGGER_RATIO;
+
+  return field.map((column, columnIndex) => ({
     pan: positionToPan(column.screenX),
-    cells: column.cells.map((cell) => ({
-      pitchHz: cell ? overviewPitchHz(cell.lat) : OVERVIEW_BASE_HZ,
-      gain: cell ? overviewGain(sample(cell.lon, cell.lat)) : 0,
-    })),
+    cells: column.cells.map((cell, rowIndex) => {
+      const value = values[columnIndex]?.[rowIndex] ?? null;
+      return {
+        pitchHz: cell ? overviewPitchHz(cell.lat, scale) : OVERVIEW_BASE_HZ,
+        gain: overviewGain(value, threshold),
+      };
+    }),
   }));
 }

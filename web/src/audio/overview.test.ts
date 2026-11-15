@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAJOR_PENTATONIC_SEMITONES, MINOR_PENTATONIC_SEMITONES } from "./mapping";
 import {
   OVERVIEW_BASE_HZ,
   OVERVIEW_COLUMNS,
@@ -7,6 +8,7 @@ import {
   buildOverviewColumns,
   overviewGain,
   overviewPitchHz,
+  visibleAverage,
   type VisibleField,
 } from "./overview";
 
@@ -28,6 +30,23 @@ describe("overview mapping", () => {
     expect(overviewGain(0)).toBe(0);
     expect(overviewGain(1)).toBeGreaterThan(overviewGain(0.5));
     expect(overviewGain(0.5)).toBeGreaterThan(0);
+  });
+
+  it("uses the visible average as the trigger threshold", () => {
+    expect(visibleAverage([0.2, 0.8, null])).toBeCloseTo(0.5, 6);
+    expect(visibleAverage([null, null])).toBe(0);
+    const field: VisibleField = [
+      { screenX: 0, cells: [{ lon: -10, lat: 0, screenX: 0, screenY: 0.5 }] },
+      { screenX: 1, cells: [{ lon: 10, lat: 0, screenX: 1, screenY: 0.5 }] },
+    ];
+    const columns = buildOverviewColumns(field, (lon) => (lon < 0 ? 0.2 : 0.8));
+    expect(columns[0]!.cells[0]!.gain).toBe(0);
+    expect(columns[1]!.cells[0]!.gain).toBeGreaterThan(0);
+
+    // A uniform field is at its own average; it still sounds.
+    const uniform = buildOverviewColumns(field, () => 0.5);
+    expect(uniform[0]!.cells[0]!.gain).toBeGreaterThan(0);
+    expect(uniform[1]!.cells[0]!.gain).toBeGreaterThan(0);
   });
 
   it("builds columns from screen x and visible cells, preserving empty rows", () => {
@@ -56,6 +75,15 @@ describe("overview mapping", () => {
     expect(columns[0]!.cells[1]!.gain).toBe(0);
     expect(columns[0]!.cells[0]!.gain).toBeGreaterThan(0);
     expect(columns[1]!.cells[0]!.gain).toBe(0);
+  });
+
+  it("uses the minor pentatonic scale for CO2 and keeps the others major", () => {
+    expect(OVERVIEW_INSTRUMENTS.co2.scale).toBe(MINOR_PENTATONIC_SEMITONES);
+    expect(OVERVIEW_INSTRUMENTS.forest.scale).toBe(MAJOR_PENTATONIC_SEMITONES);
+    expect(overviewPitchHz(0, MINOR_PENTATONIC_SEMITONES)).toBeCloseTo(OVERVIEW_BASE_HZ, 6);
+    expect(overviewPitchHz(90, MINOR_PENTATONIC_SEMITONES)).toBeGreaterThan(
+      overviewPitchHz(0, MINOR_PENTATONIC_SEMITONES),
+    );
   });
 
   it("gives every layer an editable instrument with its requested waveform", () => {

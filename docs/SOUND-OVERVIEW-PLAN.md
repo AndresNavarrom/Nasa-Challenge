@@ -24,7 +24,9 @@ single locked point. Every screen column sounds at once:
 - **Screen X -> pan.** Visually right cells sound on the right.
 - **|Latitude| -> pitch**, quantised to a pentatonic scale: poles low, equator
   high.
-- **Layer value -> gain** with a `value^0.7` curve; no-data cells are silent.
+- **Layer value -> gain** with a `value^0.7` curve; a cell sounds only when its
+  value reaches the **average intensity of the visible field** (a relative
+  threshold, never a fixed absolute level); no-data cells are silent.
 - **Data time -> frame** through `framePosition`, the same blend the picture and
   point audio use.
 - The field is normalised by its total active cells and sent through the
@@ -46,10 +48,10 @@ Current editable instruments:
 |---|---|---|
 | Forest | triangle | soft continuous bed |
 | Smoke | sawtooth | brighter, rougher |
-| CO2 | sawtooth | lower register |
+| CO2 | sawtooth | lower register; minor pentatonic |
 | Lightning | square | percussive edge |
 
-Each entry also sets filter cutoff/Q, attack, release, gain, detune and octave.
+Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and scale. CO2 uses the minor pentatonic scale; the other layers use the major pentatonic scale.
 
 ## Integration
 
