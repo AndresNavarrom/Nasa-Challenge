@@ -14,6 +14,8 @@
 #                                          ~/.netrc (only the urs.earthdata.nasa.gov line),
 #                                          mounted read-only in this service only
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
+#   docker compose run --rm audio-prep     prepare data/audio/source into web/public/audio/
+#                                          (Ogg Vorbis + manifest, metadata still pending)
 #   docker compose run --rm web npm run build && docker compose up server
 #                                          dev server over web/dist on http://127.0.0.1:8081
 #
@@ -166,6 +168,16 @@ services:
       - ./tools:/work/tools:ro
       # Output: the downloaded and converted sources in data/raw/ and data/SOURCES.md.
       - ./data:/work/data
+
+  audio-prep:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      - ./data:/work/data:ro
+      # Output: the prepared library and its manifest, shipped with the app.
+      - ./web/public/audio:/work/web/public/audio
+    command: ["python", "tools/audio/prepare.py"]
 
   # GEDI L3 canopy height: the only source behind a NASA Earthdata login, so it has
   # its own service and `fetch` needs no account.

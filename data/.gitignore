@@ -1,2 +1,6 @@
 # Raw NASA frames are re-downloadable with tools/fetch-frames.sh and can be heavy.
 raw/
+
+# Original audio library: heavy WAVs, prepared into web/public/audio/ by
+# tools/audio/prepare.py. Keep the originals out of git; the prepared copies are.
+audio/source/
