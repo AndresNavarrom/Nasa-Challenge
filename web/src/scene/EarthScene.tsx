@@ -57,6 +57,8 @@ export interface EarthSceneProps {
   activeLayer: LoadedLayer | null;
   targetView: TargetView;
   lite: boolean;
+  /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
+  autoRotate: boolean;
   onRequestView: (view: TargetView) => void;
   onModeChange: (mode: ViewMode) => void;
   onProbe: (probe: Probe | null) => void;
@@ -190,7 +192,7 @@ interface SceneContentsProps extends EarthSceneProps {
 }
 
 function SceneContents(props: SceneContentsProps) {
-  const { data, activeLayer, targetView, lite, onRequestView, onModeChange, onProbe, onFps, onSceneError, setListeningPoint } =
+  const { data, activeLayer, targetView, lite, autoRotate, onRequestView, onModeChange, onProbe, onFps, onSceneError, setListeningPoint } =
     props;
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -451,6 +453,7 @@ function SceneContents(props: SceneContentsProps) {
         mode={mode}
         segments={lite ? LITE_SEGMENTS : FULL_SEGMENTS}
         raiseRelief={!lite}
+        autoRotate={autoRotate}
         reliefImages={reliefImages}
         dotImage={dotImage}
         onHover={handleHover}

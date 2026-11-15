@@ -65,6 +65,8 @@ function PlanetView({
   const [probe, setProbe] = useState<Probe | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
+  // The planet starts turning by itself; the "Auto-rotate" switch stops it.
+  const [autoRotate, setAutoRotate] = useState(true);
 
   // null: the plain Earth view, no layer drawn.
   const activeLayer = useMemo(
@@ -94,6 +96,7 @@ function PlanetView({
           activeLayer={activeLayer}
           targetView={targetView}
           lite={lite}
+          autoRotate={autoRotate}
           onRequestView={setTargetView}
           onModeChange={setMode}
           onProbe={setProbe}
@@ -105,6 +108,8 @@ function PlanetView({
         layers={data.layers}
         activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
         onSelectLayer={onSelectLayer}
+        autoRotate={autoRotate}
+        onToggleAutoRotate={setAutoRotate}
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
