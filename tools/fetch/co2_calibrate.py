@@ -17,10 +17,10 @@ globe radii. This script finds those numbers instead of guessing them by eye.
    camera (cx, cy, radius, distance, center_lat, roll) and fits only
    ``center_lon`` on every frame, starting from the steady turn of the globe.
 
-Usage (inside the fetch container, from the repository root):
+Usage (from the repository root):
 
-    python3 tools/fetch/co2_calibrate.py fit FRAME.png [FRAME.png ...]
-    python3 tools/fetch/co2_calibrate.py overlay FRAME.png OUT.png '<json params>'
+    docker compose run --rm --entrypoint python3 fetch tools/fetch/co2_calibrate.py fit FRAME.png [FRAME.png ...]
+    docker compose run --rm --entrypoint python3 fetch tools/fetch/co2_calibrate.py overlay FRAME.png OUT.png '<json params>'
 
 ``fit`` prints one JSON object per frame with its projection. ``overlay`` draws
 the projected coastlines in red over a frame, to check a fit by eye.
@@ -41,12 +41,13 @@ from scipy import ndimage
 Image.MAX_IMAGE_PIXELS = None
 
 BASE_IMAGE = Path("web/public/data/earth-4k.jpg")
-# Frame 00940 is centred on 49.90 W; the globe turns west by about this much per
-# frame. It is only the starting guess of the fit: the longitudes the fit settles
-# on give 0.2017 degrees per frame (the figure in fetch-frames.sh and SOURCES.md).
+# Frame 00940 is centred on 49.90 W; the point under the camera moves west by this
+# much per frame (the Earth turns east). It is the figure the fit settles on, also
+# in fetch-frames.sh and SOURCES.md, and it is the start of the search, which only
+# covers +-20 degrees around it.
 REFERENCE_FRAME = 940
 REFERENCE_LON = -49.90
-DEGREES_PER_FRAME = -0.1947
+DEGREES_PER_FRAME = -0.2017
 FIT_SCALE = 2  # fit on frames shrunk by this factor (5760 x 3240 -> 2880 x 1620)
 MIN_FACING = 0.35
 START = {"cx": 2876.0, "cy": 1620.0, "radius": 1410.0, "center_lat": 0.34, "roll": -0.19, "distance": 4.57}
@@ -173,7 +174,7 @@ def overlay(path: str, out_path: str, params: str) -> None:
     image = Image.open(path).convert("RGB")
     rgb = np.asarray(image).copy()
     x, y, z = project(coastline_points(), p)
-    keep = (z >= 0.2) & (x >= 0) & (y >= 0) & (x < rgb.shape[1]) & (y < rgb.shape[0])
+    keep = (z >= max(0.2, 1 / p["distance"])) & (x >= 0) & (y >= 0) & (x < rgb.shape[1]) & (y < rgb.shape[0])
     rgb[y[keep].astype(int), x[keep].astype(int)] = (255, 0, 0)
     Image.fromarray(rgb).resize((rgb.shape[1] // 3, rgb.shape[0] // 3), Image.BOX).save(out_path)
 
