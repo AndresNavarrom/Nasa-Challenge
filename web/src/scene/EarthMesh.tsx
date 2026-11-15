@@ -53,6 +53,8 @@ import {
   type Texture,
 } from "three";
 import type { BoundingBox } from "../data/types";
+import type { SceneDefinition } from "../scenes/types";
+import { SceneMarkers } from "./SceneMarkers";
 import type { ViewMode, ViewState } from "./FocusTransition";
 import {
   GLOBE_RADIUS,
@@ -65,6 +67,7 @@ import {
   spherePointToLonLat,
 } from "./geo";
 import { glowColor, type DotImageStyle } from "./dotImage";
+import { spinStep } from "./spin";
 import type { ColorRamp, LayerTextures } from "./layerTexture";
 import {
   SHADER_STOPS,
@@ -76,8 +79,6 @@ import {
   shaderPresence,
 } from "./relief";
 
-/** Turn speed of the spinning planet, radians per second. */
-const SPIN_SPEED = 0.08;
 /** Turn per dragged pixel, radians. */
 const DRAG_SPEED = 0.005;
 const MAX_PITCH = 1.2;
@@ -128,6 +129,8 @@ export interface EarthMeshProps {
   segments: { width: number; height: number };
   /** Raise relief layers above the surface (off in lite mode; the shaded relief stays). */
   raiseRelief: boolean;
+  /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
+  autoRotate: boolean;
   /**
    * Sharp forest height images (forest-height-8k/4k.png and forest-height-amazon.png),
    * when the active layer is the forest and both have loaded; null otherwise, and
@@ -139,6 +142,10 @@ export interface EarthMeshProps {
    * and it has loaded; null otherwise, and the layer then comes from its grids.
    */
   dotImage: DotImage | null;
+  /** Clickable scene points; shown only on the flattened Amazon map. */
+  scenes?: SceneDefinition[];
+  onSceneSelect?: (scene: SceneDefinition) => void;
+  onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
   onHover: (hit: GlobeHit | null) => void;
   /** Double-click on the planet (not after a drag). */
   onGlobeDoubleClick: (lon: number, lat: number) => void;
@@ -471,8 +478,12 @@ export function EarthMesh({
   mode,
   segments,
   raiseRelief,
+  autoRotate,
   reliefImages,
   dotImage,
+  scenes,
+  onSceneSelect,
+  onSceneHover,
   onHover,
   onGlobeDoubleClick,
   onMapDoubleClick,
@@ -664,9 +675,12 @@ export function EarthMesh({
   const rotation = useMemo(() => new Matrix4(), []);
   useFrame((_, delta) => {
     const state = view.current;
-    if (state.spinning && mode === "globe" && dragRef.current === null) {
-      state.yaw += SPIN_SPEED * Math.min(delta, 0.1);
-    }
+    state.yaw = spinStep(state.yaw, delta, {
+      spinning: state.spinning,
+      autoRotate,
+      mode,
+      dragging: dragRef.current !== null,
+    });
     euler.set(state.pitch, state.yaw, 0);
     rotation.makeRotationFromEuler(euler);
     uniforms.uRotation.value.setFromMatrix4(rotation);
@@ -810,15 +824,28 @@ export function EarthMesh({
       )}
 
       {mode === "map" && (
-        <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove}
-          onPointerDown={handlePlaneDown}
-          onClick={handlePlaneClick}
-          onDoubleClick={handlePlaneDoubleClick}
-          onPointerOut={handleOut}
-        >
-          <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
+        <>
+          <mesh
+            ref={planeMesh}
+            position={[-shift.x, -shift.y, GLOBE_RADIUS]}
+            onPointerMove={handlePlaneMove}
+            onPointerDown={handlePlaneDown}
+            onClick={handlePlaneClick}
+            onDoubleClick={handlePlaneDoubleClick}
+            onPointerOut={handleOut}
+          >
+            <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+          {scenes && scenes.length > 0 && onSceneSelect && (
+            <SceneMarkers
+              scenes={scenes}
+              bbox={bbox}
+              onSelect={onSceneSelect}
+              onHover={onSceneHover ?? (() => {})}
+            />
+          )}
+        </>
       )}
     </>
   );

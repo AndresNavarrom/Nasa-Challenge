@@ -41,12 +41,12 @@ TODO: confirm against the final app.
 
 - A 3D planet with four NASA layers: forest height (GEDI), wildfire smoke
   (GEOS-CF), carbon dioxide (DYAMOND) and lightning (LIS on the ISS).
-- Each layer sounds in real time where the cursor is; the layers can be heard
-  together, and the "Listen to" checkboxes turn each voice on and off.
+- Each layer sounds in real time where the cursor is. The layers never mix:
+  only the layer picked in the layer picker is heard.
 - A short welcome tour explains the controls the first time the app opens.
 - Focusing on the Amazon turns the planet and flattens it into a regional map.
-- A shared timeline plays the data like a song; a story mode walks through the
-  three ideas in under a minute.
+- A static timeline: the person picks the moment with the Time slider; a
+  story mode walks through the three ideas in under a minute.
 - Keyboard-only use and screen-reader descriptions (layer, place, low / medium
   / high value).
 
@@ -68,9 +68,11 @@ TODO: confirm against the final app.
 - The interface is React with three.js for the planet and GSAP for the
   transition. A small Rust (Axum) server serves everything from the laptop, so
   the whole demo runs **without internet**, packaged in Docker.
-- CO2 only has usable data over the Amazon, so on the planet it is seen and
-  heard over that region only. It is presented as global context, not as a
-  measured effect of what happens in the Amazon.
+- CO2 is global but a mosaic: NASA only publishes it as a turning globe, so only
+  the Americas and the Atlantic move with the timeline (23 to 25 February 2020)
+  and the rest of the planet is a fixed picture, each region on the date of the
+  view that covers it. It is presented as global context, not as a measured
+  effect of what happens in the Amazon.
 
 ### Benefits
 

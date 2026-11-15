@@ -11,10 +11,12 @@ import { AudioStart } from "./audio/AudioStart";
 import type { SoundEngine } from "./audio/engine";
 import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
-import type { JukeboxData } from "./data/types";
+import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
 import { framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
+import { loadScenes } from "./scenes/loadScenes";
+import type { SceneDefinition, ScenesManifest } from "./scenes/types";
 import type { ViewMode } from "./scene/FocusTransition";
 import { AMAZON_REGION_ID, DEFAULT_REGIONS, loadWorldRegions, regionById, type Region } from "./scene/regions";
 import {
@@ -22,10 +24,12 @@ import {
   useListeningPoint,
 } from "./scene/listeningPoint";
 import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
-import { allHeard, isHeard, withHeard, type HeardLayers } from "./ui/heardLayers";
 import { PlanetHud } from "./ui/PlanetHud";
+import { ScenePopup } from "./ui/ScenePopup";
 import { TimelineBar } from "./ui/TimelineBar";
 import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
+import { layerVoices } from "./ui/soloLayer";
+import { timelineLayer } from "./ui/timelineFormat";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
@@ -33,6 +37,10 @@ type LoadState =
   | { status: "loading" }
   | { status: "ready"; data: JukeboxData }
   | { status: "error"; message: string };
+
+/** Data voices fade to this level while a scene popup is open, over 0.6 s. */
+const SCENE_DATA_DUCK = 0.12;
+const SCENE_DATA_FADE_SECONDS = 0.6;
 
 /** Plan B switch: `?lite=1` in the address (half-resolution planet image, instant view changes). */
 function readLiteMode(search: string): boolean {
@@ -44,9 +52,14 @@ interface PlanetViewProps {
   lite: boolean;
   audio?: ReactNode;
   timeline?: ReactNode;
-  heard?: HeardLayers;
-  onToggleHeard?: (layerId: string, on: boolean) => void;
+  /** The layer picker's value: a layer id or EARTH_VIEW_ID. */
+  activeLayerId: string;
+  onSelectLayer: (layerId: string) => void;
   onShowTour?: () => void;
+  scenes?: ScenesManifest | null;
+  onSceneSelect?: (scene: SceneDefinition) => void;
+  onCloseScene?: () => void;
+  focusedScene?: SceneDefinition | null;
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
@@ -55,16 +68,22 @@ function PlanetView({
   lite,
   audio,
   timeline,
-  heard,
-  onToggleHeard,
+  activeLayerId,
+  onSelectLayer,
   onShowTour,
+  scenes,
+  onSceneSelect,
+  onCloseScene,
+  focusedScene,
 }: PlanetViewProps) {
-  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
+  const [sceneHover, setSceneHover] = useState<{ scene: SceneDefinition; x: number; y: number } | null>(null);
+  // The planet starts turning by itself; the "Auto-rotate" switch stops it.
+  const [autoRotate, setAutoRotate] = useState(true);
 
   // null: the plain Earth view, no layer drawn.
   const activeLayer = useMemo(
@@ -96,7 +115,41 @@ function PlanetView({
     setTargetView("map");
   }, []);
   const showAmazon = useCallback(() => visitRegion(AMAZON_REGION_ID), [visitRegion]);
-  const showEarth = useCallback(() => setTargetView("globe"), []);
+  const showEarth = useCallback(() => {
+    setSceneHover(null);
+    onCloseScene?.();
+    setTargetView("globe");
+  }, [onCloseScene]);
+  const handleSceneSelect = useCallback(
+    (scene: SceneDefinition) => {
+      setSceneHover(null);
+      onSceneSelect?.(scene);
+    },
+    [onSceneSelect],
+  );
+  const handleSceneHover = useCallback(
+    (scene: SceneDefinition | null, clientX?: number, clientY?: number) => {
+      if (!scene || clientX === undefined || clientY === undefined) {
+        setSceneHover(null);
+        return;
+      }
+      setSceneHover({ scene, x: clientX, y: clientY });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (targetView !== "map") setSceneHover(null);
+  }, [targetView]);
+  // Every way back to the planet (the button, a double-click or double-tap on the
+  // map) closes the open scene too.
+  const requestView = useCallback(
+    (view: TargetView) => {
+      if (view === "globe") showEarth();
+      else setTargetView(view);
+    },
+    [showEarth],
+  );
 
   if (data.layers.length === 0) {
     return (
@@ -118,7 +171,8 @@ function PlanetView({
           activeLayer={activeLayer}
           targetView={targetView}
           lite={lite}
-          onRequestView={setTargetView}
+          autoRotate={autoRotate}
+          onRequestView={requestView}
           regions={regions}
           focusRegionId={focusRegionId}
           onFocusRegion={visitRegion}
@@ -127,12 +181,18 @@ function PlanetView({
           onProbe={setProbe}
           onFps={setFps}
           onSceneError={setSceneError}
+          scenes={scenes?.scenes}
+          onSceneSelect={handleSceneSelect}
+          onSceneHover={handleSceneHover}
+          focusedScene={focusedScene}
         />
       </div>
       <PlanetHud
         layers={data.layers}
         activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
-        onSelectLayer={setActiveLayerId}
+        onSelectLayer={onSelectLayer}
+        autoRotate={autoRotate}
+        onToggleAutoRotate={setAutoRotate}
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
@@ -144,10 +204,17 @@ function PlanetView({
         sceneError={sceneError}
         audio={audio}
         timeline={timeline}
-        heard={heard}
-        onToggleHeard={onToggleHeard}
         onShowTour={onShowTour}
       />
+      {sceneHover && !focusedScene && (
+        <div
+          data-testid="scene-marker-title"
+          className="pointer-events-none fixed z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-slate-950/90 px-2 py-1 text-center text-xs text-white shadow"
+          style={{ left: sceneHover.x, top: sceneHover.y - 10 }}
+        >
+          {sceneHover.scene.title}
+        </div>
+      )}
     </>
   );
 }
@@ -156,7 +223,8 @@ function PlanetView({
  * Feeds the sound engine from the point under the cursor and the shared
  * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
  * ListeningPointProvider, so the scene publishes the point without knowing
- * about audio. The timeline starts paused at 0; the timeline bar plays it.
+ * about audio. The timeline is static: it starts at 0 and only the Time
+ * slider of the timeline bar moves it.
  */
 function AudioListener({
   data,
@@ -193,22 +261,17 @@ function AudioListener({
 
 /**
  * The timeline bar bound to the shared clock. Only this component reads the
- * clock, so while the sequence plays (about 30 updates a second) it re-renders
- * alone, not the planet view around it.
+ * clock, so moving the Time slider re-renders it alone, not the planet view
+ * around it.
  */
-function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
+function TimelineControls({ layer }: { layer: LoadedLayer }) {
   const timeline = useTimeline();
   return (
     <TimelineBar
       className="w-56"
       position={timeline.position}
-      playing={timeline.playing}
-      speed={timeline.speed}
-      durationSeconds={timeline.durationSeconds}
-      layers={layers}
+      layer={layer}
       onSeek={timeline.seek}
-      onToggle={timeline.toggle}
-      onSpeed={timeline.setSpeed}
     />
   );
 }
@@ -245,16 +308,77 @@ function useGuidedTour(): () => void {
 
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
-  const [heard, setHeard] = useState<HeardLayers>(() => allHeard(data.layers.map((layer) => layer.manifest.id)));
-  const toggleHeard = useCallback((layerId: string, on: boolean) => setHeard((current) => withHeard(current, layerId, on)), []);
+  // Starts on the plain Earth view, with no layer drawn and none sounding.
+  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const showTour = useGuidedTour();
+  const [scenes, setScenes] = useState<ScenesManifest | null>(null);
+  const [openScene, setOpenScene] = useState<SceneDefinition | null>(null);
+  const [sceneAudioError, setSceneAudioError] = useState<string | null>(null);
+  const closeScene = useCallback(() => setOpenScene(null), []);
+  // The timeline bar only for a picked layer that changes over time (smoke, CO2).
+  const timedLayer = useMemo(() => timelineLayer(data.layers, activeLayerId), [data, activeLayerId]);
 
-  // A layer that is not heard keeps its data and drawing; only its voice goes quiet.
   useEffect(() => {
-    for (const layer of data.layers) {
-      engine.setLayerEnabled(layer.manifest.id, isHeard(heard, layer.manifest.id));
+    let cancelled = false;
+    loadScenes()
+      .then((manifest) => {
+        if (!cancelled) setScenes(manifest);
+      })
+      .catch((cause: unknown) => {
+        console.warn("Earth Jukebox could not load its scenes:", cause);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Scene audio: ARPA and the loop start together; the loop fades in over 0.5 s
+  // while ARPA keeps playing over it. Closing or switching stops both.
+  useEffect(() => {
+    if (!openScene) {
+      engine.stopSceneAudio();
+      engine.setDataVoiceDuck(1, SCENE_DATA_FADE_SECONDS);
+      return;
     }
-  }, [engine, data, heard]);
+    let cancelled = false;
+    setSceneAudioError(null);
+    const start = async (): Promise<void> => {
+      try {
+        if (engine.state === "idle") await engine.start();
+        if (cancelled) return;
+        engine.setDataVoiceDuck(SCENE_DATA_DUCK, SCENE_DATA_FADE_SECONDS);
+        const transition = `./${scenes?.transition.file ?? "audio/samples/arpa.ogg"}`;
+        await Promise.all([
+          engine.playSceneTransition(transition),
+          engine.playSceneLoop(`./${openScene.loop}`, {
+            gain: openScene.loopGain,
+            fadeInSeconds: 0.5,
+          }),
+        ]);
+      } catch (cause) {
+        if (cancelled) return;
+        engine.stopSceneAudio();
+        engine.setDataVoiceDuck(1, SCENE_DATA_FADE_SECONDS);
+        setSceneAudioError(
+          `The scene sound could not start: ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      engine.stopSceneAudio();
+      engine.setDataVoiceDuck(1, SCENE_DATA_FADE_SECONDS);
+    };
+  }, [engine, openScene, scenes]);
+
+  // The layers never mix: only the picked layer sounds (plain Earth: none).
+  useEffect(() => {
+    const voices = layerVoices(data.layers.map((layer) => layer.manifest.id), activeLayerId);
+    for (const { manifest } of data.layers) {
+      engine.setLayerEnabled(manifest.id, voices[manifest.id] === true);
+    }
+  }, [engine, data, activeLayerId]);
 
   return (
     <>
@@ -262,12 +386,19 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         data={data}
         lite={lite}
         audio={<AudioStart engine={engine} className="w-56" />}
-        timeline={<TimelineControls layers={data.layers} />}
-        heard={heard}
-        onToggleHeard={toggleHeard}
+        timeline={timedLayer ? <TimelineControls layer={timedLayer} /> : undefined}
+        activeLayerId={activeLayerId}
+        onSelectLayer={setActiveLayerId}
         onShowTour={showTour}
+        scenes={scenes}
+        onSceneSelect={setOpenScene}
+        onCloseScene={closeScene}
+        focusedScene={openScene}
       />
       <AudioListener data={data} engine={engine} />
+      {openScene && (
+        <ScenePopup scene={openScene} onClose={closeScene} audioError={sceneAudioError} />
+      )}
     </>
   );
 }

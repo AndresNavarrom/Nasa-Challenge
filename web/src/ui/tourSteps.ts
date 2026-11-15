@@ -33,10 +33,10 @@ export const TOUR_STEPS: readonly TourStep[] = [
     align: "end",
   },
   {
-    testId: "planet-hud-heard-layers",
+    testId: "planet-hud-layer-select",
     title: "Choose what you hear",
     description:
-      "Tick the layers you want to listen to and untick the ones you want to silence. The layer picked above is the one drawn on the planet.",
+      "Pick a layer: it is drawn on the planet and it is the only one you hear. Earth (no layer) is silent.",
     side: "right",
     align: "start",
   },
