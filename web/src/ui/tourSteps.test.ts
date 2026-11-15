@@ -61,12 +61,13 @@ describe("guided tour steps", () => {
   });
 
   it("opens a timed layer before pointing at the timeline", () => {
-    const autoRotate = TOUR_STEPS.find((step) => step.testId === "planet-hud-auto-rotate");
-    const timeline = TOUR_STEPS.find((step) => step.testId === "timeline-track");
-    const speed = TOUR_STEPS.find((step) => step.testId === "timeline-speed");
-    expect(autoRotate?.onNext).toBe("show-timeline");
-    expect(timeline).toBeDefined();
-    expect(speed).toBeDefined();
+    const autoIndex = TOUR_STEPS.findIndex((step) => step.testId === "planet-hud-auto-rotate");
+    const timelineIndex = TOUR_STEPS.findIndex((step) => step.testId === "timeline-track");
+    const speedIndex = TOUR_STEPS.findIndex((step) => step.testId === "timeline-speed");
+    expect(autoIndex).toBeGreaterThanOrEqual(0);
+    expect(TOUR_STEPS[autoIndex]?.onNext).toBe("show-timeline");
+    expect(timelineIndex).toBeGreaterThan(autoIndex);
+    expect(speedIndex).toBeGreaterThan(timelineIndex);
   });
 
   it("ends on the button that repeats it", () => {

@@ -49,7 +49,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     testId: "planet-canvas",
     title: "Explore the planet",
     description:
-      "The overview plays the visible planet all at once: low notes near the poles, high notes near the equator. Drag to turn it; double-click a region to fly there.",
+      "The overview sounds the visible planet: low notes at the poles, high at the equator. Click and drag to turn it; a single click alone selects no point here; double-click a region to fly there.",
   },
   {
     testId: "planet-hud-auto-rotate",
@@ -83,6 +83,11 @@ export const TOUR_STEPS: readonly TourStep[] = [
       "The world is divided into regions, with the Amazon on its own. Double-click (or tap twice) one, or press Amazon, to open its map.",
     side: "left",
     align: "end",
+  },
+  {
+    title: "On a regional map",
+    description:
+      "Click a point to lock its sound, click and drag to move it and change its pitch, and double-click the map to return to the globe.",
   },
   {
     testId: "planet-hud-back-button",

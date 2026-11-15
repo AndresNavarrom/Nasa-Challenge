@@ -11,6 +11,25 @@ import { TOUR_STEPS, stepSelector, type TourAction } from "./tourSteps";
 const OVERLAY_COLOR = "#05070d";
 /** The welcome window has nothing to go back to. */
 const WELCOME_BUTTONS: AllowedButtons[] = ["next", "close"];
+/** The control the timeline step needs before driver.js can resolve it. */
+const TIMELINE_SELECTOR = '[data-testid="timeline-track"]';
+const TIMELINE_WAIT_MS = 1500;
+const MOVE_COOLDOWN_MS = 250;
+
+/** Resolves once the timeline is mounted, or after a bounded wait. */
+function waitForTimeline(): Promise<void> {
+  return new Promise((resolve) => {
+    const started = performance.now();
+    const check = (): void => {
+      if (document.querySelector(TIMELINE_SELECTOR) || performance.now() - started >= TIMELINE_WAIT_MS) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
 
 /**
  * Starts the tour from its first window. `onEnd` runs once when it closes,
@@ -20,6 +39,8 @@ export function startTour(
   onEnd?: () => void,
   onAction?: (action: TourAction) => void,
 ): Driver {
+  let pendingMove = false;
+  let moveLockedUntil = 0;
   const tour = driver({
     popoverClass: "jukebox-tour",
     overlayColor: OVERLAY_COLOR,
@@ -53,11 +74,15 @@ export function startTour(
         ...(step.onNext
           ? {
               onNextClick: (_element, _activeStep, opts) => {
+                // Ignore the second half of a double click or a repeated Enter.
+                if (pendingMove || performance.now() < moveLockedUntil) return;
+                pendingMove = true;
                 onAction?.(step.onNext!);
-                // Let React open the timeline before driver resolves the next element.
-                window.setTimeout(() => {
+                void waitForTimeline().then(() => {
+                  pendingMove = false;
+                  moveLockedUntil = performance.now() + MOVE_COOLDOWN_MS;
                   if (opts.driver.isActive()) opts.driver.moveNext();
-                }, 80);
+                });
               },
             }
           : {}),

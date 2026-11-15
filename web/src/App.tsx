@@ -418,8 +418,11 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
     (action: TourAction) => {
       if (action === "show-timeline") {
         if (previousLayerRef.current === null) previousLayerRef.current = activeLayerId;
-        const timed = data.layers.find((layer) => !layer.manifest.static);
-        if (timed) setActiveLayerId(timed.manifest.id);
+        const current = layerForChoice(data.layers, activeLayerId);
+        if (current === null || current.manifest.static) {
+          const timed = data.layers.find((layer) => !layer.manifest.static);
+          if (timed) setActiveLayerId(timed.manifest.id);
+        }
         return;
       }
       if (previousLayerRef.current !== null) setActiveLayerId(previousLayerRef.current);
