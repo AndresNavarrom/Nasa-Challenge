@@ -13,6 +13,12 @@
 // crop of the base image (earth-amazon.jpg), on the planet and on the map;
 // outside it, from the global image.
 //
+// The forest (a relief layer) is drawn like NASA SVS 4950 from the GEDI 1 km
+// height images (forest-height-8k/4k.png, forest-height-amazon.png): colour from
+// the GEDI colour bar, shaded relief and exaggerated height, all computed here
+// from the height. Until they load, or if they fail, it uses the 0.25 degree
+// grids of the data file instead.
+//
 // Picking (FR4.1, FR4.2): an invisible sphere while on the planet and an
 // invisible plane while on the map; nothing is picked during the transition.
 
@@ -26,6 +32,7 @@ import {
   Matrix3,
   Matrix4,
   ShaderMaterial,
+  Vector2,
   Vector4,
   type Group,
   type IUniform,
@@ -46,7 +53,16 @@ import {
   planeUvToLonLat,
   spherePointToLonLat,
 } from "./geo";
-import type { LayerTextures } from "./layerTexture";
+import type { ColorRamp, LayerTextures } from "./layerTexture";
+import {
+  SHADER_STOPS,
+  SHADE_STEP_GLOBAL_DEGREES,
+  SHADE_STEP_REGION_DEGREES,
+  lodForSpacing,
+  shadeStepDegrees,
+  shaderColorbar,
+  shaderPresence,
+} from "./relief";
 
 /** Turn speed of the spinning planet, radians per second. */
 const SPIN_SPEED = 0.08;
@@ -57,8 +73,20 @@ const MAX_PITCH = 1.2;
 const CLICK_TOLERANCE_PX = 5;
 /** How often the point under a resting cursor is looked up again, seconds. */
 const HOVER_REFRESH_SECONDS = 0.05;
-/** Opacity of the active layer over the base image. */
-const LAYER_OPACITY = 0.8;
+/**
+ * Relief layers (forest, like NASA SVS 4950): how far the tallest value (50 m)
+ * is raised, as a fraction of the globe radius. Height is exaggerated on
+ * purpose so the canopy reads at the scale of the planet; the map is raised
+ * half as much.
+ */
+const RELIEF_LIFT = 0.025;
+/**
+ * Strength of the shaded relief (light from the north-west), per unit of height
+ * difference (0..1 = 0..50 m) across one shading step. Soft, like SVS 4950: a
+ * 5 m rise across the step brightens or darkens by about 17 %, and the shading
+ * always stays between 0.7 and 1.25 (the 0.25 degree grids used 6 and 0.55..1.4).
+ */
+const RELIEF_SHADE = 2.5;
 
 export interface GlobeHit {
   lon: number;
@@ -76,21 +104,68 @@ export interface EarthMeshProps {
   view: RefObject<ViewState>;
   mode: ViewMode;
   segments: { width: number; height: number };
+  /** Raise relief layers above the surface (off in lite mode; the shaded relief stays). */
+  raiseRelief: boolean;
+  /**
+   * Sharp forest height images (forest-height-8k/4k.png and forest-height-amazon.png),
+   * when the active layer is the forest and both have loaded; null otherwise, and
+   * the relief then comes from the layer's grids (layerTextures.height*).
+   */
+  reliefImages: ReliefImages | null;
   onHover: (hit: GlobeHit | null) => void;
   onGlobeClick: (lon: number, lat: number) => void;
 }
+
+export interface ReliefImages {
+  global: Texture;
+  region: Texture;
+  /** Colour ramp of the layer (its stops and presence go to the shader). */
+  ramp: ColorRamp;
+}
+
+// Height of a relief layer (0..1) at a texture coordinate of the planet: the
+// detailed Amazon texture inside the rectangle, the global one outside it, at
+// the given mipmap levels. Both textures hold the north row first (flipY off).
+const HEIGHT_AT = /* glsl */ `
+  uniform sampler2D uHeightGlobal;
+  uniform sampler2D uHeightRegion;
+  uniform bool uHasHeight;
+  uniform bool uHasHeightGlobal;
+  uniform vec4 uBbox; // west, south, east, north in degrees
+
+  float heightAt(vec2 p, float lodGlobal, float lodRegion) {
+    if (!uHasHeight) return 0.0;
+    float lon = -180.0 + 360.0 * p.x;
+    float lat = -90.0 + 180.0 * p.y;
+    if (lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w) {
+      vec2 r = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
+      return textureLod(uHeightRegion, r, lodRegion).r;
+    }
+    if (uHasHeightGlobal) return textureLod(uHeightGlobal, vec2(p.x, 1.0 - p.y), lodGlobal).r;
+    return 0.0;
+  }
+`;
 
 const VERTEX_SHADER = /* glsl */ `
   attribute vec3 aPlane;
   uniform mat3 uRotation;
   uniform float uFlatten;
+  uniform float uLift;
+  // Mipmap levels about one vertex wide, so each vertex rises with the mean height around it.
+  uniform float uLiftLodGlobal;
+  uniform float uLiftLodRegion;
   varying vec2 vUv;
   varying float vShade;
+  ${HEIGHT_AT}
 
   void main() {
     vUv = uv;
     vec3 spherePosition = uRotation * position;
-    vec3 blended = mix(spherePosition, aPlane, uFlatten);
+    // Relief layers rise along the surface normal: outwards on the sphere, towards the camera on the map.
+    float lift = uLift > 0.0 ? heightAt(uv, uLiftLodGlobal, uLiftLodRegion) * uLift : 0.0;
+    vec3 raisedSphere = spherePosition + normalize(spherePosition) * lift;
+    vec3 raisedPlane = aPlane + vec3(0.0, 0.0, lift * 0.5);
+    vec3 blended = mix(raisedSphere, raisedPlane, uFlatten);
     // Soft light from the upper left on the sphere; the flat map is lit evenly.
     float light = 0.55 + 0.45 * max(dot(normalize(spherePosition), normalize(vec3(-0.4, 0.5, 1.0))), 0.0);
     vShade = mix(light, 1.0, uFlatten);
@@ -106,15 +181,70 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uLayerGlobal;
   uniform bool uHasGlobal;
   uniform sampler2D uLayerRegion;
-  uniform vec4 uBbox; // west, south, east, north in degrees
   uniform float uLayerOpacity;
+  // uBbox comes with HEIGHT_AT below.
+  uniform float uReliefShade;
+  // Texels of the height textures, and the shading step and its mipmap level, in
+  // planet texture units (u covers 360 degrees, v covers 180).
+  uniform vec2 uHeightSizeGlobal;
+  uniform vec2 uHeightSizeRegion;
+  uniform vec2 uShadeStepGlobal;
+  uniform vec2 uShadeStepRegion;
+  uniform float uShadeLodGlobal;
+  uniform float uShadeLodRegion;
+  // Colour from the height itself (sharp forest images): GEDI colour bar and presence alpha.
+  uniform bool uColorFromHeight;
+  uniform vec3 uColorbar[11];
+  uniform vec2 uPresence; // start, fade on the 0..1 height scale
   varying vec2 vUv;
   varying float vShade;
+  ${HEIGHT_AT}
+
+  // Mipmap level of a texture of size texels covering the given uv derivatives.
+  float lodOf(vec2 dx, vec2 dy, vec2 size) {
+    vec2 a = dx * size;
+    vec2 b = dy * size;
+    return max(0.0, 0.5 * log2(max(max(dot(a, a), dot(b, b)), 1e-12)));
+  }
+
+  // GEDI colour bar, linear between its eleven stops (0 m to 50 m).
+  vec3 colorbar(float h) {
+    float x = clamp(h, 0.0, 1.0) * 10.0;
+    vec3 color = uColorbar[0];
+    for (int i = 0; i < 10; i++) {
+      if (x >= float(i)) color = mix(uColorbar[i], uColorbar[i + 1], clamp(x - float(i), 0.0, 1.0));
+    }
+    return color;
+  }
+
+  // Shaded relief like a hillshade: slopes facing the light (north-west) are
+  // brighter, slopes facing away darker. The step is a fixed distance in degrees
+  // (or one texel of the level being drawn, when that is coarser), sampled at a
+  // mipmap level about one step wide so the shading is soft and has no bands.
+  float reliefShade(bool inRegion, float lodGlobal, float lodRegion, vec2 regionScale) {
+    if (!uHasHeight) return 1.0;
+    float lg = max(lodGlobal, uShadeLodGlobal);
+    float lr = max(lodRegion, uShadeLodRegion);
+    vec2 s = inRegion
+      ? max(uShadeStepRegion, exp2(lr) / (uHeightSizeRegion * regionScale))
+      : max(uShadeStepGlobal, exp2(lg) / uHeightSizeGlobal);
+    float dx = heightAt(vUv + vec2(s.x, 0.0), lg, lr) - heightAt(vUv - vec2(s.x, 0.0), lg, lr);
+    float dy = heightAt(vUv + vec2(0.0, s.y), lg, lr) - heightAt(vUv - vec2(0.0, s.y), lg, lr);
+    // Normal ~ (-dx, -dy, 1) with x east and y north; light towards the north-west (-1, 1).
+    return clamp(1.0 + uReliefShade * 0.7 * (dx - dy), 0.7, 1.25);
+  }
 
   void main() {
     float lon = -180.0 + 360.0 * vUv.x;
     float lat = -90.0 + 180.0 * vUv.y;
     bool inRegion = lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w;
+    // Levels of detail of both height textures, worked out here, outside any
+    // branch, because screen-space derivatives are undefined inside one.
+    vec2 duvx = dFdx(vUv);
+    vec2 duvy = dFdy(vUv);
+    vec2 regionScale = vec2(360.0 / (uBbox.z - uBbox.x), 180.0 / (uBbox.w - uBbox.y));
+    float lodGlobal = lodOf(duvx, duvy, uHeightSizeGlobal);
+    float lodRegion = lodOf(duvx * regionScale, duvy * regionScale, uHeightSizeRegion);
     vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
     if (inRegion && uHasRegionBase) {
       // Same calculation as regionUv() in geo.ts: v grows northwards like an image texture.
@@ -122,14 +252,21 @@ const FRAGMENT_SHADER = /* glsl */ `
       color = texture2D(uRegionBase, cropUv).rgb;
     }
     vec4 overlay = vec4(0.0);
-    if (inRegion) {
+    if (uColorFromHeight) {
+      // Sharp forest images: colour and presence straight from the height.
+      float h = heightAt(vUv, lodGlobal, lodRegion);
+      overlay = vec4(colorbar(h), clamp((h - uPresence.x) / uPresence.y, 0.0, 1.0));
+    } else if (inRegion) {
       // Inside the Amazon: the detailed regional grid (north row first).
       vec2 regionUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
       overlay = texture2D(uLayerRegion, regionUv);
     } else if (uHasGlobal) {
       overlay = texture2D(uLayerGlobal, vec2(vUv.x, 1.0 - vUv.y));
     }
-    color = mix(color, overlay.rgb, overlay.a * uLayerOpacity);
+    float layerAmount = overlay.a * uLayerOpacity;
+    color = mix(color, overlay.rgb, layerAmount);
+    // The relief shading applies where the layer is drawn, not to the base image around it.
+    color *= mix(1.0, reliefShade(inRegion, lodGlobal, lodRegion, regionScale), layerAmount);
     gl_FragColor = vec4(color * vShade, 1.0);
   }
 `;
@@ -188,6 +325,31 @@ interface Uniforms {
   uLayerRegion: IUniform<Texture | null>;
   uBbox: IUniform<Vector4>;
   uLayerOpacity: IUniform<number>;
+  uHeightGlobal: IUniform<Texture | null>;
+  uHeightRegion: IUniform<Texture | null>;
+  uHasHeight: IUniform<boolean>;
+  uHasHeightGlobal: IUniform<boolean>;
+  uLift: IUniform<number>;
+  uLiftLodGlobal: IUniform<number>;
+  uLiftLodRegion: IUniform<number>;
+  uReliefShade: IUniform<number>;
+  uHeightSizeGlobal: IUniform<Vector2>;
+  uHeightSizeRegion: IUniform<Vector2>;
+  uShadeStepGlobal: IUniform<Vector2>;
+  uShadeStepRegion: IUniform<Vector2>;
+  uShadeLodGlobal: IUniform<number>;
+  uShadeLodRegion: IUniform<number>;
+  uColorFromHeight: IUniform<boolean>;
+  uColorbar: IUniform<Float32Array>;
+  uPresence: IUniform<Vector2>;
+}
+
+/** Width and height in texels of a loaded texture (image or data), null when unknown. */
+function textureSize(texture: Texture | null): { width: number; height: number } | null {
+  const image = texture?.image as { width?: unknown; height?: unknown } | undefined;
+  if (!image || typeof image.width !== "number" || typeof image.height !== "number") return null;
+  if (!(image.width > 0) || !(image.height > 0)) return null;
+  return { width: image.width, height: image.height };
 }
 
 export function EarthMesh({
@@ -198,6 +360,8 @@ export function EarthMesh({
   view,
   mode,
   segments,
+  raiseRelief,
+  reliefImages,
   onHover,
   onGlobeClick,
 }: EarthMeshProps) {
@@ -225,7 +389,24 @@ export function EarthMesh({
       uHasGlobal: { value: false },
       uLayerRegion: { value: null },
       uBbox: { value: new Vector4() },
-      uLayerOpacity: { value: LAYER_OPACITY },
+      uLayerOpacity: { value: 0.8 },
+      uHeightGlobal: { value: null },
+      uHeightRegion: { value: null },
+      uHasHeight: { value: false },
+      uHasHeightGlobal: { value: false },
+      uLift: { value: 0 },
+      uLiftLodGlobal: { value: 0 },
+      uLiftLodRegion: { value: 0 },
+      uReliefShade: { value: RELIEF_SHADE },
+      uHeightSizeGlobal: { value: new Vector2(1, 1) },
+      uHeightSizeRegion: { value: new Vector2(1, 1) },
+      uShadeStepGlobal: { value: new Vector2() },
+      uShadeStepRegion: { value: new Vector2() },
+      uShadeLodGlobal: { value: 0 },
+      uShadeLodRegion: { value: 0 },
+      uColorFromHeight: { value: false },
+      uColorbar: { value: new Float32Array(SHADER_STOPS * 3) },
+      uPresence: { value: new Vector2(0, 1) },
     }),
     [],
   );
@@ -250,7 +431,45 @@ export function EarthMesh({
     uniforms.uHasGlobal.value = layerTextures.global !== null;
     uniforms.uLayerRegion.value = layerTextures.region;
     uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
-  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, bbox]);
+    uniforms.uLayerOpacity.value = layerTextures.opacity;
+    // A relief layer draws from the sharp forest images once they are there,
+    // from its own grids before that or when they failed to load.
+    const relief = layerTextures.heightRegion !== null;
+    const sharp = relief && reliefImages !== null;
+    const heightGlobal = sharp ? reliefImages.global : layerTextures.heightGlobal;
+    const heightRegion = sharp ? reliefImages.region : layerTextures.heightRegion;
+    uniforms.uHeightGlobal.value = heightGlobal;
+    uniforms.uHeightRegion.value = heightRegion;
+    uniforms.uHasHeight.value = heightRegion !== null;
+    uniforms.uHasHeightGlobal.value = heightGlobal !== null;
+    uniforms.uColorFromHeight.value = sharp;
+    if (sharp) {
+      uniforms.uColorbar.value = shaderColorbar(reliefImages.ramp);
+      uniforms.uPresence.value.set(...shaderPresence(reliefImages.ramp));
+    }
+
+    // Texel sizes in degrees (global textures cover 360 x 180, the Amazon ones the rectangle).
+    const globalSize = textureSize(heightGlobal);
+    const regionSize = textureSize(heightRegion);
+    const globalCell = globalSize ? 360 / globalSize.width : 0;
+    const regionCell = regionSize ? (bbox.east - bbox.west) / regionSize.width : 0;
+    uniforms.uHeightSizeGlobal.value.set(globalSize?.width ?? 1, globalSize?.height ?? 1);
+    uniforms.uHeightSizeRegion.value.set(regionSize?.width ?? 1, regionSize?.height ?? 1);
+
+    // Shaded relief: a fixed step in degrees (one texel on the coarser grids), in planet texture units.
+    const stepGlobal = shadeStepDegrees(SHADE_STEP_GLOBAL_DEGREES, globalCell);
+    const stepRegion = shadeStepDegrees(SHADE_STEP_REGION_DEGREES, regionCell);
+    uniforms.uShadeStepGlobal.value.set(stepGlobal / 360, stepGlobal / 180);
+    uniforms.uShadeStepRegion.value.set(stepRegion / 360, stepRegion / 180);
+    uniforms.uShadeLodGlobal.value = lodForSpacing(stepGlobal, globalCell);
+    uniforms.uShadeLodRegion.value = lodForSpacing(stepRegion, regionCell);
+
+    // Raised height: sample one mean height per vertex (the mesh has `segments.width` columns over 360 degrees).
+    uniforms.uLift.value = relief && raiseRelief ? RELIEF_LIFT : 0;
+    const vertexSpacing = 360 / segments.width;
+    uniforms.uLiftLodGlobal.value = lodForSpacing(vertexSpacing, globalCell);
+    uniforms.uLiftLodRegion.value = lodForSpacing(vertexSpacing, regionCell);
+  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, reliefImages, bbox, raiseRelief, segments.width]);
 
   // Dragging follows the pointer anywhere on the page once it started on the planet.
   useEffect(() => {
