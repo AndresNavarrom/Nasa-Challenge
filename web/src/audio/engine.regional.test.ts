@@ -67,7 +67,7 @@ describe("regional point instrument", () => {
     engine.dispose();
   });
 
-  it("retriggers lightning at 90..120 bpm from the layer value", async () => {
+  it("retriggers lightning at the lowest note and 90 bpm for value 0", async () => {
     vi.useFakeTimers();
     const context = new FakeAudioContext();
     const engine = createSoundEngine({ context: context.asAudioContext(), lightningSampleUrl: null });
@@ -75,16 +75,13 @@ describe("regional point instrument", () => {
     expect(context.oscillators).toHaveLength(6);
 
     engine.setRegionalPoint("lightning", 0, 0.5);
-    expect(context.oscillators).toHaveLength(6);
-
-    engine.setRegionalPoint("lightning", 1, 0.5);
     expect(context.oscillators).toHaveLength(7);
-    vi.advanceTimersByTime(499);
+    vi.advanceTimersByTime(600);
     expect(context.oscillators).toHaveLength(7);
-    vi.advanceTimersByTime(1);
+    vi.advanceTimersByTime(100);
     expect(context.oscillators).toHaveLength(8);
 
-    engine.setRegionalPoint("lightning", 0, 0.5);
+    engine.setRegionalPoint("lightning", null, 0.5);
     vi.advanceTimersByTime(2000);
     expect(context.oscillators).toHaveLength(8);
     engine.dispose();

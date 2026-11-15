@@ -85,13 +85,16 @@ still apply.
   a short chorus and a generated reverb. The value is a discrete pitch across
   one octave of the visible range; screen X is the pan. A separate regional gain
   keeps the voice below the overview mix. Lightning uses decaying notes at a
-  value-dependent 90–120 bpm instead of a sustained note.
+  value-dependent 90–120 bpm; value 0 is the lowest scale note at 90 bpm, not
+  silence (only no-data/null is silent).
 - Smoke and CO2 add looped air textures from the existing sample library; the
   forest bird ambience already plays in both views.
 - The selected marker uses the focused region bounds on the map and is also
   drawn on the globe.
-- Forest birds also play in the regional view; the selected marker is drawn on
-  both the globe and the regional map.
+- Forest birds play in both views only when the visible field average (globe)
+  or selected value (regional map) is at least `0.25`; sparse forest stops the
+  bird ambience. The selected marker is drawn on both the globe and the
+  regional map.
 - Auto-rotate, drag, and the map still control data time as before.
 - The globe uses drag-to-rotate and double-click-to-zoom; point selection is
   hidden from the globe HUD.

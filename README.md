@@ -191,7 +191,9 @@ docker compose up web     # then open http://127.0.0.1:5173/
   base instruments as the overview, enriched with detuned/sub voices, chorus,
   reverb and air textures; the selected point's left-right position sets pan
   and the layer value sets a discrete pitch over one octave. Lightning
-  retriggers decaying notes at 90–120 bpm, and forest birds also play there.
+  retriggers decaying notes at 90–120 bpm (0 is the lowest note at 90 bpm, not
+  silence), and forest birds play while the visible/selected forest value is at
+  least 0.25.
 - **Indicator** (bottom left): longitude, latitude and the active layer's
   value (0 to 100 %) for the point under the cursor; the region map also shows
   the locked point, or "no data here".

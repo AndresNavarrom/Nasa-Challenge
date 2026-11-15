@@ -582,7 +582,7 @@ export class WebAudioSoundEngine implements SoundEngine {
         this.fadeRegional(0);
         this.stopRegionalSample(this.regionalVoice);
       }
-      if (this.currentState === "running" && this.regional.value !== null && this.regional.value > 0) {
+      if (this.currentState === "running" && this.regional.value !== null) {
         this.startRegionalLightning();
       } else {
         this.clearRegionalLightning();
@@ -717,7 +717,7 @@ export class WebAudioSoundEngine implements SoundEngine {
       return;
     }
     if (this.regional.layer === "lightning") {
-      if (this.regional.value > 0) this.startRegionalLightning();
+      this.startRegionalLightning();
       return;
     }
     this.ensureRegionalVoice();
@@ -840,8 +840,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     if (
       this.currentState !== "running" ||
       this.regional.layer !== "lightning" ||
-      this.regional.value === null ||
-      this.regional.value <= 0
+      this.regional.value === null
     ) {
       return;
     }
@@ -854,8 +853,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     if (
       this.currentState !== "running" ||
       this.regional.layer !== "lightning" ||
-      this.regional.value === null ||
-      this.regional.value <= 0
+      this.regional.value === null
     ) {
       return;
     }
@@ -882,7 +880,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     if (!context || !graph || this.currentState !== "running") return;
     const layer = this.regional.layer;
     const value = this.regional.value;
-    if (layer !== "lightning" || value === null || value <= 0) return;
+    if (layer !== "lightning" || value === null) return;
     const instrument = OVERVIEW_INSTRUMENTS.lightning;
     const span = this.regional.max - this.regional.min;
     const amount = span > 0 ? (value - this.regional.min) / span : 0.5;
@@ -1264,7 +1262,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     const bus = this.ensureBirdBus();
     if (!bus) return;
     rampParameter(bus.gain, BIRD_BUS_GAIN, this.context!.currentTime, this.rampSeconds);
-    if (this.birdStarted) return;
+    if (this.birdStarted || this.birdTimer !== undefined) return;
     this.birdStarted = true;
     void this.loadBirdSample().then((sample) => {
       this.birdStarted = false;
