@@ -117,6 +117,16 @@ describe("marks on the line", () => {
     expect(years).toEqual(["2017", "2018", "2019", "2020", "2021", "2022", "2023"]);
   });
 
+  it("labels months, not days, for weeks of three-hourly data and drops the marks in between", () => {
+    const first = Date.UTC(2026, 7, 1, 0, 30);
+    const times = Array.from({ length: 488 }, (_, index) => first + index * 3 * HOUR);
+    const season: Timed = { dates: times.map(String), times, cadence: { unit: "hour", count: 3 } };
+    const ticks = timelineTicks(season);
+    expect(ticks.filter((tick) => tick.major).map((tick) => tick.label)).toEqual(["Aug 2026", "Sep"]);
+    // One unlabelled mark per day start (61 days, two of them month starts), no mark per instant.
+    expect(ticks).toHaveLength(61);
+  });
+
   it("labels each month of daily data briefly, with the year only in January", () => {
     const times = Array.from({ length: 366 }, (_, day) => Date.UTC(2020, 0, 1 + day));
     const daily: Timed = { dates: times.map(String), times, cadence: { unit: "day", count: 1 } };

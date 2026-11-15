@@ -3,6 +3,7 @@ import { DataTexture } from "three";
 import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
 import {
   CO2_STOPS,
+  SMOKE_STOPS,
   FIRST_INSTANT,
   GEDI_COLORBAR,
   LAYER_RAMPS,
@@ -88,7 +89,7 @@ describe("forest drawn like NASA SVS 4950", () => {
     const flat = layerTextureFor({ manifest: manifest("smoke"), global, region });
     expect(flat.heightGlobal).toBeNull();
     expect(flat.heightRegion).toBeNull();
-    expect(flat.opacity).toBe(0.8);
+    expect(flat.opacity).toBe(0.85);
     disposeLayerTextures(flat);
   });
 });
@@ -163,6 +164,23 @@ describe("instants following the timeline", () => {
     showLayerFrame(textures, layer, -4);
     expect(textures.frame).toBe(0);
     disposeLayerTextures(textures);
+  });
+});
+
+describe("smoke drawn from MERRA-2 carbon optical depth", () => {
+  const smoke = LAYER_RAMPS.smoke!;
+
+  it("goes from pale haze through orange to charcoal in the thickest plumes", () => {
+    expect(rampColor(smoke, 0)).toEqual(SMOKE_STOPS[0]);
+    expect(rampColor(smoke, 127.5)).toEqual(SMOKE_STOPS[2]);
+    expect(rampColor(smoke, 255)).toEqual(SMOKE_STOPS[SMOKE_STOPS.length - 1]);
+  });
+
+  it("keeps clean air clear and shows a visible haze fully", () => {
+    expect(rampAlpha(smoke, 10)).toBe(0); // optical depth about 0.003
+    expect(rampAlpha(smoke, 25)).toBe(0);
+    expect(rampAlpha(smoke, 60)).toBe(255); // about 0.11
+    expect(rampAlpha(smoke, 200)).toBe(255);
   });
 });
 

@@ -78,7 +78,32 @@ export const RELIEF_LAYERS: ReadonlySet<string> = new Set(["forest"]);
 
 export const NEUTRAL_RAMP: ColorRamp = { low: [90, 90, 100], high: [240, 240, 245], maxAlpha: 1 };
 
-const SMOKE_RAMP: ColorRamp = { low: [170, 170, 170], high: [125, 72, 30], maxAlpha: 1 };
+/**
+ * Smoke colours on the square-root optical depth scale of MERRA-2 (0..255 = 0..2):
+ * pale yellow haze, orange, then dark brown and charcoal in the thickest plumes.
+ */
+export const SMOKE_STOPS: readonly Rgb[] = [
+  [250, 235, 170],
+  [245, 185, 90],
+  [215, 110, 45],
+  [140, 60, 35],
+  [60, 35, 30],
+];
+
+/**
+ * The cleanest air (below about 0.02 of optical depth, grey 25) stays clear, smoke
+ * fades in up to grey 60 (about 0.11, a visible haze) and is opaque above, so only
+ * the smoke shows, not a tint over the whole planet.
+ */
+const SMOKE_RAMP: ColorRamp = {
+  low: SMOKE_STOPS[0]!,
+  high: SMOKE_STOPS[SMOKE_STOPS.length - 1]!,
+  maxAlpha: 1,
+  stops: SMOKE_STOPS,
+  presence: { from: 60, fade: 35 },
+  opacity: 0.85,
+  baseDim: 0.15,
+};
 
 /** Ramps keyed by layer id; ids not listed here use NEUTRAL_RAMP. */
 export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {

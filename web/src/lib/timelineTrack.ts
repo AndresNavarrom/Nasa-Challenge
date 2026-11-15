@@ -124,11 +124,25 @@ function startsPeriod(time: Date, before: Date, cadence: Cadence): boolean {
   }
 }
 
+/** Most labels that fit on the line; with more periods, the labels move up to months. */
+export const MAX_LABELS = 14;
+/** Most marks drawn one per instant; with more, only the marks that start a period are drawn. */
+export const MAX_MARKS = 200;
+
+/** Month label used when there are too many days to label each one: "Aug 2026", then "Sep". */
+function monthLabel(time: Date, first: boolean): string {
+  const month = MONTHS[time.getUTCMonth()]!;
+  return first || time.getUTCMonth() === 0 ? `${month} ${time.getUTCFullYear()}` : month;
+}
+
 /**
- * One mark per instant of the data. The first instant and each instant that
- * starts a new day / month / year (by the cadence) are major marks with a label.
- * Without times or cadence only the first and last marks are major, labelled
- * with their dates.
+ * Marks of the line. The first instant and each instant that starts a new day /
+ * month / year (by the cadence) are major marks with a label. When that would be
+ * more than MAX_LABELS labels for hourly data (weeks of it), the labelled marks
+ * are the months instead and each day is an unlabelled mark. Every instant gets
+ * a small mark unless there are more than MAX_MARKS of them; then only the marks
+ * that start a period are drawn. Without times or cadence only the first and
+ * last marks are major, labelled with their dates.
  */
 export function timelineTicks(layer: Timed): Tick[] {
   const fractions = instantFractions(layer);
@@ -139,11 +153,23 @@ export function timelineTicks(layer: Timed): Tick[] {
       return { fraction, major: edge, label: edge ? (dates[index] ?? "") : "" };
     });
   }
-  return fractions.map((fraction, index) => {
-    const time = new Date(times[index]!);
-    const major = index === 0 || startsPeriod(time, new Date(times[index - 1]!), cadence);
-    return { fraction, major, label: major ? majorLabel(time, cadence) : "" };
+  const moments = times.map((time) => new Date(time));
+  const starts = moments.map((time, index) => index === 0 || startsPeriod(time, moments[index - 1]!, cadence));
+  const byMonth = cadence.unit === "hour" && starts.filter(Boolean).length > MAX_LABELS;
+  const dense = fractions.length > MAX_MARKS;
+  const ticks: Tick[] = [];
+  fractions.forEach((fraction, index) => {
+    const time = moments[index]!;
+    if (byMonth) {
+      const monthStart = index === 0 || time.getUTCMonth() !== moments[index - 1]!.getUTCMonth();
+      if (monthStart) ticks.push({ fraction, major: true, label: monthLabel(time, index === 0) });
+      else if (starts[index] || !dense) ticks.push({ fraction, major: false, label: "" });
+      return;
+    }
+    if (starts[index]) ticks.push({ fraction, major: true, label: majorLabel(time, cadence) });
+    else if (!dense) ticks.push({ fraction, major: false, label: "" });
   });
+  return ticks;
 }
 
 /** Short words for how far apart the instants are: "every hour", "every month". */
