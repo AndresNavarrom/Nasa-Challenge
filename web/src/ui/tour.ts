@@ -5,7 +5,7 @@
 
 import { driver, type AllowedButtons, type Driver } from "driver.js";
 import "driver.js/dist/driver.css";
-import { TOUR_STEPS, stepSelector } from "./tourSteps";
+import { TOUR_STEPS, stepSelector, type TourAction } from "./tourSteps";
 
 /** Background of the page (index.css `body`), so the dimmed screen keeps its colour. */
 const OVERLAY_COLOR = "#05070d";
@@ -16,7 +16,10 @@ const WELCOME_BUTTONS: AllowedButtons[] = ["next", "close"];
  * Starts the tour from its first window. `onEnd` runs once when it closes,
  * however it closes (Done, the close button, Escape or a click outside).
  */
-export function startTour(onEnd?: () => void): Driver {
+export function startTour(
+  onEnd?: () => void,
+  onAction?: (action: TourAction) => void,
+): Driver {
   const tour = driver({
     popoverClass: "jukebox-tour",
     overlayColor: OVERLAY_COLOR,
@@ -31,7 +34,10 @@ export function startTour(onEnd?: () => void): Driver {
     closeBtnLabel: "Close the tour",
     allowKeyboardControl: true,
     skipMissingElement: true,
-    onDestroyed: () => onEnd?.(),
+    onDestroyed: () => {
+      onAction?.("restore-layer");
+      onEnd?.();
+    },
     // Focus "Next" (driver.js focuses the close button), so Enter moves on.
     onPopoverRender: (popover) => {
       requestAnimationFrame(() => popover.nextButton.focus());
@@ -44,6 +50,17 @@ export function startTour(onEnd?: () => void): Driver {
         side: step.side,
         align: step.align,
         ...(index === 0 ? { showButtons: WELCOME_BUTTONS } : {}),
+        ...(step.onNext
+          ? {
+              onNextClick: (_element, _activeStep, opts) => {
+                onAction?.(step.onNext!);
+                // Let React open the timeline before driver resolves the next element.
+                window.setTimeout(() => {
+                  if (opts.driver.isActive()) opts.driver.moveNext();
+                }, 80);
+              },
+            }
+          : {}),
       },
     })),
   });

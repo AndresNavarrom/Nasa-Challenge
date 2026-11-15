@@ -33,7 +33,7 @@ import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
 import { layerVoices } from "./ui/soloLayer";
 import { TimelineTrack } from "./ui/TimelineTrack";
 import { startTour } from "./ui/tour";
-import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
+import { browserFlagStore, hasSeenTour, markTourSeen, type TourAction } from "./ui/tourSteps";
 
 type LoadState =
   | { status: "loading" }
@@ -381,15 +381,20 @@ const TOUR_START_DELAY_MS = 400;
  * The welcome window and guided tour: shown by itself on the first visit of
  * this browser, and again whenever `show` is called (the "?" button).
  */
-function useGuidedTour(): () => void {
+function useGuidedTour(onAction: (action: TourAction) => void): () => void {
   const tourRef = useRef<Driver | null>(null);
+  const actionRef = useRef(onAction);
+  actionRef.current = onAction;
 
   const show = useCallback(() => {
     tourRef.current?.destroy();
-    tourRef.current = startTour(() => {
-      markTourSeen(browserFlagStore());
-      tourRef.current = null;
-    });
+    tourRef.current = startTour(
+      () => {
+        markTourSeen(browserFlagStore());
+        tourRef.current = null;
+      },
+      (action) => actionRef.current(action),
+    );
   }, []);
 
   useEffect(() => {
@@ -408,7 +413,21 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
   // Starts on the plain Earth view, with no layer drawn and none sounding.
   const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
-  const showTour = useGuidedTour();
+  const previousLayerRef = useRef<string | null>(null);
+  const handleTourAction = useCallback(
+    (action: TourAction) => {
+      if (action === "show-timeline") {
+        if (previousLayerRef.current === null) previousLayerRef.current = activeLayerId;
+        const timed = data.layers.find((layer) => !layer.manifest.static);
+        if (timed) setActiveLayerId(timed.manifest.id);
+        return;
+      }
+      if (previousLayerRef.current !== null) setActiveLayerId(previousLayerRef.current);
+      previousLayerRef.current = null;
+    },
+    [activeLayerId, data.layers],
+  );
+  const showTour = useGuidedTour(handleTourAction);
   const [scenes, setScenes] = useState<ScenesManifest | null>(null);
   const [openScene, setOpenScene] = useState<SceneDefinition | null>(null);
   const [sceneAudioError, setSceneAudioError] = useState<string | null>(null);
