@@ -1,68 +1,47 @@
-# Code Structure
+# Estructura del código — Earth Jukebox
 
-## Organización del repositorio
+## Organización
 
 ```
-web/                    earth-jukebox-web (Vite + React + TS)
-  index.html            punto de entrada HTML (#root)
-  src/main.tsx          monta <App/> en StrictMode
-  src/App.tsx           carga datos y monta la escena y el HUD
-  src/index.css         Tailwind 4 (@theme con colores por capa), foco visible, .sr-only
-  src/data/             contrato de datos (types.ts) y cargador validado (loadManifest.ts)
-  src/scene/            planeta 3D: EarthScene.tsx, EarthMesh.tsx, layerTexture.ts, geo.ts,
-                        FocusTransition.ts, listeningPoint.tsx (+ pruebas geo, layerTexture)
-  src/ui/               PlanetHud.tsx
-  src/lib/              interpolate.ts (muestreo espacio/tiempo), timeline.ts (posición común)
-  src/audio/            mapping.ts (valor -> parámetros de sonido, funciones puras)
-  public/data/          datos preparados que se sirven tal cual
-  Dockerfile            etapas deps, dev, test, build
-  docker-entrypoint.sh  reinstala dependencias si cambia package-lock.json
-tools/prep/             jukebox-prep (Rust): cuadros -> cuadrículas, texturas, manifiesto
-  src/main.rs           CLI y orquestación
-  src/config.rs         configuración de entrada, LAYER_IDS, límites de tamaño y formato del manifiesto (serde)
-  src/pipeline.rs       carga de imágenes, render, reducción, escritura de archivos, earth.jpg
-  src/project.rs        proyecciones equirect y orthographic
-  src/color.rs          color -> valor (colorbar, brightness, warmth)
-  src/grid.rs           reducción a cuadrícula, cuantización, mínimos de tamaño
-  src/sample.rs         datos de muestra generados (--sample), con ids forest/smoke/co2
-  src/error.rs          PrepError
-tools/fetch-frames.sh   descarga de cuadros NASA y reescritura de data/SOURCES.md (anfitrión)
-tools/scraping/         scripts Python de exploración (GEOS-FP, SVS, GISTEMP) con entorno Nix
-  fetch_geos_variable.py  una variable GEOS-FP de un día -> NetCDF + CSV de media global
-  collect_resources.py    recolector genérico con límites --max-files / --max-gb
-  flake.nix, flake.lock   entorno Python + netcdf + cdo
-  README.md
-server/                 jukebox-server (Rust, Axum): esqueleto
-data/                   prep-config.json, SOURCES.md (generado); raw/ ignorado (png, jpg, mp4 por SVS)
-docker-compose.yml      servicios web, web-test, prep-test, prep
-README.md, TAREAS.md, VISION-MISION.md
+docker-compose.yml       servicios web, web-test, prep, prep-test, fetch, fetch-test
+data/                    prep-config.json (entrada de prep), SOURCES.md (generado por fetch), raw/ (ignorado)
+tools/fetch-frames.sh    descarga y conversión de fuentes (corre en el contenedor fetch)
+tools/fetch/             Dockerfile, requirements.txt, geoscf_to_png.py, lightning_composite.py, tests/
+tools/prep/              crate Rust jukebox-prep (src/: main, config, pipeline, project, grid, color, error, sample)
+tools/scraping/          exploración fuera del POC (Python + Nix)
+server/                  crate Rust jukebox-server (esqueleto)
+web/                     SPA (Vite, React, three.js, Tailwind, Vitest)
+web/src/data/            types.ts, loadManifest.ts
+web/src/lib/             interpolate.ts, timeline.ts
+web/src/audio/           mapping.ts
+web/src/scene/           EarthScene.tsx, EarthMesh.tsx, FocusTransition.ts, geo.ts, layerTexture.ts, baseImage.ts, listeningPoint.tsx
+web/src/ui/              PlanetHud.tsx
+web/public/data/         datos preparados (manifest.json, *.bin, *.png, earth-*.jpg)
+docs/                    PLANET-CHECKLIST.md
 ```
-
-Carpetas previstas que no existen todavía: `web/src/audio/engine.ts`, `docs/`, `run-demo.sh`.
 
 ## Clasificación de archivos
 
-| Clase | Archivos |
+| Categoría | Archivos |
 |---|---|
-| Vista / entrada | `web/src/main.tsx`, `web/src/App.tsx`, `web/index.html`, `web/src/index.css`, `web/src/ui/PlanetHud.tsx` |
-| Vista 3D | `web/src/scene/EarthScene.tsx`, `web/src/scene/EarthMesh.tsx` (shaders GLSL en línea) |
-| Modelo / contrato | `web/src/data/types.ts`, `tools/prep/src/config.rs` |
-| Servicio / carga | `web/src/data/loadManifest.ts` |
-| Utilidad (pura) | `web/src/lib/interpolate.ts`, `web/src/lib/timeline.ts`, `web/src/audio/mapping.ts`, `web/src/scene/{geo,layerTexture,FocusTransition}.ts`, `tools/prep/src/{color,grid,project}.rs` |
-| Estado compartido | `web/src/scene/listeningPoint.tsx` (contexto React) |
-| Proceso por lotes | `tools/prep/src/{main,pipeline,sample}.rs`, `tools/fetch-frames.sh`, `tools/scraping/*.py` |
-| Configuración | `web/{package.json,vite.config.ts,vitest.config.ts,tsconfig.json}`, `*/Cargo.toml`, `docker-compose.yml`, Dockerfiles, `data/prep-config.json`, `tools/scraping/flake.nix` |
-| Pruebas | `web/src/**/*.test.ts`, módulos `#[cfg(test)]` en `color.rs`, `grid.rs`, `project.rs` |
-| Datos | `web/public/data/*` |
+| Model/Entity | `tools/prep/src/config.rs` (PrepConfig, LayerConfig, ValueConfig, Manifest), `tools/prep/src/project.rs` (Projection), `web/src/data/types.ts` |
+| Controller/Handler | `tools/prep/src/main.rs` (CLI), `main()` de los scripts Python, `web/src/App.tsx` |
+| Service/UseCase | `tools/prep/src/pipeline.rs`, `tools/prep/src/sample.rs`, `tools/fetch-frames.sh`, `tools/fetch/geoscf_to_png.py`, `tools/fetch/lightning_composite.py`, `web/src/data/loadManifest.ts` |
+| Utility/Helper | `tools/prep/src/grid.rs`, `color.rs`, `error.rs`; `web/src/lib/*.ts`, `web/src/audio/mapping.ts`, `web/src/scene/geo.ts`, `layerTexture.ts`, `baseImage.ts`, `FocusTransition.ts` |
+| UI/Static | `web/src/scene/EarthScene.tsx`, `EarthMesh.tsx`, `listeningPoint.tsx`, `web/src/ui/PlanetHud.tsx`, `web/src/index.css`, `web/index.html`, `web/public/data/*` |
+| Configuration | `docker-compose.yml`, Dockerfiles, `data/prep-config.json`, `package.json`, `Cargo.toml`, `requirements.txt`, `vite.config.ts`, `vitest.config.ts`, `tsconfig.json` |
+| Test | `web/src/**/*.test.ts`, `tools/fetch/tests/*.py`, bloques `#[cfg(test)]` en Rust |
 
-## Patrones de código
+## Patrones
 
-- **Validación en la frontera con errores para personas**: `DataLoadError` (TS) y `PrepError` (Rust) con mensajes que nombran el archivo y la acción (`PREP_HINT`). Funciones `require*` que fallan rápido. `gridToRgba` lanza un `Error` que nombra la capa; `EarthScene` lo convierte en aviso visible y dibuja sin capa.
-- **Funciones puras con límites**: todas las entradas se limitan a 0..1 y `NaN` cuenta como 0 (`clamp01`, `clampUnit`, `clampPosition`).
-- **Inyección de dependencias ligera**: `loadJukeboxData(baseUrl, fetcher)` acepta un `fetch` sustituible para pruebas.
-- **Unión discriminada para estado de carga** en `App.tsx` (`loading | ready | error`) con limpieza de efecto (`cancelled`); el mismo patrón en `useBaseTexture`.
-- **Enums etiquetados con serde** (`#[serde(tag = "method")]`, `#[serde(tag = "type")]`) para la configuración de prep; valores por defecto con `#[serde(default = ...)]`.
-- **Geometría morfable en GPU**: un solo `BufferGeometry` con la esfera en `position` y el mapa en `aPlane`, mezclados por `uFlatten` en el shader.
-- **Datos abiertos a ids nuevos en la escena**: `rampFor(id)` devuelve `NEUTRAL_RAMP` para ids sin rampa propia.
-- **`data-testid` en elementos de interfaz** (convención pedida en `TAREAS.md`).
-- Nombres idiomáticos: camelCase en TS, snake_case en Rust y Python; comentarios de documentación en inglés.
+- **Funciones puras + bordes delgados**: la lógica (interpolación, mapeo a sonido, geometría, conversión de color, reducción a cuadrícula, conversión PM2.5) está en funciones puras probadas; la E/S queda en `main`, `load*`, `write*`.
+- **Errores con mensaje para la persona**: `PrepError` (Rust), `ConversionError`/`CompositeError` (Python), `DataLoadError` (TS) con pistas de cómo arreglarlo.
+- **Configuración por enumeraciones etiquetadas** (`#[serde(tag = "method")]`, `#[serde(tag = "type")]`) para métodos de valor y proyecciones.
+- **Constantes compartidas a mano entre Rust y TS** (`LAYER_IDS`), con comentarios "keep in step".
+- **Estado mutable de vista + GSAP** en la escena; React solo para el modo y la UI.
+
+## Dependencias internas
+
+- `main.rs` → `config`, `pipeline`, `sample`, `error`; `pipeline` → `color`, `config`, `grid`, `project`, `error`; `sample` → `pipeline`, `grid`, `config`.
+- `App.tsx` → `data/loadManifest`, `scene/EarthScene`, `scene/listeningPoint`, `ui/PlanetHud`; `EarthScene` → `EarthMesh`, `FocusTransition`, `layerTexture`, `baseImage`, `geo`, `lib/interpolate`; `geo` → `lib/interpolate`.
+- Sin referencias circulares detectadas.
