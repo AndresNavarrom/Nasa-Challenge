@@ -10,7 +10,7 @@
 
 import { LAYER_IDS, type LayerId } from "../data/types";
 import { clampUnit, co2ToBreath, forestToVoice, intensityToGain, lightningToPercussion, positionToPan, smokeToTimbre } from "./mapping";
-import { OVERVIEW_BASE_HZ, OVERVIEW_COLUMNS, OVERVIEW_INSTRUMENTS, OVERVIEW_ROWS, type OverviewColumn } from "./overview";
+import { OVERVIEW_BASE_HZ, OVERVIEW_COLUMNS, OVERVIEW_INSTRUMENTS, OVERVIEW_LAYER_GAIN, OVERVIEW_ROWS, type OverviewColumn } from "./overview";
 import { TEMPO_STYLES } from "./tempo";
 import { DEFAULT_SMOOTHING_SECONDS, OnePoleSmoother } from "./smoothing";
 
@@ -455,7 +455,7 @@ export class WebAudioSoundEngine implements SoundEngine {
 
     const now = context.currentTime;
     const oscillator = context.createOscillator();
-    oscillator.type = style.kind === "mark" ? "square" : "sine";
+    oscillator.type = style.wave;
     oscillator.frequency.setValueAtTime(style.frequencyHz, now);
 
     const gain = context.createGain();
@@ -731,7 +731,9 @@ export class WebAudioSoundEngine implements SoundEngine {
       for (let row = 0; row < OVERVIEW_ROWS; row += 1) {
         const cell = column?.cells[row];
         const pitch = cell && Number.isFinite(cell.pitchHz) ? cell.pitchHz : OVERVIEW_BASE_HZ;
-        const gain = cell ? clampUnit(cell.gain) * instrument.gain * gainScale : 0;
+        const gain = cell
+          ? clampUnit(cell.gain) * instrument.gain * gainScale * OVERVIEW_LAYER_GAIN
+          : 0;
         rampParameter(voice.oscillators[row]!.frequency, pitch * detune * 2 ** instrument.octave, now, this.rampSeconds);
         rampParameter(voice.gains[row]!.gain, gain, now, this.rampSeconds);
       }

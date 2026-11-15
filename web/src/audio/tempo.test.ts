@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { TEMPO_BEATS_PER_FRAME, TEMPO_STYLES, tempoIndex, tempoStep } from "./tempo";
 
 describe("tempo marks", () => {
-  it("uses the layer units: hourly smoke, daily CO2, monthly lightning", () => {
-    expect(TEMPO_BEATS_PER_FRAME.smoke).toBe(3);
-    expect(TEMPO_BEATS_PER_FRAME.co2).toBe(1);
+  it("uses the layer units: monthly lightning only", () => {
     expect(TEMPO_BEATS_PER_FRAME.lightning).toBe(1);
+    expect(TEMPO_BEATS_PER_FRAME.smoke).toBeUndefined();
+    expect(TEMPO_BEATS_PER_FRAME.co2).toBeUndefined();
     expect(TEMPO_BEATS_PER_FRAME.forest).toBeUndefined();
   });
 
@@ -18,10 +18,10 @@ describe("tempo marks", () => {
     expect(tempoIndex(1, 1 / 10)).toBe(10);
   });
 
-  it("breathes for smoke and CO2 and ticks for lightning", () => {
-    expect(TEMPO_STYLES.smoke?.kind).toBe("breath");
-    expect(TEMPO_STYLES.co2?.kind).toBe("breath");
-    expect(TEMPO_STYLES.lightning?.kind).toBe("mark");
-    expect(TEMPO_STYLES.lightning!.gain).toBeGreaterThan(TEMPO_STYLES.smoke!.gain);
+  it("ticks only for lightning", () => {
+    expect(TEMPO_STYLES.lightning?.wave).toBe("square");
+    expect(TEMPO_STYLES.smoke).toBeUndefined();
+    expect(TEMPO_STYLES.co2).toBeUndefined();
+    expect(TEMPO_STYLES.forest).toBeUndefined();
   });
 });

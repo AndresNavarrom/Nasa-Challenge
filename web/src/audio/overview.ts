@@ -25,6 +25,9 @@ export const OVERVIEW_ROWS = 6;
 export const OVERVIEW_BASE_HZ = 110;
 export const OVERVIEW_PITCH_STEPS = 10;
 
+/** Global gain applied on top of every layer's instrument gain. */
+export const OVERVIEW_LAYER_GAIN = 1.5;
+
 /**
  * A cell sounds only when its value reaches this fraction of the average of the
  * visible field. 1 means "at or above the visible average"; lower values let
@@ -142,16 +145,16 @@ export function overviewPitchHz(
 }
 
 /**
- * Value 0..1 to a row gain with a cubic curve, so low values stay quiet and the
- * higher end of the layer has useful level control. `threshold` is relative to
- * the visible field: values below it are silent. Null, NaN and non-positive
+ * Value 0..1 to a row gain with a quadratic curve, so low values stay quiet and
+ * the higher end of the layer has useful level control. `threshold` is relative
+ * to the visible field: values below it are silent. Null, NaN and non-positive
  * values are always silent.
  */
 export function overviewGain(value: number | null, threshold = 0): number {
   if (value === null || !Number.isFinite(value) || value <= 0) return 0;
   const amount = clampUnit(value);
   if (amount < clampUnit(threshold)) return 0;
-  return amount ** 3;
+  return amount ** 2;
 }
 
 /** Average of the valid cells in the visible field; 0 when nothing is visible. */

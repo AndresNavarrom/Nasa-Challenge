@@ -4,7 +4,7 @@ import { TEMPO_STYLES } from "./tempo";
 import { FakeAudioContext } from "./testing/fakeAudioContext";
 
 describe("tempo marks", () => {
-  it("plays a marked square tick for lightning and a soft breath for smoke/CO2", async () => {
+  it("plays a marked square tick for lightning and nothing for other layers", async () => {
     const context = new FakeAudioContext();
     const engine = createSoundEngine({ context: context.asAudioContext(), lightningSampleUrl: null });
     await engine.start();
@@ -17,12 +17,9 @@ describe("tempo marks", () => {
     expect(tick.frequency.value).toBe(TEMPO_STYLES.lightning!.frequencyHz);
 
     engine.playTempoBeat("smoke");
-    const breath = context.oscillators[7]!;
-    expect(breath.type).toBe("sine");
-    expect(breath.frequency.value).toBe(TEMPO_STYLES.smoke!.frequencyHz);
-
+    engine.playTempoBeat("co2");
     engine.playTempoBeat("forest");
-    expect(context.oscillators).toHaveLength(8); // no tempo style for the static layer
+    expect(context.oscillators).toHaveLength(7);
     engine.dispose();
   });
 

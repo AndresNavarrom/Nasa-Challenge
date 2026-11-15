@@ -24,7 +24,7 @@ single locked point. Every screen column sounds at once:
 - **Screen X -> pan.** Visually right cells sound on the right.
 - **|Latitude| -> pitch**, quantised to a pentatonic scale: poles low, equator
   high.
-- **Layer value -> gain** with a `value^3` cubic curve; a cell sounds only when its
+- **Layer value -> gain** with a `value^2` quadratic curve; a cell sounds only when its
   value reaches the **average intensity of the visible field** (a relative
   threshold, never a fixed absolute level); no-data cells are silent.
 - **Data time -> frame** through `framePosition`, the same blend the picture and
@@ -51,7 +51,7 @@ Current editable instruments:
 | CO2 | sawtooth | lower register; minor pentatonic |
 | Lightning | square | percussive edge |
 
-Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and scale. CO2 uses the minor pentatonic scale, smoke uses the suspended pentatonic, and the other layers use the major pentatonic.
+Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and scale. A global `OVERVIEW_LAYER_GAIN` applies extra level to every layer; CO2 uses the minor pentatonic scale, smoke uses the suspended pentatonic, and the other layers use the major pentatonic.
 
 ## Data-time tempo marks
 
@@ -59,13 +59,12 @@ Timed layers get a mark tied to their own unit, following the shared timeline:
 
 | Layer | Mark | Character |
 |---|---|---|
-| Smoke | every hour (3 per prepared 3-hour frame) | soft breathing pulse |
-| CO2 | every day (1 per frame) | lower, slower breathing pulse |
 | Lightning | every month (1 per frame) | short, marked square tick |
 
-The mark pauses when the planet stops and accelerates with the 4x/8x timeline
-speed. A seek that jumps several units is ignored instead of firing a burst.
-The settings live in `web/src/audio/tempo.ts`.
+Smoke and CO2 have no timed mark. The lightning mark pauses when the planet
+stops and accelerates with the 4x/8x timeline speed. A seek that jumps several
+units is ignored instead of firing a burst. The settings live in
+`web/src/audio/tempo.ts`.
 
 ## Forest bird ambience
 
