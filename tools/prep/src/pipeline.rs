@@ -6,12 +6,12 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, ImageReader, RgbImage, RgbaImage};
+use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, GrayImage, ImageReader, RgbImage, RgbaImage};
 
 use crate::color::{brightness_value, colorbar_value, stretch_brightness, warmth_value, Rgb};
 use crate::config::{
-    BBox, ColorbarImage, EarthConfig, GridOut, GridSizes, LayerConfig, LayerOut, Manifest, PrepConfig,
-    RegionOut, ValueConfig, ViewConfig,
+    BBox, ColorbarImage, EarthConfig, GridOut, GridSizes, ImagesOut, LayerConfig, LayerOut, Manifest, PrepConfig,
+    RegionOut, SharpOut, ValueConfig, ViewConfig,
 };
 use crate::error::{PrepError, Result};
 use crate::grid::{check_image_size, quantize, reduce_to_grid, MIN_REGION};
@@ -332,6 +332,51 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
         .map_err(|cause| PrepError::new(format!("could not write {}: {cause}", path.display())))
 }
 
+/// One grey pixel per value (0..1 as 0..255, 0 where there is no data), like a grid frame.
+fn grey_image(rendered: &Rendered, width: u32, height: u32) -> Result<GrayImage> {
+    GrayImage::from_raw(width, height, quantize(&rendered.values))
+        .ok_or_else(|| PrepError::new(format!("a sharp image of {width} x {height} could not be built")))
+}
+
+/// Draws the views of instant `index` at `size` over `area` and writes
+/// `<id>_sharp_<suffix>_<index>.png`; returns the file name.
+fn write_sharp(out_dir: &Path, id: &str, suffix: &str, index: usize, views: &[LoadedView], area: BBox, size: [u32; 2]) -> Result<String> {
+    let [width, height] = size;
+    let rendered = render(views, area, width, height);
+    let file = format!("{id}_sharp_{suffix}_{index:02}.png");
+    let path = out_dir.join(&file);
+    grey_image(&rendered, width, height)?
+        .save(&path)
+        .map_err(|cause| PrepError::new(format!("could not write {}: {cause}", path.display())))?;
+    Ok(file)
+}
+
+/// Removes every `<id>_sharp_*.png` in `out_dir` that `sharp` does not list, so a layer
+/// with fewer instants, or none of them sharp any more, leaves no old images behind.
+pub fn remove_stale_sharp(out_dir: &Path, id: &str, sharp: Option<&SharpOut>) -> Result<()> {
+    let kept: Vec<&str> = sharp
+        .into_iter()
+        .flat_map(|s| s.global.iter().chain(s.region.iter()))
+        .flat_map(|images| images.files.iter().map(String::as_str))
+        .collect();
+    let prefix = format!("{id}_sharp_");
+    let entries = match fs::read_dir(out_dir) {
+        Ok(entries) => entries,
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(cause) => return Err(PrepError::new(format!("could not list {}: {cause}", out_dir.display()))),
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with(&prefix) && name.ends_with(".png") && !kept.contains(&name.as_str()) {
+            let path = entry.path();
+            fs::remove_file(&path)
+                .map_err(|cause| PrepError::new(format!("could not remove {}: {cause}", path.display())))?;
+            println!("  removed stale {}", path.display());
+        }
+    }
+    Ok(())
+}
+
 fn save_picture(path: &Path, picture: &RgbaImage) -> Result<()> {
     picture
         .save(path)
@@ -431,6 +476,8 @@ fn prepare_layer(
     let mut global_frames = Vec::new();
     let mut region_texture = None;
     let mut global_texture = None;
+    let mut sharp_global: Vec<String> = Vec::new();
+    let mut sharp_region: Vec<String> = Vec::new();
 
     for (index, instant) in layer.instants.iter().enumerate() {
         let views = load_views(&instant.views, raw_dir, &mut cache, &method).map_err(named)?;
@@ -465,6 +512,15 @@ fn prepare_layer(
                 global_texture = Some(render(&views, BBox::WORLD, GLOBAL_TEXTURE.0, GLOBAL_TEXTURE.1).picture);
             }
         }
+        // Sharp images: one per instant, so the planet view stays sharp at every date.
+        if let Some(sizes) = layer.sharp {
+            if let Some(size) = sizes.global {
+                sharp_global.push(write_sharp(out_dir, &layer.id, "global", index, &views, BBox::WORLD, size).map_err(named)?);
+            }
+            if let Some(size) = sizes.region {
+                sharp_region.push(write_sharp(out_dir, &layer.id, "region", index, &views, bbox, size).map_err(named)?);
+            }
+        }
         println!(
             "  {} [{}] region coverage {:.0}%",
             layer.id,
@@ -497,6 +553,15 @@ fn prepare_layer(
         }
     };
 
+    let sharp = layer.sharp.map(|sizes| SharpOut {
+        global: sizes.global.map(|[width, height]| ImagesOut { width, height, files: sharp_global }),
+        region: sizes.region.map(|[width, height]| ImagesOut { width, height, files: sharp_region }),
+    });
+    if let Some(sizes) = layer.sharp {
+        println!("  {} sharp images: {} instants ({:?} global, {:?} Amazon)", layer.id, layer.instants.len(), sizes.global, sizes.region);
+    }
+    remove_stale_sharp(out_dir, &layer.id, sharp.as_ref())?;
+
     Ok(LayerOut {
         id: layer.id.clone(),
         title: layer.title.clone(),
@@ -507,6 +572,7 @@ fn prepare_layer(
         dates: layer.instants.iter().map(|instant| instant.date.clone()).collect(),
         global: global_out,
         region: region_out,
+        sharp,
     })
 }
 
@@ -661,6 +727,44 @@ mod tests {
         let one_cell = reduce_rendered(&rendered, 8, 4, 1, 1).unwrap();
         assert!((one_cell.values[0] - 0.8).abs() < 1e-3, "{}", one_cell.values[0]);
         assert_eq!(one_cell.sources, vec![CellSource::Primary]);
+    }
+
+    #[test]
+    fn sharp_image_keeps_full_detail_and_zero_where_there_is_no_data() {
+        let rendered = render(&main_and_fallback_views(), BBox::WORLD, 8, 4);
+        // Without the fallback the western half has no data.
+        let main_only: Vec<LoadedView> = main_and_fallback_views().into_iter().filter(|v| !v.view.fallback).collect();
+        let sharp = grey_image(&render(&main_only, BBox::WORLD, 8, 4), 8, 4).unwrap();
+        assert_eq!(sharp.dimensions(), (8, 4));
+        assert_eq!(sharp.get_pixel(1, 1).0[0], 0); // west: no data
+        assert_eq!(sharp.get_pixel(6, 1).0[0], 204); // east: 0.8 of 255
+        // With the fallback, the west takes its value (0.4), as the grids do.
+        let both = grey_image(&rendered, 8, 4).unwrap();
+        assert_eq!(both.get_pixel(1, 1).0[0], 102);
+        assert!(grey_image(&rendered, 9, 4).is_err()); // size does not match the values
+    }
+
+    #[test]
+    fn write_sharp_writes_one_png_per_instant_and_remove_stale_sharp_cleans_up() {
+        let dir = std::env::temp_dir().join(format!("jukebox-sharp-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let views = main_and_fallback_views();
+        let first = write_sharp(&dir, "co2", "global", 0, &views, BBox::WORLD, [16, 8]).unwrap();
+        let second = write_sharp(&dir, "co2", "global", 1, &views, BBox::WORLD, [16, 8]).unwrap();
+        assert_eq!((first.as_str(), second.as_str()), ("co2_sharp_global_00.png", "co2_sharp_global_01.png"));
+        let written = image::open(dir.join(&first)).unwrap().to_luma8();
+        assert_eq!(written.dimensions(), (16, 8));
+        fs::write(dir.join("smoke_sharp_global_00.png"), b"other layer").unwrap();
+
+        // Only the listed images stay; another layer's images are left alone.
+        let keep = SharpOut { global: Some(ImagesOut { width: 16, height: 8, files: vec![first.clone()] }), region: None };
+        remove_stale_sharp(&dir, "co2", Some(&keep)).unwrap();
+        assert!(dir.join(&first).exists());
+        assert!(!dir.join(&second).exists());
+        remove_stale_sharp(&dir, "co2", None).unwrap();
+        assert!(!dir.join(&first).exists());
+        assert!(dir.join("smoke_sharp_global_00.png").exists());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

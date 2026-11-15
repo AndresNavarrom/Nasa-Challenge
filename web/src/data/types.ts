@@ -17,6 +17,26 @@ export interface GridInfo {
   texture: string;
 }
 
+/** One still image per instant of an area, all the same size. */
+export interface ImagesInfo {
+  width: number;
+  height: number;
+  /** Paths relative to the data folder, one per date, in the order of `dates`. */
+  files: string[];
+}
+
+/**
+ * Sharp grey images of a layer, one per instant (one channel, 0..255 like the grids,
+ * 0 where there is no data, north row first), drawn on the planet instead of the
+ * coarser grids; the sound keeps reading the grids.
+ */
+export interface SharpImages {
+  /** Whole planet, equirectangular. */
+  global?: ImagesInfo;
+  /** The Amazon rectangle (`region.bbox`). */
+  region?: ImagesInfo;
+}
+
 export interface LayerSource {
   title: string;
   url: string;
@@ -37,6 +57,8 @@ export interface LayerManifest {
   global: GridInfo | null;
   /** Detailed Amazon grid. */
   region: GridInfo;
+  /** Sharp images for the planet view, when tools/prep made them (`sharp` in the layer's configuration). */
+  sharp?: SharpImages;
 }
 
 /** Latitude/longitude rectangle of the Amazon region, in degrees. */
