@@ -37,7 +37,8 @@ export interface Probe {
 
 export interface EarthSceneProps {
   data: JukeboxData;
-  activeLayer: LoadedLayer;
+  /** null: the plain Earth, no layer drawn. */
+  activeLayer: LoadedLayer | null;
   targetView: TargetView;
   lite: boolean;
   onRequestView: (view: TargetView) => void;
@@ -168,6 +169,8 @@ function SceneContents(props: SceneContentsProps) {
   );
 
   const layer = useMemo(() => {
+    // The plain Earth view: an empty (fully transparent) layer, so only the planet shows.
+    if (activeLayer === null) return { textures: emptyLayerTextures(), error: null };
     try {
       return { textures: layerTextureFor(activeLayer), error: null };
     } catch (cause) {
@@ -250,7 +253,7 @@ function SceneContents(props: SceneContentsProps) {
     (hit: GlobeHit): Probe => ({
       lon: hit.lon,
       lat: hit.lat,
-      value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT),
+      value: activeLayer ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT) : null,
     }),
     [activeLayer, data.bbox],
   );

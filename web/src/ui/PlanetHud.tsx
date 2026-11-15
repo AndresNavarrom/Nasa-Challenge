@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
+import { layerChoices, layerForChoice } from "./layerChoice";
 
 export interface PlanetHudProps {
   layers: LoadedLayer[];
@@ -55,7 +56,8 @@ const button =
 
 export function PlanetHud(props: PlanetHudProps) {
   const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError, audio } = props;
-  const activeLayer = layers.find((layer) => layer.manifest.id === activeLayerId);
+  // null on the plain Earth view.
+  const activeLayer = layerForChoice(layers, activeLayerId);
 
   return (
     <div data-testid="planet-hud" className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
@@ -70,11 +72,9 @@ export function PlanetHud(props: PlanetHudProps) {
               value={activeLayerId}
               onChange={(event) => onSelectLayer(event.target.value)}
             >
-              {layers.map(({ manifest, global }) => (
-                <option key={manifest.id} value={manifest.id}>
-                  {manifest.title}
-                  {global ? "" : " (Amazon only)"}
-                  {manifest.sample ? " (sample data)" : ""}
+              {layerChoices(layers).map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.label}
                 </option>
               ))}
             </select>
@@ -109,10 +109,12 @@ export function PlanetHud(props: PlanetHudProps) {
                 {", "}
                 <span data-testid="planet-hud-probe-lat">{formatLatitude(probe.lat)}</span>
               </p>
-              <p data-testid="planet-hud-probe-value">
-                {activeLayer?.manifest.title ?? "Layer"}:{" "}
-                {probe.value === null ? "no data here" : `${Math.round(probe.value * 100)} %`}
-              </p>
+              {activeLayer && (
+                <p data-testid="planet-hud-probe-value">
+                  {activeLayer.manifest.title}:{" "}
+                  {probe.value === null ? "no data here" : `${Math.round(probe.value * 100)} %`}
+                </p>
+              )}
             </>
           ) : (
             <p className="text-slate-400">Move the cursor over the planet or the map.</p>
