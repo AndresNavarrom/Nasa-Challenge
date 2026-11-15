@@ -47,6 +47,7 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
   and 52 S, so the fill covers the rest of the land; places neither source
   shows (near the poles) are 0. jukebox-prep prints which share of the cells
   comes from GEDI and which from the fill, for the globe and for the Amazon.
+  The planet view draws the forest (not the sound) from sharper greyscale images made from the same GeoTIFF by tools/fetch/gedi_visual.py (run by `docker compose run --rm fetch-gedi` once `prep` has run): `web/public/data/forest-height-8k.png` (8192 x 4096), `forest-height-4k.png` (4096 x 2048) and `forest-height-amazon.png` (the Amazon rectangle at 0.01 degree, 3600 x 2800), 0 to 255 = 0 to 50 m with 0 also meaning no forest, each pixel the mean of the GEDI pixels in it and its gaps filled from coarser GEDI means, then the 0.1 degree image, then the final forest grid (with its SVS 4950 fill).
 
 ## Base image of the planet
 
