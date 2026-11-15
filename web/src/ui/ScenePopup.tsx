@@ -15,7 +15,11 @@ export interface ScenePopupProps {
   audioError?: string | null;
 }
 
-export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProps) {
+export function ScenePopup({
+  scene,
+  onClose,
+  audioError = null,
+}: ScenePopupProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closingRef = useRef(false);
@@ -62,7 +66,7 @@ export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProp
       aria-labelledby="scene-popup-title"
       data-testid="scene-popup"
       onClick={requestClose}
-      className={`fixed inset-3 z-30 overflow-hidden rounded-xl bg-slate-950/80 shadow-2xl transition-opacity duration-300 sm:inset-4 ${
+      className={`fixed inset-1 z-30 overflow-hidden rounded-xl bg-slate-950/80 shadow-2xl transition-opacity duration-300 sm:inset-1.5 ${
         shown ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
@@ -70,7 +74,7 @@ export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProp
         src={`./${scene.image}`}
         alt={scene.imageAlt}
         data-testid="scene-popup-image"
-        className={`absolute inset-0 h-full w-full border border-white/60 object-cover transition-transform duration-500 ${
+        className={`absolute inset-0 h-full w-full border-4 border-slate-950 object-cover transition-transform duration-500 ${
           shown ? "scale-100" : "scale-105"
         }`}
       />
@@ -87,14 +91,28 @@ export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProp
           onClick={requestClose}
           className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-500 text-slate-200 hover:border-slate-300 hover:bg-slate-800"
         >
-          <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
           </svg>
         </button>
-        <h2 id="scene-popup-title" data-testid="scene-popup-title" className="text-xl font-semibold">
+        <h2
+          id="scene-popup-title"
+          data-testid="scene-popup-title"
+          className="text-xl font-semibold"
+        >
           {scene.title}
         </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-300" data-testid="scene-popup-description">
+        <p
+          className="mt-2 text-sm leading-6 text-slate-300"
+          data-testid="scene-popup-description"
+        >
           {scene.description}
         </p>
         {audioError && (
