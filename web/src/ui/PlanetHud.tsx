@@ -26,6 +26,8 @@ export interface PlanetHudProps {
   sceneError: string | null;
   /** Sound controls, docked in the bottom-right panel so they never overlap the HUD. */
   audio?: ReactNode;
+  /** Timeline bar (play, position, speed, dates), docked above the sound controls. */
+  timeline?: ReactNode;
   /** Layers whose voice is on (the "Listen to" checkboxes). Shown only with onToggleHeard. */
   heard?: HeardLayers;
   onToggleHeard?: (layerId: string, on: boolean) => void;
@@ -66,18 +68,37 @@ function modeLabel(mode: ViewMode): string {
   }
 }
 
-const panel = "pointer-events-auto rounded-lg bg-slate-950/75 p-3 text-sm shadow-lg backdrop-blur";
+const panel =
+  "pointer-events-auto rounded-lg bg-slate-950/75 p-3 text-sm shadow-lg backdrop-blur";
 const button =
   "rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400";
 
 export function PlanetHud(props: PlanetHudProps) {
-  const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError, audio } = props;
-  const { heard, onToggleHeard, onShowTour } = props;
+  const {
+    layers,
+    activeLayerId,
+    onSelectLayer,
+    mode,
+    onAmazon,
+    onBackToEarth,
+    probe,
+    fps,
+    lite,
+    sceneError,
+    audio,
+    timeline,
+    heard,
+    onToggleHeard,
+    onShowTour,
+  } = props;
   // null on the plain Earth view.
   const activeLayer = layerForChoice(layers, activeLayerId);
 
   return (
-    <div data-testid="planet-hud" className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
+    <div
+      data-testid="planet-hud"
+      className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4"
+    >
       <div className="flex items-start justify-between gap-4">
         <div className={panel}>
           <div className="flex items-center justify-between gap-3">
@@ -111,10 +132,17 @@ export function PlanetHud(props: PlanetHudProps) {
             </select>
           </label>
           {activeLayer && activeLayer.manifest.dates.length > 1 && (
-            <p className="mt-1 text-xs text-slate-400">Showing the first instant: {activeLayer.manifest.dates[0]}</p>
+            <p className="mt-1 text-xs text-slate-400">
+              Showing the first instant: {activeLayer.manifest.dates[0]}
+            </p>
           )}
           {heard && onToggleHeard && (
-            <div data-testid="planet-hud-heard-layers" role="group" aria-labelledby="planet-hud-heard-title" className="mt-3">
+            <div
+              data-testid="planet-hud-heard-layers"
+              role="group"
+              aria-labelledby="planet-hud-heard-title"
+              className="mt-3"
+            >
               <p id="planet-hud-heard-title" className="text-slate-300">
                 Listen to
               </p>
@@ -129,14 +157,18 @@ export function PlanetHud(props: PlanetHudProps) {
                           data-testid={`planet-hud-heard-${manifest.id}`}
                           className="h-4 w-4 cursor-pointer accent-emerald-600 [color-scheme:dark]"
                           checked={on}
-                          onChange={(event) => onToggleHeard(manifest.id, event.target.checked)}
+                          onChange={(event) =>
+                            onToggleHeard(manifest.id, event.target.checked)
+                          }
                         />
                         <span
                           aria-hidden="true"
                           className="h-2.5 w-5 rounded-sm"
                           style={{ background: rampGradient(manifest.id) }}
                         />
-                        <span className={on ? "" : "text-slate-400"}>{manifest.title}</span>
+                        <span className={on ? "" : "text-slate-400"}>
+                          {manifest.title}
+                        </span>
                       </label>
                     </li>
                   );
@@ -157,39 +189,66 @@ export function PlanetHud(props: PlanetHudProps) {
       </div>
 
       {sceneError && (
-        <p role="alert" data-testid="planet-hud-error" className={`${panel} self-center border border-amber-400 text-amber-100`}>
+        <p
+          role="alert"
+          data-testid="planet-hud-error"
+          className={`${panel} self-center border border-amber-400 text-amber-100`}
+        >
           {sceneError}
         </p>
       )}
 
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div data-testid="planet-hud-probe" className={`${panel} min-w-56 font-mono`} aria-live="off">
+        <div
+          data-testid="planet-hud-probe"
+          className={`${panel} min-w-56 font-mono`}
+          aria-live="off"
+        >
           {probe ? (
             <>
               <p>
-                <span data-testid="planet-hud-probe-lon">{formatLongitude(probe.lon)}</span>
+                <span data-testid="planet-hud-probe-lon">
+                  {formatLongitude(probe.lon)}
+                </span>
                 {", "}
-                <span data-testid="planet-hud-probe-lat">{formatLatitude(probe.lat)}</span>
+                <span data-testid="planet-hud-probe-lat">
+                  {formatLatitude(probe.lat)}
+                </span>
               </p>
               {activeLayer && (
                 <p data-testid="planet-hud-probe-value">
                   {activeLayer.manifest.title}:{" "}
-                  {probe.value === null ? "no data here" : `${Math.round(probe.value * 100)} %`}
+                  {probe.value === null
+                    ? "no data here"
+                    : `${Math.round(probe.value * 100)} %`}
                 </p>
               )}
             </>
           ) : (
-            <p className="text-slate-400">Move the cursor over the planet or the map.</p>
+            <p className="text-slate-400">
+              Move the cursor over the planet or the map.
+            </p>
           )}
         </div>
 
         <div className={`${panel} flex flex-col items-end gap-2`}>
+          {timeline && <div className="w-full">{timeline}</div>}
           {audio && <div className="w-full">{audio}</div>}
-          <p role="status" data-testid="planet-hud-status" className="text-slate-300">
+          <p
+            role="status"
+            data-testid="planet-hud-status"
+            className="text-slate-300"
+          >
             {modeLabel(mode)}
           </p>
           <div className="flex gap-2">
-            <button type="button" data-testid="planet-hud-amazon-button" className={button} disabled={mode !== "globe"} onClick={onAmazon}>
+            <button
+              type="button"
+              data-testid="planet-hud-amazon-button"
+              className={button}
+              disabled={mode !== "globe"}
+              onClick={onAmazon}
+            >
               Amazon
             </button>
             <button
