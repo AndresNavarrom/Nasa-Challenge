@@ -12,12 +12,15 @@
 #   docker compose run --rm fetch-gedi     download GEDI L3 forest height into data/raw/gedi/
 #                                          (about 617 MB); needs a NASA Earthdata login in
 #                                          ~/.netrc (only the urs.earthdata.nasa.gov line),
-#                                          mounted read-only in this service only
+#                                          mounted read-only in this service only. Once
+#                                          `prep` has run, it also writes the sharp forest
+#                                          images web/public/data/forest-height-*.png
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
 #   docker compose run --rm web npm run build && docker compose up server
 #                                          dev server over web/dist on http://127.0.0.1:8081
 #
-# Data from scratch: `fetch`, `fetch-gedi`, then `prep`.
+# Data from scratch: `fetch`, `fetch-gedi`, `prep`, then `fetch-gedi` again (it only
+# converts the second time: the GeoTIFF is already there).
 #
 # There is no database. Only `app` has no profile, so a plain `docker compose up`
 # starts the full app and nothing else. Naming a service (`up web`, `run --rm
@@ -176,6 +179,9 @@ services:
       - ./tools:/work/tools:ro
       # Output: data/raw/gedi/ (the GeoTIFF and the converted PNG).
       - ./data:/work/data
+      # Input: manifest.json and forest_global.bin from `prep`. Output: the sharp
+      # forest images forest-height-8k.png, -4k.png and -amazon.png (gedi_visual.py).
+      - ./web/public/data:/work/web/public/data
       # The Earthdata login, read-only and only in this service. If ~/.netrc is
       # missing Docker stops with an error naming it instead of creating a folder.
       # `~` (not ${HOME}) so Windows PowerShell, which has no HOME, shows no

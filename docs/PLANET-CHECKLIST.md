@@ -129,6 +129,7 @@ After `docker compose run --rm fetch-gedi` and `docker compose run --rm prep`.
       Amazon basin and lines up with the rivers and coasts of the base image;
       there are no stripes or seams, neither along GEDI's orbit tracks nor at
       about 52° N and S where the SVS 4950 fill takes over.
+- [ ] **Sharp forest like SVS 4950, 30 fps.** With **Forest height** on the planet and on the Amazon map (after `fetch-gedi` wrote `web/public/data/forest-height-*.png`), the forest is sharp (rivers and clearings show, no 0.25° blocks), brown to green to white on the GEDI colour bar with soft shaded relief and raised height like https://svs.gsfc.nasa.gov/4950, no shimmer while the planet turns, no banner about the forest images, no seam at the edge of the Amazon rectangle, and the indicator stays at 30 fps or more (also with `?lite=1`).
 
 ## Result
 
