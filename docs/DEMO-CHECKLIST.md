@@ -44,7 +44,7 @@ count, who tested). Planet-specific checks during development are in
 - [ ] **Layers are recognisable (FR3)**: with eyes closed, a person outside the team says which layer is playing and whether its value is high or low, in **4 of 5** tries. Person 1: __/5 · Person 2: __/5
 - [ ] **Solo layer without clipping**: with one layer active for **1 minute**, the output meter never reaches the maximum and the layer does not drop out. (The old FR4 test of four mixed layers was retired by the 2026-11-15 team decision: only the picked layer sounds.)
 - [ ] **One layer at a time**: picking a layer plays only its voice; picking another one switches the sound to it; Earth (no layer) is silent
-- [ ] **Latency (NFR2)**: from clicking or dragging the locked point to the sound changing, **100 ms or less**: ______ ms
+- [ ] **Latency (NFR2)**: from clicking or dragging the selected point in the regional map to the sound changing, **100 ms or less**: ______ ms
 - [ ] **No clicks**: moving the cursor across the edge of the Amazon rectangle gives no audible jump
 - [ ] **Left / right (FR3.4)**: moving the point across the screen moves the sound between the speakers
 

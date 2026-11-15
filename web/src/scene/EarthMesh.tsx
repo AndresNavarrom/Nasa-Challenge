@@ -54,6 +54,7 @@ import {
 } from "three";
 import type { BoundingBox } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
+import { OVERVIEW_COLUMNS, OVERVIEW_ROWS, type VisibleCell, type VisibleColumn, type VisibleField } from "../audio/overview";
 import { LocationMarkers } from "./LocationMarkers";
 import { SceneMarkers } from "./SceneMarkers";
 import type { ViewMode, ViewState } from "./FocusTransition";
@@ -171,6 +172,8 @@ export interface EarthMeshProps {
   onGlobeTap: (lon: number, lat: number) => void;
   /** Touch screens: a tap on the map of a region. */
   onMapTap: () => void;
+  /** Visible screen field for the overview scan; null when the globe is not visible. */
+  onOverviewField?: (field: VisibleField | null) => void;
 }
 
 export interface ReliefImages {
@@ -530,15 +533,17 @@ export function EarthMesh({
   onMapBack,
   onGlobeTap,
   onMapTap,
+  onOverviewField,
 }: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
   const sphereMesh = useRef<Mesh>(null);
   const planeMesh = useRef<Mesh>(null);
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
-  const scrubDrag = useRef(false);
   const planeDown = useRef<{ x: number; y: number } | null>(null);
   const clickTimer = useRef<number | null>(null);
+  const overviewSince = useRef(0);
+  const overviewNdc = useMemo(() => new Vector2(), []);
   // Where the cursor rests over the canvas, so the point under it can be found
   // again while the planet turns or a transition ends beneath a still cursor.
   const pointerRef = useRef<{ inside: boolean; clientX: number; touch: boolean }>({ inside: false, clientX: 0, touch: false });
@@ -690,16 +695,13 @@ export function EarthMesh({
   useEffect(() => {
     const move = (event: PointerEvent) => {
       const drag = dragRef.current;
-      // A scrubbing drag moves the listening point (handleSphereMove); only the
-      // other drags turn the planet.
-      if (!drag || scrubDrag.current) return;
+      if (!drag) return;
       const state = view.current;
       state.yaw = drag.yaw + (event.clientX - drag.x) * DRAG_SPEED;
       state.pitch = Math.min(MAX_PITCH, Math.max(-MAX_PITCH, drag.pitch + (event.clientY - drag.y) * DRAG_SPEED));
     };
     const end = () => {
       dragRef.current = null;
-      scrubDrag.current = false;
       planeDown.current = null;
     };
     window.addEventListener("pointermove", move);
@@ -786,6 +788,54 @@ export function EarthMesh({
     emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX, touch: pointerRef.current.touch });
   };
 
+  // Sample a small screen grid over the visible globe or region map. It uses
+  // screen space, so the column on the right is the column heard on the right,
+  // and raycasting naturally leaves out the part of the grid off the surface.
+  useFrame((state, delta) => {
+    if (!onOverviewField) return;
+    const globe = mode === "globe";
+    const map = mode === "map";
+    if (!globe && !map) {
+      overviewSince.current = 0;
+      return;
+    }
+    overviewSince.current += delta;
+    if (overviewSince.current < 0.1) return;
+    overviewSince.current = 0;
+    const sphere = globe ? sphereMesh.current : null;
+    const plane = map ? planeMesh.current : null;
+    const target = sphere ?? plane;
+    if (!target) return;
+    target.updateMatrixWorld(true);
+    pickGroup.current?.updateMatrixWorld(true);
+
+    const columns: VisibleColumn[] = [];
+    for (let column = 0; column < OVERVIEW_COLUMNS; column += 1) {
+      const screenX = (column + 0.5) / OVERVIEW_COLUMNS;
+      const cells: (VisibleCell | null)[] = [];
+      for (let row = 0; row < OVERVIEW_ROWS; row += 1) {
+        const screenY = (row + 0.5) / OVERVIEW_ROWS;
+        overviewNdc.set(screenX * 2 - 1, 1 - screenY * 2);
+        state.raycaster.setFromCamera(overviewNdc, state.camera);
+        const hit = state.raycaster.intersectObject(target, false)[0];
+        const point = sphere
+          ? hit
+            ? sphereLonLat(hit.point)
+            : null
+          : hit?.uv
+            ? planeUvToLonLat(hit.uv.x, 1 - hit.uv.y)
+            : null;
+        cells.push(point ? { lon: point.lon, lat: point.lat, screenX, screenY } : null);
+      }
+      columns.push({ screenX, cells });
+    }
+    onOverviewField(columns);
+  });
+
+  useEffect(() => {
+    if (mode !== "globe" && mode !== "map") onOverviewField?.(null);
+  }, [mode, onOverviewField]);
+
   // Browsers only send pointer events when the mouse moves. While the planet
   // turns, or when a transition ends under a still cursor, look the point up
   // again a few times a second so the sound follows what is under the cursor.
@@ -823,22 +873,15 @@ export function EarthMesh({
   useEffect(() => clearClickTimer, []);
 
   const handleSphereMove = (event: ThreeEvent<PointerEvent>) => {
-    const clientX = event.nativeEvent.clientX;
-    reportSphere(event.point, clientX);
-    const drag = dragRef.current;
-    if (!scrubDrag.current || !drag) return;
-    if (Math.hypot(clientX - drag.x, event.nativeEvent.clientY - drag.y) <= CLICK_TOLERANCE_PX) return;
-    const point = sphereLonLat(event.point);
-    if (point) onGlobeSelectPoint(point.lon, point.lat, clientX);
+    reportSphere(event.point, event.nativeEvent.clientX);
   };
 
   const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
     clearClickTimer();
     lastPressTouch.current = event.nativeEvent.pointerType === "touch";
-    // A mouse drag scrubs the selected point; hold Shift to turn the planet
-    // instead. Fingers keep turning it, as they did before.
-    scrubDrag.current = !lastPressTouch.current && !event.nativeEvent.shiftKey;
+    // The general view rotates the planet; selecting a listening point belongs
+    // to the region map, so a drag here never scrubs a point.
     const state = view.current;
     dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
   };
@@ -852,27 +895,10 @@ export function EarthMesh({
 
   const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
+    // Touch screens keep the region flow: one tap chooses, the next visits.
+    if (!lastPressTouch.current) return;
     const point = sphereLonLat(event.point);
-    if (!point) return;
-    const clientX = event.nativeEvent.clientX;
-    // Touch screens have their own tap flow: keep selecting the sound point on a
-    // tap while the region flow (tap to choose, tap again to fly) stays as it is.
-    if (lastPressTouch.current) {
-      onGlobeSelectPoint(point.lon, point.lat, clientX);
-      onGlobeTap(point.lon, point.lat);
-      return;
-    }
-    // Wait: a second click cancels this timer and zooms to the region instead.
-    if (event.nativeEvent.detail > 1) {
-      clearClickTimer();
-      return;
-    }
-    clearClickTimer();
-    const { lon, lat } = point;
-    clickTimer.current = window.setTimeout(() => {
-      clickTimer.current = null;
-      onGlobeSelectPoint(lon, lat, clientX);
-    }, SINGLE_CLICK_MS);
+    if (point) onGlobeTap(point.lon, point.lat);
   };
 
   const handlePlaneDown = (event: ThreeEvent<PointerEvent>) => {
@@ -962,7 +988,7 @@ export function EarthMesh({
             <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="map" bbox={bbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="map" bbox={focusBbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
           {scenes && scenes.length > 0 && onSceneSelect && (
             <SceneMarkers
               scenes={scenes}
