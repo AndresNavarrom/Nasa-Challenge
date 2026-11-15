@@ -571,4 +571,21 @@ describe("sound engine", () => {
     expect(engine.getOutputLevel()).toBeCloseTo(0.25, 6);
     engine.dispose();
   });
+
+  it("reads the spectrum from the analyser, low frequencies first", async () => {
+    const { engine } = setup();
+    const bands = new Float32Array(16).fill(0.5);
+    // Not running yet: nothing to show.
+    expect(engine.getSpectrum(bands)).toBe(false);
+    expect(Array.from(bands).every((level) => level === 0)).toBe(true);
+
+    await engine.start();
+    expect(engine.getSpectrum(bands)).toBe(true);
+    const loudest = bands.indexOf(Math.max(...bands));
+    const quieter = Array.from(bands).findIndex((level, index) => index > loudest && level > 0);
+    expect(bands[loudest]).toBeCloseTo(1, 6);
+    expect(quieter).toBeGreaterThan(loudest);
+    expect(bands[quieter]).toBeCloseTo(0.4, 6);
+    engine.dispose();
+  });
 });

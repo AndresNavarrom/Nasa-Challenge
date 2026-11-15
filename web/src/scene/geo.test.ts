@@ -12,6 +12,7 @@ import {
   regionUv,
   screenX01,
   spherePointToLonLat,
+  viewCentre,
 } from "./geo";
 
 const AMAZON: BoundingBox = { west: -80, south: -20, east: -44, north: 8 };
@@ -142,5 +143,22 @@ describe("turning the Amazon to the camera (FR2.1)", () => {
     expect(Math.abs(nearest - from)).toBeLessThanOrEqual(Math.PI);
     expect(Math.cos(nearest)).toBeCloseTo(Math.cos(target), 10);
     expect(Math.sin(nearest)).toBeCloseTo(Math.sin(target), 10);
+  });
+});
+
+describe("centre of the view (compass)", () => {
+  it("is the place facingRotation turns to the camera", () => {
+    for (const [lon, lat] of [[-60, 0], [0, 0], [120, 35], [-179, -50]] as const) {
+      const { yaw, pitch } = facingRotation(lon, lat);
+      const centre = viewCentre(yaw, pitch);
+      expect(centre.lon).toBeCloseTo(lon, 6);
+      expect(centre.lat).toBeCloseTo(lat, 6);
+    }
+  });
+
+  it("keeps the longitude within -180..180 after many turns", () => {
+    const { yaw } = facingRotation(-60, 0);
+    expect(viewCentre(yaw + 6 * Math.PI, 0).lon).toBeCloseTo(-60, 6);
+    expect(viewCentre(yaw - 4 * Math.PI, 0).lon).toBeCloseTo(-60, 6);
   });
 });

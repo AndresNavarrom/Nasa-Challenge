@@ -45,7 +45,7 @@ import {
   type ViewMode,
   type ViewState,
 } from "./FocusTransition";
-import { GLOBE_RADIUS, screenX01 } from "./geo";
+import { GLOBE_RADIUS, screenX01, type ViewOrientation } from "./geo";
 import { disposeLayerTextures, layerTextureFor, rampFor, showLayerBlend, type LayerTextures } from "./layerTexture";
 import { useListeningPoint, useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 import {
@@ -108,6 +108,10 @@ export interface EarthSceneProps {
   onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
   /** Visible screen field for the overview scan; null while the globe is not visible. */
   onOverviewField?: (field: VisibleField | null) => void;
+  /** Written on every frame with how the planet is turned (the HUD's compass reads it). */
+  orientation?: RefObject<ViewOrientation | null>;
+  /** Colour of the listening point (the picked layer's contrast colour). */
+  markerColor?: string;
 }
 
 const CAMERA_FOV = 45;
@@ -302,6 +306,8 @@ function SceneContents(props: SceneContentsProps) {
     onSceneHover,
     focusedScene,
     onOverviewField,
+    orientation,
+    markerColor,
     setListeningPoint,
   } = props;
   const selectedPoint = useListeningPoint();
@@ -634,6 +640,11 @@ function SceneContents(props: SceneContentsProps) {
   useFrame(() => {
     const state = view.current;
     const focus = focusRef.current;
+    if (orientation) {
+      const shown = (orientation.current ??= { yaw: 0, pitch: 0 });
+      shown.yaw = state.yaw;
+      shown.pitch = state.pitch;
+    }
     if (modeRef.current === "map") {
       // Keep the region visited framed if the window is resized while on the map.
       state.cameraZ = mapCameraZ(focusBbox, CAMERA_FOV, size.width / size.height);
@@ -808,6 +819,7 @@ function SceneContents(props: SceneContentsProps) {
         onGlobeTap={handleGlobeTap}
         onMapTap={handleMapTap}
         onOverviewField={onOverviewField}
+        markerColor={markerColor}
       />
       <FpsProbe onFps={onFps} />
     </>

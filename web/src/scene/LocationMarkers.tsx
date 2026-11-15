@@ -1,10 +1,25 @@
 // The selected listening point and the hovered crosshair, on the globe and on
 // the flat Amazon map. Both are billboard sprites: they face the camera and stay
 // legible while the planet turns or the map zooms.
+//
+// On a map the listening point is also a reference mark: two thin guide lines
+// cross the whole map through it, along its latitude and its longitude, so the
+// place being heard can be found at a glance and read against the map's edges.
+// The point takes the contrast colour of the picked layer; the lines stay light,
+// because a layer's colour does not stand out over its own map.
 
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { CanvasTexture, SpriteMaterial, Vector3, type Sprite } from "three";
+import {
+  BufferGeometry,
+  CanvasTexture,
+  Float32BufferAttribute,
+  LineBasicMaterial,
+  LineSegments,
+  SpriteMaterial,
+  Vector3,
+  type Sprite,
+} from "three";
 import type { BoundingBox } from "../data/types";
 import {
   GLOBE_RADIUS,
@@ -40,7 +55,7 @@ function canvasTexture(draw: (context: CanvasRenderingContext2D) => void): Canva
   return texture;
 }
 
-function selectedTexture(): CanvasTexture {
+function selectedTexture(color: string): CanvasTexture {
   return canvasTexture((context) => {
     context.clearRect(0, 0, 64, 64);
     context.beginPath();
@@ -49,7 +64,7 @@ function selectedTexture(): CanvasTexture {
     context.fill();
     context.beginPath();
     context.arc(32, 32, 20, 0, Math.PI * 2);
-    context.fillStyle = "#22c55e";
+    context.fillStyle = color;
     context.fill();
   });
 }
@@ -99,20 +114,73 @@ export interface LocationMarkersProps {
   bbox?: BoundingBox;
   selectedPoint?: ListeningPoint | null;
   hoverPoint?: { lon: number; lat: number } | null;
+  /** Colour of the listening point. */
+  color?: string;
 }
 
-export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: LocationMarkersProps) {
+/** The listening point without a layer colour: the accent of the palette. */
+const DEFAULT_COLOR = "#5ee9b5";
+const GUIDE_COLOR = "#e8edf5";
+const GUIDE_OPACITY = 0.7;
+
+export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint, color = DEFAULT_COLOR }: LocationMarkersProps) {
   const selectedRef = useRef<Sprite>(null);
   const pulseRef = useRef<Sprite>(null);
   const crosshairRef = useRef<Sprite>(null);
   const camera = useThree((state) => state.camera);
   const worldPosition = useMemo(() => new Vector3(), []);
-  const selectedMap = useMemo(selectedTexture, []);
+  const selectedMap = useMemo(() => selectedTexture(color), [color]);
   const pulseMap = useMemo(pulseTexture, []);
   const crosshairMap = useMemo(crosshairTexture, []);
   const selectedMaterial = useMemo(() => materialFor(selectedMap), [selectedMap]);
   const pulseMaterial = useMemo(() => materialFor(pulseMap, 0.7), [pulseMap]);
   const crosshairMaterial = useMemo(() => materialFor(crosshairMap, 0.95, false), [crosshairMap]);
+
+  // Guide lines of the listening point on a map: along its latitude and its
+  // longitude, from edge to edge of the region.
+  const guides = useMemo(() => {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array(12), 3));
+    const material = new LineBasicMaterial({
+      color: GUIDE_COLOR,
+      transparent: true,
+      opacity: GUIDE_OPACITY,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const lines = new LineSegments(geometry, material);
+    lines.renderOrder = 8;
+    lines.frustumCulled = false;
+    lines.raycast = () => {};
+    return lines;
+  }, []);
+  useEffect(
+    () => () => {
+      guides.geometry.dispose();
+      (guides.material as LineBasicMaterial).dispose();
+    },
+    [guides],
+  );
+  const guidePoint =
+    mode === "map" && bbox && selectedPoint && isInsideBbox(selectedPoint.lon, selectedPoint.lat, bbox) ? selectedPoint : null;
+  const guideLon = guidePoint?.lon ?? null;
+  const guideLat = guidePoint?.lat ?? null;
+  useEffect(() => {
+    if (!bbox || guideLon === null || guideLat === null) return;
+    const center = bboxCenter(bbox);
+    const shift = lonLatToPlanePoint(center.lon, center.lat);
+    const z = GLOBE_RADIUS + 0.015;
+    const ends = [
+      lonLatToPlanePoint(bbox.west, guideLat),
+      lonLatToPlanePoint(bbox.east, guideLat),
+      lonLatToPlanePoint(guideLon, bbox.south),
+      lonLatToPlanePoint(guideLon, bbox.north),
+    ];
+    const positions = guides.geometry.getAttribute("position");
+    ends.forEach((end, index) => positions.setXYZ(index, end.x - shift.x, end.y - shift.y, z));
+    positions.needsUpdate = true;
+  }, [guides, bbox, guideLon, guideLat]);
 
   useEffect(() => {
     return () => {
@@ -172,6 +240,7 @@ export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: Locat
 
   return (
     <group>
+      {guidePoint && <primitive object={guides} />}
       {selectedPosition && (
         <>
           <sprite

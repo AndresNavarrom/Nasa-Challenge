@@ -40,13 +40,21 @@ const LAYERS = [
     text: "How tall the canopy stands, from cleared land to old-growth rainforest.",
     globe: globeForest,
   },
-  { title: "Wildfire smoke", text: "Where smoke from burning forest gathers and how far it drifts.", globe: globeSmoke },
+  {
+    title: "Wildfire smoke",
+    text: "Where smoke from burning forest gathers and how far it drifts.",
+    globe: globeSmoke,
+  },
   {
     title: "Atmospheric CO2",
     text: "The carbon dioxide in the air above the basin, the gas the forest breathes in.",
     globe: globeCo2,
   },
-  { title: "Lightning", text: "Where storms strike, flash by flash, across the tropics.", globe: globeLightning },
+  {
+    title: "Lightning",
+    text: "Where storms strike, flash by flash, across the tropics.",
+    globe: globeLightning,
+  },
 ] as const;
 
 /** How long each layer's planet stays before the next one fades in, and how long the fade takes. */
@@ -87,9 +95,17 @@ const TEAM = [
 const REPO_URL = "https://github.com/Betha2516/Nasa-Challenge";
 
 /** Small spaced capitals above a heading ("THE LAYERS"). */
-function Eyebrow({ children, accent = false }: { children: ReactNode; accent?: boolean }) {
+function Eyebrow({
+  children,
+  accent = false,
+}: {
+  children: ReactNode;
+  accent?: boolean;
+}) {
   return (
-    <p className={`font-label text-[11px] tracking-[0.26em] ${accent ? "text-landing-accent" : "text-landing-label"}`}>
+    <p
+      className={`font-label text-[11px] tracking-[0.26em] ${accent ? "text-landing-accent" : "text-landing-label"}`}
+    >
       {children}
     </p>
   );
@@ -98,10 +114,25 @@ function Eyebrow({ children, accent = false }: { children: ReactNode; accent?: b
 /** The three layers of forest silhouette at the foot of a section, fading into the deep background. */
 function ForestBackdrop() {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[340px] overflow-hidden">
-      <img alt="" src={forestBack} className="absolute inset-[38.82%_-5.76%_0_-2.78%] block size-full max-w-none" />
-      <img alt="" src={forestMiddle} className="absolute inset-[51.4%_-5.56%_0_-2.78%] block size-full max-w-none" />
-      <img alt="" src={forestFront} className="absolute inset-[64.13%_-4.51%_0_-2.78%] block size-full max-w-none" />
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-[340px] overflow-hidden"
+    >
+      <img
+        alt=""
+        src={forestBack}
+        className="absolute inset-[38.82%_-5.76%_0_-2.78%] block size-full max-w-none"
+      />
+      <img
+        alt=""
+        src={forestMiddle}
+        className="absolute inset-[51.4%_-5.56%_0_-2.78%] block size-full max-w-none"
+      />
+      <img
+        alt=""
+        src={forestFront}
+        className="absolute inset-[64.13%_-4.51%_0_-2.78%] block size-full max-w-none"
+      />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#05070d_0%,rgba(5,7,13,0.6)_30%,rgba(5,7,13,0)_58%,rgba(5,7,13,0.55)_86%,#05070d_100%)]" />
     </div>
   );
@@ -115,7 +146,10 @@ function ForestBackdrop() {
 function LayerShowcase() {
   const [shown, setShown] = useState(0);
   useEffect(() => {
-    const timer = window.setInterval(() => setShown((index) => (index + 1) % LAYERS.length), GLOBE_HOLD_MS);
+    const timer = window.setInterval(
+      () => setShown((index) => (index + 1) % LAYERS.length),
+      GLOBE_HOLD_MS,
+    );
     return () => window.clearInterval(timer);
   }, [shown]);
 
@@ -129,7 +163,11 @@ function LayerShowcase() {
           <img
             key={layer.title}
             src={layer.globe}
-            alt={index === shown ? `The planet showing ${layer.title.toLowerCase()}` : ""}
+            alt={
+              index === shown
+                ? `The planet showing ${layer.title.toLowerCase()}`
+                : ""
+            }
             aria-hidden={index !== shown}
             width={800}
             height={800}
@@ -145,23 +183,32 @@ function LayerShowcase() {
         {LAYERS.map((layer, index) => {
           const active = index === shown;
           return (
-            <li key={layer.title} className="border-t border-landing-line last:border-b">
+            <li
+              key={layer.title}
+              className="border-t border-landing-line last:border-b"
+            >
               <button
                 type="button"
                 aria-pressed={active}
                 onClick={() => setShown(index)}
                 className={`flex w-full items-baseline gap-5 py-6 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-accent ${
-                  active ? "text-landing-ink" : "text-landing-label hover:text-landing-mist"
+                  active
+                    ? "text-landing-ink"
+                    : "text-landing-label hover:text-landing-mist"
                 }`}
               >
-                <span className={`font-label text-[11px] tracking-[0.26em] ${active ? "text-landing-accent" : ""}`}>
+                <span
+                  className={`font-label text-[11px] tracking-[0.26em] ${active ? "text-landing-accent" : ""}`}
+                >
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <span className="flex flex-col gap-1.5">
                   <span className="font-display text-[clamp(1.375rem,2.6vw,1.75rem)] font-light tracking-[-0.02em]">
                     {layer.title}
                   </span>
-                  <span className={`text-[15px] leading-[1.6] ${active ? "text-landing-mist" : "text-landing-label"}`}>
+                  <span
+                    className={`text-[15px] leading-[1.6] ${active ? "text-landing-mist" : "text-landing-label"}`}
+                  >
                     {layer.text}
                   </span>
                 </span>
@@ -192,15 +239,20 @@ function OpenJukebox() {
 }
 
 /** Section width of the design: 1120 px with 32 px sides, narrower on small screens. */
-const content = "mx-auto flex w-full max-w-[1120px] flex-col items-center px-4 text-center sm:px-8";
+const content =
+  "mx-auto flex w-full max-w-[1120px] flex-col items-center px-4 text-center sm:px-8";
 /** Every section fills the screen's height, so the page reads as three screens. */
-const screen = "relative flex min-h-svh scroll-mt-0 flex-col justify-center overflow-hidden";
+const screen =
+  "relative flex min-h-svh scroll-mt-0 flex-col justify-center overflow-hidden";
 /** Titles stay thin and a step dimmer than the button, whatever their size. */
 const calmTitle = "font-display font-extralight text-landing-title";
 
 export function Landing() {
   return (
-    <div data-testid="landing" className="relative h-full overflow-y-auto scroll-smooth bg-landing-deep font-text text-landing-ink">
+    <div
+      data-testid="landing"
+      className="relative h-full overflow-y-auto scroll-smooth bg-landing-deep font-text text-landing-ink"
+    >
       <header className="absolute inset-x-0 top-0 z-10 py-7">
         <div className="mx-auto flex w-full max-w-[1120px] items-center justify-between gap-4 px-4 font-label sm:px-8">
           <a
@@ -215,9 +267,16 @@ export function Landing() {
               {TEAM_NAME.toUpperCase()}
             </span>
           </a>
-          <nav aria-label="Sections" className="flex gap-5 text-[11px] tracking-[0.16em] text-landing-label sm:gap-7">
+          <nav
+            aria-label="Sections"
+            className="flex gap-5 text-[11px] tracking-[0.16em] text-landing-label sm:gap-7"
+          >
             {NAV.map((item) => (
-              <a key={item.href} href={item.href} className="hover:text-landing-ink">
+              <a
+                key={item.href}
+                href={item.href}
+                className="hover:text-landing-ink"
+              >
                 {item.label}
               </a>
             ))}
@@ -227,34 +286,51 @@ export function Landing() {
 
       <main>
         {/* 1 · Listen — on the forest. */}
-        <section id="top" data-testid="landing-section-listen" className={`${screen} pb-[200px] pt-28`}>
+        <section
+          id="top"
+          data-testid="landing-section-listen"
+          className={`${screen} pb-[200px] pt-28`}
+        >
           <ForestBackdrop />
           <div className={`${content} relative gap-8`}>
             <Eyebrow>NASA SPACE APPS CHALLENGE</Eyebrow>
-            <h1 className={`${calmTitle} max-w-[820px] text-[clamp(2.75rem,7vw,5rem)] leading-[1.04] tracking-[-0.04em]`}>
+            <h1
+              className={`${calmTitle} max-w-[820px] text-[clamp(2.75rem,7vw,5rem)] leading-[1.04] tracking-[-0.04em]`}
+            >
               Listen to the Lungs of the World.
             </h1>
             <p className="max-w-[540px] text-[17px] leading-[1.6] text-landing-mist sm:text-[18px]">
-              NASA Earth data about the Amazon, turned into sound. Every layer has its own voice.
+              NASA Earth data about the Amazon, turned into sound. Every layer
+              has its own voice.
             </p>
             <div className="mt-4 flex flex-col items-center gap-4">
               <OpenJukebox />
-              <p className="font-label text-[11px] tracking-[0.16em] text-landing-label">HEADPHONES RECOMMENDED</p>
+              <p className="font-label text-[11px] tracking-[0.16em] text-landing-label">
+                HEADPHONES RECOMMENDED
+              </p>
             </div>
           </div>
         </section>
 
         {/* 2 · Layers — on the planet. */}
-        <section id="layers" data-testid="landing-section-layers" className={`${screen} border-t border-landing-line py-24`}>
+        <section
+          id="layers"
+          data-testid="landing-section-layers"
+          className={`${screen} border-t border-landing-line py-24`}
+        >
           <div className={`${content} gap-14`}>
             <div className="flex flex-col items-center gap-5">
               <Eyebrow>THE LAYERS</Eyebrow>
-              <h2 className={`${calmTitle} max-w-[820px] text-[clamp(2.25rem,4.5vw,3.25rem)] leading-[1.08] tracking-[-0.035em]`}>
+              <h2
+                className={`${calmTitle} max-w-[820px] text-[clamp(2.25rem,4.5vw,3.25rem)] leading-[1.08] tracking-[-0.035em]`}
+              >
                 Four datasets. Four voices.
               </h2>
               <p className="max-w-[600px] text-[17px] leading-[1.6] text-landing-mist">
-                Shown only as pictures, Earth science reaches only the people who can see it. Earth Jukebox translates
-                NASA's visualizations into sound: the forest, the fires, the air and the storms each sound their own way.
+                Shown only as pictures, Earth science reaches only the people
+                who can see it. Earth Jukebox translates NASA's visualizations
+                into sound: the forest, the fires, the air and the storms each
+                sound their own way.
               </p>
             </div>
             <LayerShowcase />
@@ -262,28 +338,46 @@ export function Landing() {
         </section>
 
         {/* 3 · About — how to listen and who made it, back on the forest. */}
-        <section id="about" data-testid="landing-section-about" className={`${screen} border-t border-landing-line pb-[220px] pt-24`}>
+        <section
+          id="about"
+          data-testid="landing-section-about"
+          className={`${screen} border-t border-landing-line pb-[220px] pt-24`}
+        >
           <ForestBackdrop />
           <div className={`${content} relative gap-16`}>
             <div className="flex flex-col items-center gap-5">
               <Eyebrow>HOW TO LISTEN</Eyebrow>
-              <h2 className={`${calmTitle} max-w-[760px] text-[clamp(2rem,4vw,2.75rem)] leading-[1.1] tracking-[-0.03em]`}>
+              <h2
+                className={`${calmTitle} max-w-[760px] text-[clamp(2rem,4vw,2.75rem)] leading-[1.1] tracking-[-0.03em]`}
+              >
                 Four moves from silence to the rainforest.
               </h2>
             </div>
             <ol className="grid w-full gap-8 text-left sm:grid-cols-2 lg:grid-cols-4">
               {STEPS.map((step, index) => (
-                <li key={step} className="flex flex-col gap-2 border-t border-landing-line pt-5">
+                <li
+                  key={step}
+                  className="flex flex-col gap-2 border-t border-landing-line pt-5"
+                >
                   <Eyebrow accent>{String(index + 1).padStart(2, "0")}</Eyebrow>
-                  <p className="text-[16px] leading-[1.6] text-landing-mist">{step}</p>
+                  <p className="text-[16px] leading-[1.6] text-landing-mist">
+                    {step}
+                  </p>
                 </li>
               ))}
             </ol>
             <ul className="grid w-full gap-10 md:grid-cols-3">
               {POINTS.map((point) => (
-                <li key={point.title} className="flex flex-col items-center gap-2">
-                  <h3 className="font-display text-[17px] font-light tracking-[-0.01em] text-landing-title">{point.title}</h3>
-                  <p className="text-[15px] leading-[1.6] text-landing-label">{point.text}</p>
+                <li
+                  key={point.title}
+                  className="flex flex-col items-center gap-2"
+                >
+                  <h3 className="font-display text-[17px] font-light tracking-[-0.01em] text-landing-title">
+                    {point.title}
+                  </h3>
+                  <p className="text-[15px] leading-[1.6] text-landing-label">
+                    {point.text}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -291,14 +385,23 @@ export function Landing() {
               <p className="font-label text-[11px] tracking-[0.22em] text-landing-accent">
                 TEAM {TEAM_NAME.toUpperCase()} · NASA SPACE APPS CHALLENGE
               </p>
-              <p className="max-w-[640px] text-[15px] leading-[1.6] text-landing-mist">{TEAM.join(" · ")}</p>
-              <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-[15px] text-landing-accent hover:underline">
+              <p className="max-w-[640px] text-[15px] leading-[1.6] text-landing-mist">
+                {TEAM.join(" · ")}
+              </p>
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[15px] text-landing-accent hover:underline"
+              >
                 Betha2516/Nasa-Challenge
               </a>
             </div>
             <div className="flex flex-col items-center gap-4">
               <OpenJukebox />
-              <p className="font-label text-[11px] tracking-[0.16em] text-landing-label">PUT YOUR HEADPHONES ON</p>
+              <p className="font-label text-[11px] tracking-[0.16em] text-landing-label">
+                PUT YOUR HEADPHONES ON
+              </p>
             </div>
           </div>
         </section>

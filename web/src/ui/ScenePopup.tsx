@@ -1,6 +1,7 @@
 // Scene popup: a nearly full-window image with the scene title and description
-// floating in a card at the top right. It fades and zooms in/out; the app keeps
-// the map focused until the closing animation finishes.
+// written on the image itself, over a soft shade at its foot (no card, no frame
+// and no dark backdrop around the picture). It fades and zooms in/out; the app
+// keeps the map focused until the closing animation finishes.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDefinition } from "../scenes/types";
@@ -66,7 +67,7 @@ export function ScenePopup({
       aria-labelledby="scene-popup-title"
       data-testid="scene-popup"
       onClick={requestClose}
-      className={`fixed inset-3 z-30 overflow-hidden rounded-xl bg-slate-950/80 shadow-2xl transition-opacity duration-300 sm:inset-4 ${
+      className={`fixed inset-3 z-30 overflow-hidden rounded-2xl shadow-2xl transition-opacity duration-300 sm:inset-4 ${
         shown ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
@@ -74,52 +75,47 @@ export function ScenePopup({
         src={`./${scene.image}`}
         alt={scene.imageAlt}
         data-testid="scene-popup-image"
-        className={`absolute inset-0 h-full w-full border-8 border-gray-700 object-cover transition-transform duration-500 ${
+        className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 ${
           shown ? "scale-100" : "scale-105"
         }`}
       />
-      <div className="pointer-events-none absolute inset-0" />
-      <div
-        className="absolute right-4 top-4 z-10 max-h-[calc(100%-2rem)] w-full max-w-md overflow-auto rounded-xl bg-slate-950/80 p-5 pr-14 text-slate-100 shadow-xl backdrop-blur"
-        onClick={(event) => event.stopPropagation()}
+      <button
+        ref={closeRef}
+        type="button"
+        data-testid="scene-popup-close"
+        aria-label="Close scene"
+        onClick={(event) => {
+          event.stopPropagation();
+          requestClose();
+        }}
+        className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-landing-ink/50 bg-landing-deep/60 text-landing-ink backdrop-blur hover:border-landing-ink hover:bg-landing-deep/80"
       >
-        <button
-          ref={closeRef}
-          type="button"
-          data-testid="scene-popup-close"
-          aria-label="Close scene"
-          onClick={requestClose}
-          className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-500 text-slate-200 hover:border-slate-300 hover:bg-slate-800"
-        >
-          <svg
-            viewBox="0 0 20 20"
-            aria-hidden="true"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
+        <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+        </svg>
+      </button>
+      {/* The text sits on the picture: only a shade rising from its foot keeps it readable. */}
+      <div className="absolute inset-x-0 bottom-0 max-h-full overflow-auto bg-gradient-to-t from-landing-deep/95 via-landing-deep/60 to-transparent px-6 pb-6 pt-28 sm:px-10 sm:pb-9">
+        <div className="max-w-2xl" onClick={(event) => event.stopPropagation()}>
+          <h2
+            id="scene-popup-title"
+            data-testid="scene-popup-title"
+            className="font-display text-3xl font-light tracking-[-0.02em] text-landing-ink sm:text-4xl"
           >
-            <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
-          </svg>
-        </button>
-        <h2
-          id="scene-popup-title"
-          data-testid="scene-popup-title"
-          className="text-xl font-semibold"
-        >
-          {scene.title}
-        </h2>
-        <p
-          className="mt-2 text-sm leading-6 text-slate-300"
-          data-testid="scene-popup-description"
-        >
-          {scene.description}
-        </p>
-        {audioError && (
-          <p role="alert" className="mt-2 text-sm text-amber-300">
-            {audioError}
+            {scene.title}
+          </h2>
+          <p
+            className="mt-3 text-base leading-7 text-landing-ink/85"
+            data-testid="scene-popup-description"
+          >
+            {scene.description}
           </p>
-        )}
+          {audioError && (
+            <p role="alert" className="mt-2 text-sm text-amber-300">
+              {audioError}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

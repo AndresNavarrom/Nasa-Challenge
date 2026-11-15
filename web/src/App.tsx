@@ -5,9 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-import { AudioStart } from "./audio/AudioStart";
 import { DataAudio } from "./audio/DataAudio";
 import type { SoundEngine } from "./audio/engine";
 import type { VisibleField } from "./audio/overview";
@@ -23,6 +21,7 @@ import { sampleLayerAt } from "./lib/interpolate";
 import { frameBlend, frameIndexAt } from "./lib/timeline";
 import { SpinAccumulator, playDelta, positionPerTurn } from "./lib/timelineTrack";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
+import type { ViewOrientation } from "./scene/geo";
 import { loadScenes } from "./scenes/loadScenes";
 import type { SceneDefinition, ScenesManifest } from "./scenes/types";
 import type { ViewMode } from "./scene/FocusTransition";
@@ -32,11 +31,14 @@ import {
   useListeningPoint,
 } from "./scene/listeningPoint";
 import { TIMELINE_UPDATE_HZ, TimelineProvider, useTimeline, useTimelineActions } from "./timeline/TimelineProvider";
+import type { ArcFrame } from "./ui/arcLayout";
+import { layerStyle } from "./ui/layerStyle";
 import { PlanetHud } from "./ui/PlanetHud";
 import { ScenePopup } from "./ui/ScenePopup";
 import { EARTH_VIEW_ID, layerForChoice, type WithManifest } from "./ui/layerChoice";
 import { layerVoices } from "./ui/soloLayer";
 import { TimelineTrack } from "./ui/TimelineTrack";
+import { Starfield } from "./ui/Starfield";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen, type TourAction } from "./ui/tourSteps";
 
@@ -80,7 +82,6 @@ interface PlanetViewProps {
   layerLoadError?: string | null;
   engine: SoundEngine;
   lite: boolean;
-  audio?: ReactNode;
   /** The layer picker's value: a layer id or EARTH_VIEW_ID. */
   activeLayerId: string;
   onSelectLayer: (layerId: string) => void;
@@ -99,7 +100,6 @@ function PlanetView({
   layerLoadError = null,
   engine,
   lite,
-  audio,
   activeLayerId,
   onSelectLayer,
   onShowTour,
@@ -122,6 +122,8 @@ function PlanetView({
   const [sceneHover, setSceneHover] = useState<{ scene: SceneDefinition; x: number; y: number } | null>(null);
   // The planet starts turning by itself; the "Auto-rotate" switch stops it.
   const [autoRotate, setAutoRotate] = useState(true);
+  // How the planet is turned, written by the scene on every frame for the compass.
+  const orientationRef = useRef<ViewOrientation | null>(null);
   const overviewFieldRef = useRef<VisibleField | null>(null);
   const handleOverviewField = useCallback((field: VisibleField | null) => {
     overviewFieldRef.current = field;
@@ -240,7 +242,7 @@ function PlanetView({
       <p
         role="alert"
         data-testid="data-error"
-        className="m-8 rounded border border-red-400 p-4 text-red-200"
+        className="m-8 rounded-lg border border-red-400 p-4 text-red-200"
       >
         The data file lists no layers.
       </p>
@@ -257,6 +259,7 @@ function PlanetView({
         mixRef={frameMixRef}
         onFrames={setTracked}
       />
+      <Starfield />
       <div className="absolute inset-0">
         <EarthScene
           data={data}
@@ -281,6 +284,8 @@ function PlanetView({
           onSceneHover={handleSceneHover}
           focusedScene={focusedScene}
           onOverviewField={handleOverviewField}
+          orientation={orientationRef}
+          markerColor={layerStyle(activeLayer?.manifest.id ?? EARTH_VIEW_ID).color}
         />
       </div>
       <DataAudio
@@ -309,22 +314,27 @@ function PlanetView({
         lite={lite}
         sceneError={sceneError}
         selectedValue={selectedValue}
-        audio={audio}
+        engine={engine}
+        orientation={orientationRef}
         timeline={
-          activeLayer ? (
-            <TimelineControls
-              layer={activeLayer}
-              playing={timelinePlaying}
-              onTogglePlay={() => setTimelinePlaying((playing) => !playing)}
-            />
-          ) : undefined
+          activeLayer
+            ? (arc, color) => (
+                <TimelineControls
+                  layer={activeLayer}
+                  playing={timelinePlaying}
+                  onTogglePlay={() => setTimelinePlaying((playing) => !playing)}
+                  arc={arc}
+                  color={color}
+                />
+              )
+            : undefined
         }
         onShowTour={onShowTour}
       />
       {sceneHover && !focusedScene && (
         <div
           data-testid="scene-marker-title"
-          className="pointer-events-none fixed z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-slate-950/90 px-2 py-1 text-center text-xs text-white shadow"
+          className="pointer-events-none fixed z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-landing-line bg-landing-deep/90 px-3 py-1 text-center text-xs text-landing-ink shadow"
           style={{ left: sceneHover.x, top: sceneHover.y - 10 }}
         >
           {sceneHover.scene.title}
@@ -390,8 +400,14 @@ function FrameTracker({
  * The timeline line bound to the shared clock. Only this component reads the
  * clock, so the moving playhead re-renders it alone, not the planet view around it.
  */
-function TimelineControls(props: { layer: LoadedLayer; playing: boolean; onTogglePlay: () => void }) {
-  const { layer, playing, onTogglePlay } = props;
+function TimelineControls(props: {
+  layer: LoadedLayer;
+  playing: boolean;
+  onTogglePlay: () => void;
+  arc: ArcFrame | null;
+  color: string;
+}) {
+  const { layer, playing, onTogglePlay, arc, color } = props;
   const timeline = useTimeline();
   return (
     <TimelineTrack
@@ -402,6 +418,8 @@ function TimelineControls(props: { layer: LoadedLayer; playing: boolean; onToggl
       onSeek={timeline.seek}
       speed={timeline.speed}
       onSpeed={timeline.setSpeed}
+      arc={arc}
+      color={color}
     />
   );
 }
@@ -612,7 +630,6 @@ function JukeboxView({
         layerLoadError={layerLoadError}
         engine={engine}
         lite={lite}
-        audio={<AudioStart engine={engine} className="w-full sm:w-56" />}
         activeLayerId={activeLayerId}
         onSelectLayer={selectLayer}
         onShowTour={showTour}
@@ -665,8 +682,8 @@ export default function App() {
         <main className="relative h-full w-full overflow-hidden">
           {state.status === "loading" && (
             <div className="flex h-full flex-col items-center justify-center gap-2">
-              <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-              <p role="status" data-testid="data-loading">
+              <h1 className="font-label text-sm font-medium uppercase tracking-[0.22em]">Earth Jukebox</h1>
+              <p role="status" data-testid="data-loading" className="text-landing-mist">
                 Loading data…
               </p>
             </div>
@@ -674,7 +691,7 @@ export default function App() {
 
           {state.status === "error" && (
             <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-8">
-              <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+              <h1 className="font-label text-sm font-medium uppercase tracking-[0.22em]">Earth Jukebox</h1>
               <p
                 role="alert"
                 data-testid="data-error"

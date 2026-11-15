@@ -94,8 +94,17 @@ export class FakeCompressor extends FakeNode {
 export class FakeAnalyser extends FakeNode {
   fftSize = 2048;
   smoothingTimeConstant = 0.8;
+  get frequencyBinCount(): number {
+    return this.fftSize / 2;
+  }
   readonly getFloatTimeDomainData = vi.fn((data: Float32Array): void => {
     data.fill(0.25);
+  });
+  readonly getByteFrequencyData = vi.fn((data: Uint8Array): void => {
+    data.fill(0);
+    // One loud bin low in the spectrum and a quieter one higher up.
+    data[2] = 255;
+    data[20] = 102;
   });
 }
 
@@ -134,6 +143,7 @@ export class FakeAudioContext {
   readonly filters: FakeBiquad[] = [];
   readonly panners: FakePanner[] = [];
   readonly analysers: FakeAnalyser[] = [];
+  readonly convolvers: FakeConvolver[] = [];
   readonly buffers: FakeAudioBuffer[] = [];
   readonly bufferSources: FakeBufferSource[] = [];
   /** When set, resume() rejects with it (autoplay policy or a closed context). */
@@ -187,7 +197,9 @@ export class FakeAudioContext {
   }
 
   createConvolver(): FakeConvolver {
-    return new FakeConvolver();
+    const convolver = new FakeConvolver();
+    this.convolvers.push(convolver);
+    return convolver;
   }
 
   createDynamicsCompressor(): FakeCompressor {
