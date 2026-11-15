@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { DataTexture } from "three";
 import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
 import {
+  CO2_DOMAIN,
+  CO2_STOPS,
   FIRST_INSTANT,
   GEDI_COLORBAR,
   LAYER_RAMPS,
@@ -107,6 +109,33 @@ describe("lightning drawn like NASA SVS 5011", () => {
     expect(rampAlpha(lightning, 39)).toBe(128);
     expect(rampAlpha(lightning, 60)).toBe(255);
     expect(rampAlpha(lightning, 200)).toBe(255);
+  });
+});
+
+describe("CO2 drawn with contrast, after NASA SVS 5196", () => {
+  const co2 = LAYER_RAMPS.co2!;
+
+  it("spans its colours over the values the layer really has (0..CO2_DOMAIN)", () => {
+    expect(rampColor(co2, 0)).toEqual(CO2_STOPS[0]);
+    expect(rampColor(co2, CO2_DOMAIN)).toEqual(CO2_STOPS[CO2_STOPS.length - 1]);
+    // Above the domain the brightest colour stays.
+    expect(rampColor(co2, 255)).toEqual(CO2_STOPS[CO2_STOPS.length - 1]);
+    // Middle of the domain is the middle stop of the five.
+    expect(rampColor(co2, CO2_DOMAIN / 2)).toEqual(CO2_STOPS[2]);
+    expect(co2.baseDim).toBeGreaterThan(0);
+  });
+
+  it("keeps the faint background haze transparent and the hot spots opaque", () => {
+    expect(rampAlpha(co2, 0)).toBe(0);
+    expect(rampAlpha(co2, 14)).toBe(0);
+    expect(rampAlpha(co2, 39)).toBe(128);
+    expect(rampAlpha(co2, 64)).toBe(255);
+    expect(rampAlpha(co2, 200)).toBe(255);
+  });
+
+  it("ignores a missing or invalid domain and uses 0..255", () => {
+    expect(rampColor({ ...TEST_RAMP, domain: 0 }, 255)).toEqual([255, 100, 50]);
+    expect(rampColor({ ...TEST_RAMP, domain: -5 }, 51)).toEqual(rampColor(TEST_RAMP, 51));
   });
 });
 
