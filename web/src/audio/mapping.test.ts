@@ -10,6 +10,7 @@ import {
   co2ToBreath,
   forestToVoice,
   intensityToGain,
+  lightningToPercussion,
   positionToPan,
   smokeToTimbre,
 } from "./mapping";
@@ -77,5 +78,22 @@ describe("mapping", () => {
     expect(intensityToGain(0)).toBeCloseTo(MIN_ACTIVE_GAIN, 6);
     expect(intensityToGain(7)).toBe(1);
     expect(intensityToGain(0.8)).toBeGreaterThan(intensityToGain(0.2));
+  });
+
+  it("maps the lightning relative frequency to an exact percussion rate and pitch", () => {
+    // 0 is silence; 0.5 is three hits per second; 1 is six.
+    expect(lightningToPercussion(0).rateHz).toBe(0);
+    expect(lightningToPercussion(0.5).rateHz).toBeCloseTo(3, 6);
+    expect(lightningToPercussion(1).rateHz).toBeCloseTo(6, 6);
+
+    // The body pitch rises linearly from 90 Hz to 330 Hz.
+    expect(lightningToPercussion(0).pitchHz).toBeCloseTo(90, 6);
+    expect(lightningToPercussion(0.5).pitchHz).toBeCloseTo(210, 6);
+    expect(lightningToPercussion(1).pitchHz).toBeCloseTo(330, 6);
+
+    // Out-of-range and non-finite input follows the usual clamp rules.
+    expect(lightningToPercussion(-1)).toEqual(lightningToPercussion(0));
+    expect(lightningToPercussion(9)).toEqual(lightningToPercussion(1));
+    expect(lightningToPercussion(Number.NaN)).toEqual(lightningToPercussion(0));
   });
 });

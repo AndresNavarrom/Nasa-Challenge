@@ -1,0 +1,706 @@
+// The planet: one segmented mesh that blends between a sphere and the flat
+// world map according to `view.flatten` (0 = sphere, 1 = map), drawn with
+// the base image (earth-8k.jpg or earth-4k.jpg) and the active layer on top
+// (FR1.1, FR1.2, FR3, NFR1).
+//
+// Both shapes live in one geometry: `position` holds the sphere and `aPlane`
+// the flat map, and the vertex shader mixes them, so the blend costs nothing
+// on the CPU. The flat map is shifted so the Amazon centre sits where the
+// sphere's front point is once the planet faces the Amazon: the region stays
+// in place while the planet flattens around it.
+//
+// Inside the Amazon rectangle the base colour comes from a full-resolution
+// crop of the base image (earth-amazon.jpg), on the planet and on the map;
+// outside it, from the global image.
+//
+// The forest (a relief layer) is drawn like NASA SVS 4950 from the GEDI 1 km
+// height images (forest-height-8k/4k.png, forest-height-amazon.png): colour from
+// the GEDI colour bar, shaded relief and exaggerated height, all computed here
+// from the height. Until they load, or if they fail, it uses the 0.25 degree
+// grids of the data file instead.
+//
+// Lightning is drawn like NASA SVS 5011 from the sharp dots image
+// (lightning-4k.png): colour from the lightning stops, presence from the value
+// and a soft glow from a coarser mipmap level, over the planet dimmed to grey.
+// Until it loads, or if it fails, it uses the grids of the data file instead.
+//
+// Picking (FR4.1, FR4.2): an invisible sphere while on the planet and an
+// invisible plane while on the map; nothing is picked during the transition.
+
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
+import {
+  BufferAttribute,
+  BufferGeometry,
+  DoubleSide,
+  Euler,
+  Matrix3,
+  Matrix4,
+  ShaderMaterial,
+  Vector2,
+  Vector3,
+  Vector4,
+  type Group,
+  type IUniform,
+  type Mesh,
+  type Texture,
+} from "three";
+import type { BoundingBox } from "../data/types";
+import type { ViewMode, ViewState } from "./FocusTransition";
+import {
+  GLOBE_RADIUS,
+  PLANE_HEIGHT,
+  PLANE_WIDTH,
+  bboxCenter,
+  isInsideBbox,
+  lonLatToPlanePoint,
+  lonLatToSpherePoint,
+  planeUvToLonLat,
+  spherePointToLonLat,
+} from "./geo";
+import { glowColor, type DotImageStyle } from "./dotImage";
+import type { ColorRamp, LayerTextures } from "./layerTexture";
+import {
+  SHADER_STOPS,
+  SHADE_STEP_GLOBAL_DEGREES,
+  SHADE_STEP_REGION_DEGREES,
+  lodForSpacing,
+  shadeStepDegrees,
+  shaderColorbar,
+  shaderPresence,
+} from "./relief";
+
+/** Turn speed of the spinning planet, radians per second. */
+const SPIN_SPEED = 0.08;
+/** Turn per dragged pixel, radians. */
+const DRAG_SPEED = 0.005;
+const MAX_PITCH = 1.2;
+/** A press that moves more than this is a drag, not a click. */
+const CLICK_TOLERANCE_PX = 5;
+/** How often the point under a resting cursor is looked up again, seconds. */
+const HOVER_REFRESH_SECONDS = 0.05;
+/**
+ * Relief layers (forest, like NASA SVS 4950): how far the tallest value (50 m)
+ * is raised, as a fraction of the globe radius. Height is exaggerated on
+ * purpose so the canopy reads at the scale of the planet; the map is raised
+ * half as much.
+ */
+const RELIEF_LIFT = 0.025;
+/**
+ * Strength of the shaded relief (light from the north-west), per unit of height
+ * difference (0..1 = 0..50 m) across one shading step. Soft, like SVS 4950: a
+ * 5 m rise across the step brightens or darkens by about 17 %, and the shading
+ * always stays between 0.7 and 1.25 (the 0.25 degree grids used 6 and 0.55..1.4).
+ */
+const RELIEF_SHADE = 2.5;
+
+export interface GlobeHit {
+  lon: number;
+  lat: number;
+  clientX: number;
+}
+
+export interface EarthMeshProps {
+  /** Global base image (earth-8k.jpg or earth-4k.jpg); null while loading or when it failed (a plain ocean colour is drawn). */
+  baseTexture: Texture | null;
+  /** Amazon crop of the base image (earth-amazon.jpg); null while loading or when it failed (the global image is used). */
+  regionBaseTexture: Texture | null;
+  layerTextures: LayerTextures;
+  bbox: BoundingBox;
+  view: RefObject<ViewState>;
+  mode: ViewMode;
+  segments: { width: number; height: number };
+  /** Raise relief layers above the surface (off in lite mode; the shaded relief stays). */
+  raiseRelief: boolean;
+  /**
+   * Sharp forest height images (forest-height-8k/4k.png and forest-height-amazon.png),
+   * when the active layer is the forest and both have loaded; null otherwise, and
+   * the relief then comes from the layer's grids (layerTextures.height*).
+   */
+  reliefImages: ReliefImages | null;
+  /**
+   * Sharp dots image (lightning-4k.png) when the active layer is drawn from one
+   * and it has loaded; null otherwise, and the layer then comes from its grids.
+   */
+  dotImage: DotImage | null;
+  onHover: (hit: GlobeHit | null) => void;
+  onGlobeClick: (lon: number, lat: number) => void;
+}
+
+export interface ReliefImages {
+  global: Texture;
+  region: Texture;
+  /** Colour ramp of the layer (its stops and presence go to the shader). */
+  ramp: ColorRamp;
+}
+
+export interface DotImage {
+  /** Whole planet, one channel, north row first, with mipmaps. */
+  texture: Texture;
+  /** Ramp (stops and presence on the image's scale) and glow. */
+  style: DotImageStyle;
+}
+
+// Height of a relief layer (0..1) at a texture coordinate of the planet: the
+// detailed Amazon texture inside the rectangle, the global one outside it, at
+// the given mipmap levels. Both textures hold the north row first (flipY off).
+const HEIGHT_AT = /* glsl */ `
+  uniform sampler2D uHeightGlobal;
+  uniform sampler2D uHeightRegion;
+  uniform bool uHasHeight;
+  uniform bool uHasHeightGlobal;
+  uniform vec4 uBbox; // west, south, east, north in degrees
+
+  float heightAt(vec2 p, float lodGlobal, float lodRegion) {
+    if (!uHasHeight) return 0.0;
+    float lon = -180.0 + 360.0 * p.x;
+    float lat = -90.0 + 180.0 * p.y;
+    if (lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w) {
+      vec2 r = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
+      return textureLod(uHeightRegion, r, lodRegion).r;
+    }
+    if (uHasHeightGlobal) return textureLod(uHeightGlobal, vec2(p.x, 1.0 - p.y), lodGlobal).r;
+    return 0.0;
+  }
+`;
+
+const VERTEX_SHADER = /* glsl */ `
+  attribute vec3 aPlane;
+  uniform mat3 uRotation;
+  uniform float uFlatten;
+  uniform float uLift;
+  // Mipmap levels about one vertex wide, so each vertex rises with the mean height around it.
+  uniform float uLiftLodGlobal;
+  uniform float uLiftLodRegion;
+  varying vec2 vUv;
+  varying float vShade;
+  ${HEIGHT_AT}
+
+  void main() {
+    vUv = uv;
+    vec3 spherePosition = uRotation * position;
+    // Relief layers rise along the surface normal: outwards on the sphere, towards the camera on the map.
+    float lift = uLift > 0.0 ? heightAt(uv, uLiftLodGlobal, uLiftLodRegion) * uLift : 0.0;
+    vec3 raisedSphere = spherePosition + normalize(spherePosition) * lift;
+    vec3 raisedPlane = aPlane + vec3(0.0, 0.0, lift * 0.5);
+    vec3 blended = mix(raisedSphere, raisedPlane, uFlatten);
+    // Soft light from the upper left on the sphere; the flat map is lit evenly.
+    float light = 0.55 + 0.45 * max(dot(normalize(spherePosition), normalize(vec3(-0.4, 0.5, 1.0))), 0.0);
+    vShade = mix(light, 1.0, uFlatten);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(blended, 1.0);
+  }
+`;
+
+const FRAGMENT_SHADER = /* glsl */ `
+  uniform sampler2D uBase;
+  uniform bool uHasBase;
+  uniform sampler2D uRegionBase;
+  uniform bool uHasRegionBase;
+  uniform sampler2D uLayerGlobal;
+  uniform bool uHasGlobal;
+  uniform sampler2D uLayerRegion;
+  uniform float uLayerOpacity;
+  uniform float uBaseDim;
+  // uBbox comes with HEIGHT_AT below.
+  uniform float uReliefShade;
+  // Texels of the height textures, and the shading step and its mipmap level, in
+  // planet texture units (u covers 360 degrees, v covers 180).
+  uniform vec2 uHeightSizeGlobal;
+  uniform vec2 uHeightSizeRegion;
+  uniform vec2 uShadeStepGlobal;
+  uniform vec2 uShadeStepRegion;
+  uniform float uShadeLodGlobal;
+  uniform float uShadeLodRegion;
+  // Colour from the height itself (sharp forest images): GEDI colour bar and presence alpha.
+  uniform bool uColorFromHeight;
+  uniform vec3 uColorbar[11];
+  uniform vec2 uPresence; // start, fade on the 0..1 height (or dots image) scale
+  // Sharp dots image (lightning): its value takes the colour bar and presence above.
+  uniform sampler2D uDotImage;
+  uniform bool uHasDotImage;
+  uniform float uGlow; // strength of the glow around the dots
+  uniform float uGlowBias; // mipmap levels above the drawn one where the glow is read
+  uniform vec3 uGlowColor;
+  varying vec2 vUv;
+  varying float vShade;
+  ${HEIGHT_AT}
+
+  // Mipmap level of a texture of size texels covering the given uv derivatives.
+  float lodOf(vec2 dx, vec2 dy, vec2 size) {
+    vec2 a = dx * size;
+    vec2 b = dy * size;
+    return max(0.0, 0.5 * log2(max(max(dot(a, a), dot(b, b)), 1e-12)));
+  }
+
+  // GEDI colour bar, linear between its eleven stops (0 m to 50 m).
+  vec3 colorbar(float h) {
+    float x = clamp(h, 0.0, 1.0) * 10.0;
+    vec3 color = uColorbar[0];
+    for (int i = 0; i < 10; i++) {
+      if (x >= float(i)) color = mix(uColorbar[i], uColorbar[i + 1], clamp(x - float(i), 0.0, 1.0));
+    }
+    return color;
+  }
+
+  // Shaded relief like a hillshade: slopes facing the light (north-west) are
+  // brighter, slopes facing away darker. The step is a fixed distance in degrees
+  // (or one texel of the level being drawn, when that is coarser), sampled at a
+  // mipmap level about one step wide so the shading is soft and has no bands.
+  float reliefShade(bool inRegion, float lodGlobal, float lodRegion, vec2 regionScale) {
+    if (!uHasHeight) return 1.0;
+    float lg = max(lodGlobal, uShadeLodGlobal);
+    float lr = max(lodRegion, uShadeLodRegion);
+    vec2 s = inRegion
+      ? max(uShadeStepRegion, exp2(lr) / (uHeightSizeRegion * regionScale))
+      : max(uShadeStepGlobal, exp2(lg) / uHeightSizeGlobal);
+    float dx = heightAt(vUv + vec2(s.x, 0.0), lg, lr) - heightAt(vUv - vec2(s.x, 0.0), lg, lr);
+    float dy = heightAt(vUv + vec2(0.0, s.y), lg, lr) - heightAt(vUv - vec2(0.0, s.y), lg, lr);
+    // Normal ~ (-dx, -dy, 1) with x east and y north; light towards the north-west (-1, 1).
+    return clamp(1.0 + uReliefShade * 0.7 * (dx - dy), 0.7, 1.25);
+  }
+
+  void main() {
+    float lon = -180.0 + 360.0 * vUv.x;
+    float lat = -90.0 + 180.0 * vUv.y;
+    bool inRegion = lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w;
+    // Levels of detail of both height textures, worked out here, outside any
+    // branch, because screen-space derivatives are undefined inside one.
+    vec2 duvx = dFdx(vUv);
+    vec2 duvy = dFdy(vUv);
+    vec2 regionScale = vec2(360.0 / (uBbox.z - uBbox.x), 180.0 / (uBbox.w - uBbox.y));
+    float lodGlobal = lodOf(duvx, duvy, uHeightSizeGlobal);
+    float lodRegion = lodOf(duvx * regionScale, duvy * regionScale, uHeightSizeRegion);
+    // Dots image: sampled under a uniform condition only, so the GPU picks the
+    // mipmap level and filters anisotropically (sharp up close, steady when turning).
+    float dotValue = 0.0;
+    float dotGlow = 0.0;
+    if (uHasDotImage) {
+      vec2 dotUv = vec2(vUv.x, 1.0 - vUv.y);
+      dotValue = texture2D(uDotImage, dotUv).r;
+      dotGlow = texture2D(uDotImage, dotUv, uGlowBias).r;
+    }
+    vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
+    if (inRegion && uHasRegionBase) {
+      // Same calculation as regionUv() in geo.ts: v grows northwards like an image texture.
+      vec2 cropUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (lat - uBbox.y) / (uBbox.w - uBbox.y));
+      color = texture2D(uRegionBase, cropUv).rgb;
+    }
+    // Some layers (lightning, like NASA SVS 5011) dim the planet to dark grey so they stand out.
+    float grey = dot(color, vec3(0.299, 0.587, 0.114));
+    color = mix(color, vec3(grey * 0.5), uBaseDim);
+    vec4 overlay = vec4(0.0);
+    if (uColorFromHeight) {
+      // Sharp forest images: colour and presence straight from the height.
+      float h = heightAt(vUv, lodGlobal, lodRegion);
+      overlay = vec4(colorbar(h), clamp((h - uPresence.x) / uPresence.y, 0.0, 1.0));
+    } else if (uHasDotImage) {
+      // Sharp lightning dots, on the planet and in the Amazon alike (the image is finer than the regional grid).
+      overlay = vec4(colorbar(dotValue), clamp((dotValue - uPresence.x) / uPresence.y, 0.0, 1.0));
+    } else if (inRegion) {
+      // Inside the Amazon: the detailed regional grid (north row first).
+      vec2 regionUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
+      overlay = texture2D(uLayerRegion, regionUv);
+    } else if (uHasGlobal) {
+      overlay = texture2D(uLayerGlobal, vec2(vUv.x, 1.0 - vUv.y));
+    }
+    float layerAmount = overlay.a * uLayerOpacity;
+    color = mix(color, overlay.rgb, layerAmount);
+    // The relief shading applies where the layer is drawn, not to the base image around it.
+    color *= mix(1.0, reliefShade(inRegion, lodGlobal, lodRegion, regionScale), layerAmount);
+    // Soft glow where the dots are dense (0 without a dots image).
+    color += uGlowColor * (dotGlow * uGlow);
+    gl_FragColor = vec4(color * vShade, 1.0);
+  }
+`;
+
+/** Grid of vertices from the north-west corner: sphere in `position`, shifted flat map in `aPlane`. */
+function buildMorphGeometry(columns: number, rows: number, bbox: BoundingBox): BufferGeometry {
+  const count = (columns + 1) * (rows + 1);
+  const spherePositions = new Float32Array(count * 3);
+  const planePositions = new Float32Array(count * 3);
+  const uvs = new Float32Array(count * 2);
+  const center = bboxCenter(bbox);
+  const shift = lonLatToPlanePoint(center.lon, center.lat);
+
+  for (let row = 0; row <= rows; row += 1) {
+    const v = row / rows;
+    const lat = 90 - 180 * v;
+    for (let column = 0; column <= columns; column += 1) {
+      const u = column / columns;
+      const lon = -180 + 360 * u;
+      const index = row * (columns + 1) + column;
+      const sphere = lonLatToSpherePoint(lon, lat);
+      const plane = lonLatToPlanePoint(lon, lat);
+      spherePositions.set([sphere.x, sphere.y, sphere.z], index * 3);
+      planePositions.set([plane.x - shift.x, plane.y - shift.y, GLOBE_RADIUS], index * 3);
+      uvs.set([u, 1 - v], index * 2);
+    }
+  }
+
+  const indices: number[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const a = row * (columns + 1) + column;
+      const b = a + columns + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new BufferAttribute(spherePositions, 3));
+  geometry.setAttribute("aPlane", new BufferAttribute(planePositions, 3));
+  geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+interface Uniforms {
+  [name: string]: IUniform;
+  uRotation: IUniform<Matrix3>;
+  uFlatten: IUniform<number>;
+  uBase: IUniform<Texture | null>;
+  uHasBase: IUniform<boolean>;
+  uRegionBase: IUniform<Texture | null>;
+  uHasRegionBase: IUniform<boolean>;
+  uLayerGlobal: IUniform<Texture | null>;
+  uHasGlobal: IUniform<boolean>;
+  uLayerRegion: IUniform<Texture | null>;
+  uBbox: IUniform<Vector4>;
+  uLayerOpacity: IUniform<number>;
+  uBaseDim: IUniform<number>;
+  uHeightGlobal: IUniform<Texture | null>;
+  uHeightRegion: IUniform<Texture | null>;
+  uHasHeight: IUniform<boolean>;
+  uHasHeightGlobal: IUniform<boolean>;
+  uLift: IUniform<number>;
+  uLiftLodGlobal: IUniform<number>;
+  uLiftLodRegion: IUniform<number>;
+  uReliefShade: IUniform<number>;
+  uHeightSizeGlobal: IUniform<Vector2>;
+  uHeightSizeRegion: IUniform<Vector2>;
+  uShadeStepGlobal: IUniform<Vector2>;
+  uShadeStepRegion: IUniform<Vector2>;
+  uShadeLodGlobal: IUniform<number>;
+  uShadeLodRegion: IUniform<number>;
+  uColorFromHeight: IUniform<boolean>;
+  uColorbar: IUniform<Float32Array>;
+  uPresence: IUniform<Vector2>;
+  uDotImage: IUniform<Texture | null>;
+  uHasDotImage: IUniform<boolean>;
+  uGlow: IUniform<number>;
+  uGlowBias: IUniform<number>;
+  uGlowColor: IUniform<Vector3>;
+}
+
+/** Width and height in texels of a loaded texture (image or data), null when unknown. */
+function textureSize(texture: Texture | null): { width: number; height: number } | null {
+  const image = texture?.image as { width?: unknown; height?: unknown } | undefined;
+  if (!image || typeof image.width !== "number" || typeof image.height !== "number") return null;
+  if (!(image.width > 0) || !(image.height > 0)) return null;
+  return { width: image.width, height: image.height };
+}
+
+export function EarthMesh({
+  baseTexture,
+  regionBaseTexture,
+  layerTextures,
+  bbox,
+  view,
+  mode,
+  segments,
+  raiseRelief,
+  reliefImages,
+  dotImage,
+  onHover,
+  onGlobeClick,
+}: EarthMeshProps) {
+  const gl = useThree((state) => state.gl);
+  const pickGroup = useRef<Group>(null);
+  const sphereMesh = useRef<Mesh>(null);
+  const planeMesh = useRef<Mesh>(null);
+  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  // Where the cursor rests over the canvas, so the point under it can be found
+  // again while the planet turns or a transition ends beneath a still cursor.
+  const pointerRef = useRef<{ inside: boolean; clientX: number }>({ inside: false, clientX: 0 });
+  const sinceHoverRefresh = useRef(0);
+  // True while the last report to the scene was a point (not "nothing under the cursor").
+  const reportedPoint = useRef(false);
+
+  const uniforms = useMemo<Uniforms>(
+    () => ({
+      uRotation: { value: new Matrix3() },
+      uFlatten: { value: 0 },
+      uBase: { value: null },
+      uHasBase: { value: false },
+      uRegionBase: { value: null },
+      uHasRegionBase: { value: false },
+      uLayerGlobal: { value: null },
+      uHasGlobal: { value: false },
+      uLayerRegion: { value: null },
+      uBbox: { value: new Vector4() },
+      uLayerOpacity: { value: 0.8 },
+      uBaseDim: { value: 0 },
+      uHeightGlobal: { value: null },
+      uHeightRegion: { value: null },
+      uHasHeight: { value: false },
+      uHasHeightGlobal: { value: false },
+      uLift: { value: 0 },
+      uLiftLodGlobal: { value: 0 },
+      uLiftLodRegion: { value: 0 },
+      uReliefShade: { value: RELIEF_SHADE },
+      uHeightSizeGlobal: { value: new Vector2(1, 1) },
+      uHeightSizeRegion: { value: new Vector2(1, 1) },
+      uShadeStepGlobal: { value: new Vector2() },
+      uShadeStepRegion: { value: new Vector2() },
+      uShadeLodGlobal: { value: 0 },
+      uShadeLodRegion: { value: 0 },
+      uColorFromHeight: { value: false },
+      uColorbar: { value: new Float32Array(SHADER_STOPS * 3) },
+      uPresence: { value: new Vector2(0, 1) },
+      uDotImage: { value: null },
+      uHasDotImage: { value: false },
+      uGlow: { value: 0 },
+      uGlowBias: { value: 0 },
+      uGlowColor: { value: new Vector3() },
+    }),
+    [],
+  );
+  const material = useMemo(
+    () => new ShaderMaterial({ uniforms, vertexShader: VERTEX_SHADER, fragmentShader: FRAGMENT_SHADER, side: DoubleSide }),
+    [uniforms],
+  );
+  useEffect(() => () => material.dispose(), [material]);
+
+  const geometry = useMemo(
+    () => buildMorphGeometry(segments.width, segments.height, bbox),
+    [segments.width, segments.height, bbox],
+  );
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  useEffect(() => {
+    uniforms.uBase.value = baseTexture;
+    uniforms.uHasBase.value = baseTexture !== null;
+    uniforms.uRegionBase.value = regionBaseTexture;
+    uniforms.uHasRegionBase.value = regionBaseTexture !== null;
+    uniforms.uLayerGlobal.value = layerTextures.global;
+    uniforms.uHasGlobal.value = layerTextures.global !== null;
+    uniforms.uLayerRegion.value = layerTextures.region;
+    uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
+    uniforms.uLayerOpacity.value = layerTextures.opacity;
+    uniforms.uBaseDim.value = layerTextures.baseDim;
+    // A relief layer draws from the sharp forest images once they are there,
+    // from its own grids before that or when they failed to load.
+    const relief = layerTextures.heightRegion !== null;
+    const sharp = relief && reliefImages !== null;
+    const heightGlobal = sharp ? reliefImages.global : layerTextures.heightGlobal;
+    const heightRegion = sharp ? reliefImages.region : layerTextures.heightRegion;
+    uniforms.uHeightGlobal.value = heightGlobal;
+    uniforms.uHeightRegion.value = heightRegion;
+    uniforms.uHasHeight.value = heightRegion !== null;
+    uniforms.uHasHeightGlobal.value = heightGlobal !== null;
+    uniforms.uColorFromHeight.value = sharp;
+    if (sharp) {
+      uniforms.uColorbar.value = shaderColorbar(reliefImages.ramp);
+      uniforms.uPresence.value.set(...shaderPresence(reliefImages.ramp));
+    }
+    // A layer with a dots image (lightning) draws from it once it is there, from its grids before that.
+    const dots = sharp ? null : dotImage;
+    uniforms.uDotImage.value = dots?.texture ?? null;
+    uniforms.uHasDotImage.value = dots !== null;
+    uniforms.uGlow.value = dots?.style.glow.strength ?? 0;
+    uniforms.uGlowBias.value = dots?.style.glow.lodBias ?? 0;
+    if (dots) {
+      uniforms.uColorbar.value = shaderColorbar(dots.style.ramp);
+      uniforms.uPresence.value.set(...shaderPresence(dots.style.ramp));
+      uniforms.uGlowColor.value.set(...glowColor(dots.style.ramp));
+    }
+
+    // Texel sizes in degrees (global textures cover 360 x 180, the Amazon ones the rectangle).
+    const globalSize = textureSize(heightGlobal);
+    const regionSize = textureSize(heightRegion);
+    const globalCell = globalSize ? 360 / globalSize.width : 0;
+    const regionCell = regionSize ? (bbox.east - bbox.west) / regionSize.width : 0;
+    uniforms.uHeightSizeGlobal.value.set(globalSize?.width ?? 1, globalSize?.height ?? 1);
+    uniforms.uHeightSizeRegion.value.set(regionSize?.width ?? 1, regionSize?.height ?? 1);
+
+    // Shaded relief: a fixed step in degrees (one texel on the coarser grids), in planet texture units.
+    const stepGlobal = shadeStepDegrees(SHADE_STEP_GLOBAL_DEGREES, globalCell);
+    const stepRegion = shadeStepDegrees(SHADE_STEP_REGION_DEGREES, regionCell);
+    uniforms.uShadeStepGlobal.value.set(stepGlobal / 360, stepGlobal / 180);
+    uniforms.uShadeStepRegion.value.set(stepRegion / 360, stepRegion / 180);
+    uniforms.uShadeLodGlobal.value = lodForSpacing(stepGlobal, globalCell);
+    uniforms.uShadeLodRegion.value = lodForSpacing(stepRegion, regionCell);
+
+    // Raised height: sample one mean height per vertex (the mesh has `segments.width` columns over 360 degrees).
+    uniforms.uLift.value = relief && raiseRelief ? RELIEF_LIFT : 0;
+    const vertexSpacing = 360 / segments.width;
+    uniforms.uLiftLodGlobal.value = lodForSpacing(vertexSpacing, globalCell);
+    uniforms.uLiftLodRegion.value = lodForSpacing(vertexSpacing, regionCell);
+  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, reliefImages, dotImage, bbox, raiseRelief, segments.width]);
+
+  // Dragging follows the pointer anywhere on the page once it started on the planet.
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const state = view.current;
+      state.yaw = drag.yaw + (event.clientX - drag.x) * DRAG_SPEED;
+      state.pitch = Math.min(MAX_PITCH, Math.max(-MAX_PITCH, drag.pitch + (event.clientY - drag.y) * DRAG_SPEED));
+    };
+    const end = () => {
+      dragRef.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (mode !== "globe") dragRef.current = null;
+    gl.domElement.style.cursor = "";
+  }, [mode, gl]);
+
+  const euler = useMemo(() => new Euler(0, 0, 0, "XYZ"), []);
+  const rotation = useMemo(() => new Matrix4(), []);
+  useFrame((_, delta) => {
+    const state = view.current;
+    if (state.spinning && mode === "globe" && dragRef.current === null) {
+      state.yaw += SPIN_SPEED * Math.min(delta, 0.1);
+    }
+    euler.set(state.pitch, state.yaw, 0);
+    rotation.makeRotationFromEuler(euler);
+    uniforms.uRotation.value.setFromMatrix4(rotation);
+    uniforms.uFlatten.value = state.flatten;
+    pickGroup.current?.rotation.copy(euler);
+  });
+
+  // Remember whether the cursor is over the canvas and where, for the lookup below.
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const move = (event: PointerEvent) => {
+      pointerRef.current = { inside: true, clientX: event.clientX };
+    };
+    const leave = () => {
+      pointerRef.current = { ...pointerRef.current, inside: false };
+    };
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerleave", leave);
+    return () => {
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerleave", leave);
+    };
+  }, [gl]);
+
+  const sphereLonLat = (world: Vector3) => {
+    const group = pickGroup.current;
+    if (!group) return null;
+    const local = group.worldToLocal(world.clone());
+    return spherePointToLonLat(local.x, local.y, local.z);
+  };
+
+  const emit = (hit: GlobeHit | null) => {
+    reportedPoint.current = hit !== null;
+    onHover(hit);
+  };
+
+  const reportSphere = (world: Vector3, clientX: number) => {
+    const point = sphereLonLat(world);
+    if (!point) return;
+    gl.domElement.style.cursor = isInsideBbox(point.lon, point.lat, bbox) ? "pointer" : "grab";
+    emit({ ...point, clientX });
+  };
+
+  const reportPlane = (uvX: number, uvY: number, clientX: number) => {
+    // PlaneGeometry's texture v grows northwards; planeUvToLonLat counts from the north.
+    emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX });
+  };
+
+  // Browsers only send pointer events when the mouse moves. While the planet
+  // turns, or when a transition ends under a still cursor, look the point up
+  // again a few times a second so the sound follows what is under the cursor.
+  useFrame((state, delta) => {
+    sinceHoverRefresh.current += delta;
+    if (sinceHoverRefresh.current < HOVER_REFRESH_SECONDS) return;
+    sinceHoverRefresh.current = 0;
+    const { inside, clientX } = pointerRef.current;
+    if (!inside) {
+      // The cursor left the canvas while the scene was ignoring hovers (a transition).
+      if (reportedPoint.current) emit(null);
+      return;
+    }
+    state.raycaster.setFromCamera(state.pointer, state.camera);
+    if (mode === "globe" && sphereMesh.current) {
+      pickGroup.current?.updateMatrixWorld(true);
+      const hit = state.raycaster.intersectObject(sphereMesh.current, false)[0];
+      if (hit) reportSphere(hit.point, clientX);
+      else emit(null);
+    } else if (mode === "map" && planeMesh.current) {
+      planeMesh.current.updateMatrixWorld(true);
+      const hit = state.raycaster.intersectObject(planeMesh.current, false)[0];
+      if (hit?.uv) reportPlane(hit.uv.x, hit.uv.y, clientX);
+      else emit(null);
+    }
+  });
+
+  const handleSphereMove = (event: ThreeEvent<PointerEvent>) => {
+    reportSphere(event.point, event.nativeEvent.clientX);
+  };
+
+  const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation();
+    const state = view.current;
+    dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
+  };
+
+  const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
+    if (event.delta > CLICK_TOLERANCE_PX) return;
+    const point = sphereLonLat(event.point);
+    if (point) onGlobeClick(point.lon, point.lat);
+  };
+
+  const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
+    if (!event.uv) return;
+    reportPlane(event.uv.x, event.uv.y, event.nativeEvent.clientX);
+  };
+
+  const handleOut = () => {
+    gl.domElement.style.cursor = "";
+    emit(null);
+  };
+
+  const center = bboxCenter(bbox);
+  const shift = lonLatToPlanePoint(center.lon, center.lat);
+
+  return (
+    <>
+      <mesh geometry={geometry} material={material} frustumCulled={false} />
+
+      {mode === "globe" && (
+        <group ref={pickGroup}>
+          <mesh
+            ref={sphereMesh}
+            onPointerMove={handleSphereMove}
+            onPointerDown={handleSphereDown}
+            onClick={handleSphereClick}
+            onPointerOut={handleOut}
+          >
+            <sphereGeometry args={[GLOBE_RADIUS * 1.002, 64, 32]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+
+      {mode === "map" && (
+        <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove} onPointerOut={handleOut}>
+          <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
+    </>
+  );
+}

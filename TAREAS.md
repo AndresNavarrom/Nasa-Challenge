@@ -2,11 +2,60 @@
 
 Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10:00 p.m., límite interno 11:50 p.m. (hora de Colombia).
 
-## Dónde estamos
+## Dónde estamos (sábado 14 de noviembre, noche)
 
-La base ya está en `main` y probada: datos reales de la NASA para las tres capas, la lógica que calcula qué valor hay en cada punto y momento y a qué sonido corresponde, la herramienta en Rust que prepara los datos, y los contenedores de Docker. Sus 18 pruebas pasan.
+En `main` ya está, probado:
 
-Falta lo que se ve y se oye: el motor de sonido, el planeta 3D, el servidor local y los entregables. Son los pasos 10 a 16 del plan de código:
+- **El planeta 3D** (paso 12, PR #2): gira, pasa a la Amazonía en menos de 2 s y entrega al sonido el punto que está bajo el cursor.
+- **El motor de sonido** (paso 10, PR #4): una voz por capa.
+- **El servidor local y el contenedor final** (paso 11, PR #3): `docker compose up` levanta la app en http://127.0.0.1:8080.
+- **Los datos en alta resolución**. Son cuatro capas:
+  - **bosque**: altura del dosel de GEDI L3, de 0 a 50 m, con relleno de SVS 4950;
+  - **humo**: PM2.5 de GEOS-CF del 1 de septiembre de 2026, global, con 24 horas;
+  - **CO2**: SVS 5196, solo en la Amazonía;
+  - **rayos**: SVS 5011, acumulados de 2017 a 2023.
+
+  La imagen base es Natural Earth, en 8192 o 4096 píxeles.
+
+## Lo que falta
+
+**Samuel (interfaz)**
+- [ ] Revisar el planeta en el navegador con `docs/PLANET-CHECKLIST.md`, para decidir a las 11:00 p.m. si se queda el planeta o se pasa al plan B
+- [ ] Paso 13: panel lateral de capas (bosque, humo, CO2 y rayos)
+- [ ] Paso 13: línea de tiempo con reproducir, pausar y fechas visibles; el planeta dibuja el instante de la línea de tiempo
+- [ ] Paso 13: modo historia (planeta → Amazonía, 3 pasos con texto, menos de 60 s)
+- [ ] Paso 13: pantalla de inicio y `data-testid` en todos los controles
+- [ ] Paso 14: todo se puede usar con teclado, y `a11y.ts` con su prueba (texto para el lector de pantalla: capa, lugar y valor bajo, medio o alto)
+- [ ] Paso 14: comprobar 30 cuadros por segundo en el portátil de la demo
+- [ ] Cambiar el título "Global CO2" (la capa solo cubre la Amazonía) y regenerar los datos
+
+**Fernando (sonido)**
+- [ ] Bloque B3: afinar con 2 personas que no sean del equipo
+- [ ] Medir la latencia (máximo 100 ms) y probar 10 minutos seguidos
+- [ ] Dejar en verde `docs/SOUND-ENGINE-CHECKLIST.md`
+
+**Andres (servidor, arranque y documentos)**
+- [ ] Paso 15: abrir la PR de `paso-15-demo` (`run-demo.sh`) y unirla a `main`
+- [ ] Paso 15: probar con el cable de red desconectado en el portátil de la demo y en el de respaldo (arranque en 5 s o menos)
+- [ ] Paso 16, con Danna: `docs/DEMO-CHECKLIST.md` y `docs/SUBMISSION.md` en inglés
+- [ ] Actualizar `README.md` y `SUBMISSION.md`: el bosque (GEDI, 0 a 50 m) y el humo (GEOS-CF, 0 a 150 µg/m³) ahora son mediciones, no intensidades relativas
+
+**Danna y equipo (entregables)**
+- [ ] Domingo 1:00 p.m.: revisar las capas, la línea de tiempo y el modo historia
+- [ ] Domingo 5:00 p.m.: congelamiento de funciones y grabación del video de 30 s en inglés
+- [ ] Resumen del proyecto en inglés, con la declaración de uso de IA
+- [ ] Domingo 10:00 p.m.: envío (límite interno 11:50 p.m.)
+
+**Si se atrasa algo, se recorta en este orden:**
+1. la capa de CO2;
+2. la línea de tiempo se queda en 3 instantes fijos;
+3. el modo historia se lee en vivo.
+
+El video y el formulario no se recortan.
+
+## El plan original
+
+Lo que sigue es el reparto original, con los pasos 10 a 16 del plan de código:
 `aidlc/spaces/default/intents/261114-earth-jukebox-poc/construction/code-generation/code-generation-plan.md`
 
 Qué se construye y por qué está en:
@@ -45,8 +94,8 @@ docker compose run --rm prep            # regenerar los datos
 
 ## Tres cosas que hay que saber
 
-- **Solo el bosque tiene datos globales.** El humo y el CO2 existen únicamente sobre la Amazonía: en el planeta no se ven ni suenan fuera de la región. Las visualizaciones de la NASA para esas dos capas no tienen una vista global plana utilizable.
-- **Los valores son intensidades relativas** leídas de los cuadros, no mediciones físicas. Hay que decirlo así en los textos.
+- **El bosque, el humo y los rayos son globales; el CO2 solo cubre la Amazonía.** Fuera de la región, el CO2 no se ve ni suena.
+- **El bosque y el humo son mediciones con escala fija**: el bosque va de 0 a 50 m (GEDI) y el humo de 0 a 150 µg/m³ (GEOS-CF). **El CO2 y los rayos son valores relativos** leídos de visualizaciones de la NASA: el CO2 es una intensidad y los rayos una frecuencia, no un conteo. Hay que decirlo así en los textos. El detalle está en `data/SOURCES.md`.
 - **El CO2 se presenta como contexto global**, no como efecto medido de lo que pasa en la Amazonía.
 
 ## Quién hace qué

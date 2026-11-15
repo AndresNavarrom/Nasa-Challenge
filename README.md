@@ -152,6 +152,46 @@ frames in `data/raw/`; see [Preparing the data](#preparing-the-data).
   `data/manifest.json` is missing it stops and says which command to run.
 - There is no database.
 
+## Planet view
+
+The interface opens on the 3D planet (code in `web/src/scene/` and
+`web/src/ui/`).
+
+```bash
+docker compose up web     # then open http://127.0.0.1:5173/
+```
+
+- **Planet**: it turns slowly by itself; drag it with the mouse to turn it,
+  release and it keeps turning. The active layer is drawn over `earth.jpg`.
+- **Layer picker** (top left, temporary until the side panel): any layer of
+  `web/public/data/manifest.json` appears there, with no code change. Until
+  the timeline exists every layer shows its **first instant**.
+- **Amazon only layers** (smoke and CO2 today, `global: null`): drawn inside
+  the Amazon rectangle (`region.bbox`) from their regional grid, on the planet
+  and on the map, and nothing elsewhere. Layers with a global grid use it
+  outside the rectangle and their regional grid inside it.
+- **To the Amazon and back**: click inside the Amazon (the cursor becomes a
+  hand) or press **Amazon**; the planet turns, flattens into the map and the
+  camera moves close (1.6 s). **Back to Earth** does the reverse (1.4 s) and
+  the planet turns again.
+- **Indicator** (bottom left): longitude, latitude and the active layer's
+  value (0 to 100 %) under the cursor, or "no data here".
+- **Listening point** for the sound engine:
+  `useListeningPoint()` from `web/src/scene/listeningPoint.tsx` returns
+  `{ lon, lat, screenX }` (`screenX` 0 at the left edge of the canvas, 1 at the
+  right) or `null` when the cursor is off the planet or the map, and during
+  the transition.
+- **Frames per second** (top right): the average over the last second; green
+  at 30 or more (the target), red below. The browser's own performance monitor
+  (Chrome DevTools, "Performance monitor") gives the same figure as a backup.
+- **Lite mode (plan B)**: open `http://127.0.0.1:5173/?lite=1`. Half-resolution
+  planet image, fewer mesh segments, no antialiasing, and the view switches to
+  the map at once instead of flattening. The counter shows `· lite`.
+- If `earth.jpg` cannot be loaded, a warning appears and the planet is drawn
+  over a plain ocean colour; everything else keeps working.
+
+The manual browser check is in [docs/PLANET-CHECKLIST.md](docs/PLANET-CHECKLIST.md).
+
 ## Run without Docker (secondary)
 
 Requirements: Node.js 20.19 or newer (npm), stable Rust (cargo).
