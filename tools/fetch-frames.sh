@@ -16,11 +16,11 @@
 # source, does: it has its own script (tools/fetch/fetch-gedi.sh), run with
 # docker compose run --rm fetch-gedi (needs a NASA Earthdata login in ~/.netrc).
 #
-# Total download is about 2.6 GB: Natural Earth (324 MB zip), 24 hours of
-# GEOS-CF (about 160 MB), two passes over the SVS 5011 lightning video (350 MB
+# Total download is about 5 GB: Natural Earth (324 MB zip), 168 hours of
+# GEOS-CF (about 1.2 GB), two passes over the SVS 5011 lightning video (350 MB
 # each, streamed, not stored: one for the map the sound uses, one for the dots
 # drawn on the planet; each only when its file is missing) and 14 frames of SVS 4950 in 4K (66 MB each as 16-bit
-# TIFF, kept as 8-bit PNG), plus 17 frames of the SVS 5196 CO2 orbit (25 MB
+# TIFF, kept as 8-bit PNG), plus 72 frames of the SVS 5196 CO2 orbit (25 MB
 # each as EXR, kept as 8-bit PNG).
 # Files from earlier versions of this script (SVS 5533, SVS 3615, the 1080p
 # SVS 5196 video and its co2_globe_*.png frames) stay in
@@ -84,20 +84,24 @@ else
 fi
 record "$NE_TIF" "$NE_ZIP_URL" "extracted from the zip (21600 x 10800 GeoTIFF)"
 
-echo "Wildfire smoke - GEOS-CF v2 surface PM2.5, 1 September 2026, hourly"
-GEOSCF="https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01"
-for hour in $(seq -w 0 23); do
-  name="GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_${hour}30z.R0.nc4"
-  png="geoscf/pm25_${hour}30.png"
-  download "geoscf/nc/$name" "$GEOSCF/$name"
-  record "geoscf/nc/$name" "$GEOSCF/$name" "downloaded as published"
-  if have "$png"; then
-    echo "  have   $png"
-  elif ! python3 "$FETCH_TOOLS/geoscf_to_png.py" "$RAW/geoscf/nc/$name" "$RAW/$png"; then
-    echo "fetch-frames: could not convert $name" >&2
-    exit 1
-  fi
-  record "$png" "$GEOSCF/$name" "PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py"
+echo "Wildfire smoke - GEOS-CF v2 surface PM2.5, 1 to 7 September 2026, hourly (168 files)"
+# Seven days of the fire season, every hour: one turn of the planet in the app is
+# one real day of smoke. Days are kept in the image names (pm25_<yyyymmdd>_<hhmm>.png).
+for day in $(seq -f '%02g' 1 7); do
+  GEOSCF="https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D$day"
+  for hour in $(seq -w 0 23); do
+    name="GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.202609${day}_${hour}30z.R0.nc4"
+    png="geoscf/pm25_202609${day}_${hour}30.png"
+    download "geoscf/nc/$name" "$GEOSCF/$name"
+    record "geoscf/nc/$name" "$GEOSCF/$name" "downloaded as published"
+    if have "$png"; then
+      echo "  have   $png"
+    elif ! python3 "$FETCH_TOOLS/geoscf_to_png.py" "$RAW/geoscf/nc/$name" "$RAW/$png"; then
+      echo "fetch-frames: could not convert $name" >&2
+      exit 1
+    fi
+    record "$png" "$GEOSCF/$name" "PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py"
+  done
 done
 
 echo "Lightning - ISS LIS 2017-2023 (SVS 5011)"
@@ -146,37 +150,38 @@ elif ! python3 "$FETCH_TOOLS/lightning_dots.py" render "$RAW/$LIGHTNING_DOTS" "$
   exit 1
 fi
 ROWS+="| \`web/public/data/lightning-4k.png\` | <$LIGHTNING_VIDEO> | distinct lightning dots for the planet view (4096 x 2048, one 8-bit channel), drawn from \`data/raw/$LIGHTNING_DOTS\` by tools/fetch/lightning_dots.py render |"$'\n'
-# The timeline frames of the lightning layer: one image per quarter (2017 Q1 to
-# 2023 Q3), each the mean of only that quarter's ten-day windows, never accumulated.
-LIGHTNING_QUARTERS="5011/quarters"
-# Every quarter must be there (2017 Q1 to 2023 Q3, 27 images), not only the last.
-quarters_present() {
-  local year number
+# The timeline frames of the lightning layer: one image per month (January 2017
+# to July 2023, 79 images), each the mean of only that month's ten-day windows,
+# never accumulated.
+LIGHTNING_MONTHS="5011/months"
+# Every month must be there, not only the last.
+months_present() {
+  local year month
   for year in 2017 2018 2019 2020 2021 2022 2023; do
-    for number in 1 2 3 4; do
-      [[ "$year" == "2023" && "$number" == "4" ]] && continue
-      [[ -s "$RAW/$LIGHTNING_QUARTERS/lightning_${year}_q${number}.png" ]] || return 1
+    for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
+      [[ "$year" == "2023" && "$month" > "07" ]] && continue
+      [[ -s "$RAW/$LIGHTNING_MONTHS/lightning_${year}_${month}.png" ]] || return 1
     done
   done
 }
-if [[ "$FORCE" != "1" ]] && quarters_present \
-    && [[ "$RAW/$LIGHTNING_QUARTERS/lightning_2023_q3.png" -nt "$RAW/$LIGHTNING_DOTS" ]]; then
-  echo "  have   $LIGHTNING_QUARTERS/lightning_<year>_q<n>.png"
-elif ! python3 "$FETCH_TOOLS/lightning_quarters.py" "$RAW/$LIGHTNING_DOTS" "$RAW/$LIGHTNING_QUARTERS" >/dev/null; then
-  echo "fetch-frames: could not build the quarterly lightning images from $LIGHTNING_DOTS" >&2
+if [[ "$FORCE" != "1" ]] && months_present \
+    && [[ "$RAW/$LIGHTNING_MONTHS/lightning_2023_07.png" -nt "$RAW/$LIGHTNING_DOTS" ]]; then
+  echo "  have   $LIGHTNING_MONTHS/lightning_<year>_<mm>.png"
+elif ! python3 "$FETCH_TOOLS/lightning_months.py" "$RAW/$LIGHTNING_DOTS" "$RAW/$LIGHTNING_MONTHS" >/dev/null; then
+  echo "fetch-frames: could not build the monthly lightning images from $LIGHTNING_DOTS" >&2
   exit 1
 fi
-for png in "$RAW/$LIGHTNING_QUARTERS"/lightning_*_q?.png; do
+for png in "$RAW/$LIGHTNING_MONTHS"/lightning_*_??.png; do
   [[ "$png" == *.part.png || ! -f "$png" ]] && continue
-  record "$LIGHTNING_QUARTERS/$(basename "$png")" "$LIGHTNING_VIDEO" "mean lightning of the ten-day windows of one quarter only, from \`data/raw/$LIGHTNING_DOTS\`, by tools/fetch/lightning_quarters.py"
+  record "$LIGHTNING_MONTHS/$(basename "$png")" "$LIGHTNING_VIDEO" "mean lightning of the ten-day windows of one month only, from \`data/raw/$LIGHTNING_DOTS\`, by tools/fetch/lightning_months.py"
 done
 
 echo "Atmospheric CO2 - DYAMOND (SVS 5196), 5760 x 3240 EXR frames"
 # The orbit animation, frame by frame, as uncompressed EXR (about 25 MB each).
 # The camera stays put while the Earth turns east under it, so the point under
 # the camera moves west 0.2017 degrees per frame; each frame is one model hour, frame 00001 is 14 Jan 2020 22:00 UTC.
-# 00939 to 01005 (every 6th): South America faces the camera, 23 Feb 2020
-# 00:00 UTC to 25 Feb 2020 18:00 UTC, the 12 instants of the layer.
+# 00939 to 01005 (every frame): South America faces the camera, 23 Feb 2020
+# 00:00 UTC to 25 Feb 2020 18:00 UTC, the 67 hourly instants of the layer.
 # 00001, 00232, 00463, 00694 and 01176: the rest of the planet (Asia and
 # Australia, India, Africa and the Atlantic, the eastern Pacific), each on its
 # own date, for the fixed fallback mosaic outside the animated views.
@@ -184,7 +189,7 @@ echo "Atmospheric CO2 - DYAMOND (SVS 5196), 5760 x 3240 EXR frames"
 # coastlines by tools/fetch/co2_calibrate.py.
 CO2_STEM="dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_3x3Hyperwall"
 CO2_FRAMES="$SVS/a005100/a005196/frames/5760x3240_16x9_30p/$CO2_STEM"
-for n in 00001 00232 00463 00694 01176 00939 00945 00951 00957 00963 00969 00975 00981 00987 00993 00999 01005; do
+for n in 00001 00232 00463 00694 01176 $(seq -f '%05g' 939 1005); do
   png="5196/co2_orbit.${n}.png"
   url="$CO2_FRAMES/$CO2_STEM.$n.exr"
   if have "$png"; then
@@ -264,23 +269,29 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
 | Layer | Source | Period | What the value is |
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file \`GEDI03_rh100_mean_2019108_2025190_003_01.tif\` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
-| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
-| Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 17 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every 6 hours, where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
-| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per quarter (27 frames, the last one July 2023 only) | Relative frequency (0 to 1): how often lightning was drawn at each place during that quarter only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one quarter at a time, on the timeline. |
+| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 to 7 September 2026, 168 hourly means (00:30 to 23:30 UTC each day) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
+| Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 72 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every hour (67 instants), where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
+| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per month (79 frames) | Relative frequency (0 to 1): how often lightning was drawn at each place during that month only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one month at a time, on the timeline. |
 
 ## How each source was turned into a map
 
 - **Smoke.** GEOS-CF stores 721 latitudes (with the poles on the end rows) by
   1440 longitudes starting at 180 W. Each app cell (1440 x 720, 0.25 degrees,
   north row first) is the mean of the 2 x 2 block of model points around its
-  centre (tools/fetch/geoscf_to_png.py). The layer is global, and its Amazon
-  grid keeps the model resolution (0.25 degrees).
+  centre (tools/fetch/geoscf_to_png.py). The layer is global; its whole-planet
+  grid is kept at 720 x 360 (0.5 degree) so the browser can hold all 168
+  hours, and its Amazon grid keeps the model resolution (0.25 degrees). In the
+  app one turn of the planet is one day of smoke.
 - **CO2.** SVS 5196 is only published as a rendered globe that turns under a
   fixed camera (the point under the camera moves 0.2017 degrees west per frame, because the
   Earth turns east; one model hour per frame), so no
-  frame shows the whole planet at one moment. The 12 instants are the frames
-  where South America faces the camera (00939 to 01005, every sixth); each is
-  used up to 60 degrees from the point under the camera. The rest of the planet
+  frame shows the whole planet at one moment. The 67 instants are every frame
+  where South America faces the camera (00939 to 01005, one model hour each);
+  each is used up to 60 degrees from the point under the camera. Where the
+  globe sits was fitted on every sixth frame; the frames in between take the
+  longitude under the camera interpolated linearly between the two fitted
+  frames around them (tools/fetch/timeline_config.py). The whole-planet grid
+  is kept at 720 x 360 (0.5 degree). The rest of the planet
   comes from five more frames (00001, 00232, 00463, 00694 and 01176: 14 and 24
   January, 3 and 12 February and 3 March 2020), blended as fixed fallback views,
   so outside the animated views each region shows the date of the view that
@@ -297,15 +308,16 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
   of each pixel (lightning is drawn in yellow over a grey map), so places with
   lightning in more windows are brighter (tools/fetch/lightning_composite.py).
   LIS sees only between about 55 N and 55 S.
-  **Timeline frames.** The app's lightning layer has one frame per quarter,
-  January 2017 to July 2023 (27 frames), from the same 250 windows kept in
+  **Timeline frames.** The app's lightning layer has one frame per month,
+  January 2017 to July 2023 (79 frames), from the same 250 windows kept in
   \`data/raw/5011/lightning_dots_2017_2023.npz\`. The video runs linearly over the
   period (100 s, about 24 days per second), so window k ends about k x 0.4 / 100
-  of the way through it; each window goes to the quarter of its middle day, and
-  each quarter's image is the mean yellowness of its own 9 or 10 windows only
-  (2 for July 2023), so playing them shows where lightning was seen each
-  quarter, never an accumulation (tools/fetch/lightning_quarters.py, images in
-  \`data/raw/5011/quarters/\`). January - March 2017 is almost empty: the
+  of the way through it; each window goes to the month of its middle day, and
+  each month's image is the mean yellowness of its own 2 to 4 windows only, so
+  playing them shows where lightning was seen each month (the storm belt
+  moving north and south with the seasons), never an accumulation
+  (tools/fetch/lightning_months.py, images in \`data/raw/5011/months/\`). In
+  the app one turn of the planet is one year of lightning. January - March 2017 is almost empty: the
   video shows almost no lightning in its first weeks (LIS was new on the ISS). The accumulated mean and the
   sharp dots image below are kept but no longer drawn by the app.
   The planet view does not draw that mean, which is a soft blur and covers the
