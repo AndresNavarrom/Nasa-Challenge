@@ -6,23 +6,25 @@ Fuentes: las notas a mano del equipo, la captura anotada del jukebox y el boceto
 
 ## 1. Paleta 60-30-10
 
-| Peso | Color | Uso | Valor propuesto |
-|---|---|---|---|
-| 60 % | Negro | Fondo de la app y de la landing, paneles | `#05070d` (el actual) |
-| 30 % | Ocre / claro | Texto, arcos, reglas, bordes, iconos inactivos | ocre `#c9a96e`, claro `#ede6d6` |
-| 10 % | Verde chillón y azul eléctrico | Botón de llamada a la acción, estado activo, cabezal de la línea de tiempo | verde `#7cff4f`, azul `#2f6bff` |
+Se usa la paleta que ya tenemos en `web/src/index.css` (`@theme`); no se agregan colores nuevos, solo se reparten con la regla 60-30-10.
 
-Color de contraste por capa (lo usa el arco cuando la capa está activa):
+| Peso | Uso | Tokens existentes |
+|---|---|---|
+| 60 % | Fondo de la app y de la landing, paneles | `--color-landing-deep` `#05070d`, `--color-landing-line` `#16202f` |
+| 30 % | Texto, arcos, reglas, bordes, iconos inactivos | `--color-landing-ink` `#e8edf5`, `--color-landing-mist` `#9aa8be`, `--color-landing-label` `#8fa0b8` |
+| 10 % | Botón de llamada a la acción, estado activo, cabezal de la línea de tiempo | `--color-landing-accent` `#5ee9b5` |
 
-| Capa | Color |
+Color de contraste por capa (lo usa el arco cuando la capa está activa), también de los tokens actuales:
+
+| Capa | Token |
 |---|---|
-| Earth (sin capa) | claro `#ede6d6` |
-| Forest height | verde chillón `#7cff4f` |
-| Wildfire smoke | ocre encendido `#ff9a3c` |
-| Atmospheric CO2 | azul eléctrico `#2f6bff` |
-| Lightning | amarillo eléctrico `#ffe14d` |
+| Earth (sin capa) | `--color-landing-ink` `#e8edf5` |
+| Forest height | `--color-forest` `#6fcf6b` |
+| Wildfire smoke | `--color-smoke` `#f08a3c` |
+| Atmospheric CO2 | `--color-co2` `#7fb4ff` |
+| Lightning | `#ffd166` (el amarillo del anillo de foco); se registra como `--color-lightning` |
 
-Se definen como tokens en `web/src/index.css` (`@theme`) y sustituyen al verde esmeralda y los grises `slate` repartidos por los componentes. Hay que comprobar contraste AA del texto sobre negro.
+El jukebox pasa de los grises `slate` y el verde `emerald` de Tailwind a estos tokens, para que la app y la landing se vean iguales.
 
 ## 2. Interfaz del jukebox (captura + boceto)
 
