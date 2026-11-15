@@ -14,5 +14,13 @@
     "scope": "poc",
     "status": "complete",
     "request": "90111762"
+  },
+  {
+    "uuid": "01a1dc68-ad96-7454-9912-62ced31e3e37",
+    "slug": "hires-data-layers",
+    "dirName": "261114-hires-data-layers",
+    "scope": "poc",
+    "status": "complete",
+    "request": "73c9de17"
   }
 ]
