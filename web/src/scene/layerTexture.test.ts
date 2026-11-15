@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { DataTexture } from "three";
 import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
 import {
-  CO2_DOMAIN,
   CO2_STOPS,
   FIRST_INSTANT,
   GEDI_COLORBAR,
@@ -187,24 +186,20 @@ describe("lightning drawn like NASA SVS 5011", () => {
   });
 });
 
-describe("CO2 drawn with contrast, after NASA SVS 5196", () => {
+describe("CO2 drawn as a whole-planet field (OCO-2 GEOS XCO2)", () => {
   const co2 = LAYER_RAMPS.co2!;
 
-  it("spans its colours over the values the layer really has (0..CO2_DOMAIN)", () => {
+  it("goes from blue at 404 ppm to red at 420 ppm over the whole 0..255 scale", () => {
     expect(rampColor(co2, 0)).toEqual(CO2_STOPS[0]);
-    expect(rampColor(co2, CO2_DOMAIN)).toEqual(CO2_STOPS[CO2_STOPS.length - 1]);
-    // Above the domain the brightest colour stays.
+    expect(rampColor(co2, 127.5)).toEqual(CO2_STOPS[2]);
     expect(rampColor(co2, 255)).toEqual(CO2_STOPS[CO2_STOPS.length - 1]);
-    // Middle of the domain is the middle stop of the five.
-    expect(rampColor(co2, CO2_DOMAIN / 2)).toEqual(CO2_STOPS[2]);
-    expect(co2.baseDim).toBeGreaterThan(0);
+    expect(co2.domain).toBeUndefined();
+    expect(co2.opacity).toBeLessThan(1);
   });
 
-  it("keeps the faint background haze transparent and the hot spots opaque", () => {
+  it("is drawn wherever there is data and nowhere on the fill value", () => {
     expect(rampAlpha(co2, 0)).toBe(0);
-    expect(rampAlpha(co2, 14)).toBe(0);
-    expect(rampAlpha(co2, 39)).toBe(128);
-    expect(rampAlpha(co2, 64)).toBe(255);
+    expect(rampAlpha(co2, 1)).toBe(255);
     expect(rampAlpha(co2, 200)).toBe(255);
   });
 

@@ -37,7 +37,7 @@ describe("turning the planet plays the timeline", () => {
   it("covers one day of hourly data and one year of monthly data per turn", () => {
     expect(framesPerTurn(hourly, 168)).toBe(24);
     expect(framesPerTurn({ unit: "hour", count: 6 }, 12)).toBe(4);
-    expect(framesPerTurn({ unit: "day", count: 1 }, 30)).toBe(7);
+    expect(framesPerTurn({ unit: "day", count: 1 }, 366)).toBe(30);
     expect(framesPerTurn(monthly, 79)).toBe(12);
     // Without a cadence (sample data), one turn plays the whole sequence.
     expect(framesPerTurn(undefined, 6)).toBe(5);
@@ -125,7 +125,8 @@ describe("marks on the line", () => {
   it("says how much real time one turn covers at the picked speed", () => {
     expect(turnText(hourly, 1)).toBe("1 day");
     expect(turnText(hourly, 4)).toBe("4 days");
-    expect(turnText({ unit: "day", count: 1 }, 2)).toBe("2 weeks");
+    expect(turnText({ unit: "day", count: 1 }, 1)).toBe("30 days");
+    expect(turnText({ unit: "day", count: 1 }, 4)).toBe("120 days");
     expect(turnText(monthly, 1)).toBe("1 year");
     expect(turnText(monthly, 8)).toBe("8 years");
     expect(turnText(undefined, 2)).toBe("");

@@ -41,23 +41,16 @@ export const LIGHTNING_STOPS: readonly Rgb[] = [
 ];
 
 /**
- * CO2 colours, after NASA SVS 5196: amber where there is a little, then orange and
- * red-orange, pale yellow where there is the most (big emitters, fires).
+ * CO2 colours for OCO-2 GEOS XCO2 on its fixed 404..420 ppm scale: deep blue where
+ * the column holds the least, through pale yellow, to red where it holds the most.
  */
 export const CO2_STOPS: readonly Rgb[] = [
-  [110, 50, 20],
-  [190, 85, 25],
-  [235, 70, 30],
-  [255, 150, 40],
-  [255, 235, 160],
+  [45, 70, 150],
+  [60, 140, 195],
+  [235, 225, 150],
+  [240, 140, 55],
+  [195, 45, 40],
 ];
-
-/**
- * Grid value that takes the brightest CO2 colour. The CO2 "warmth" grid sits low
- * on its scale: across the planet half the cells are 0, 99 % are below 55 and only
- * the biggest sources (eastern China, central Africa) pass 96 (about 0.3 % of cells).
- */
-export const CO2_DOMAIN = 96;
 
 export const LAYER_OPACITY_DEFAULT = 0.8;
 
@@ -93,18 +86,16 @@ export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {
   forest: { low: [77, 61, 38], high: [253, 239, 229], maxAlpha: 1, stops: GEDI_COLORBAR, presence: { from: 6, fade: 4 }, opacity: 0.95 },
   smoke: SMOKE_RAMP,
   aerosol: SMOKE_RAMP,
-  // Hot spots stand out over a dimmed grey Earth: the faint background haze (below
-  // 14 of 255, where 90 % of the cells are) stays transparent, CO2 fades in up to
-  // 64 and is opaque above, and the colours span 0..CO2_DOMAIN instead of 0..255.
+  // A field that covers the whole planet every day: drawn everywhere there is data
+  // (0 is only the fill value), see-through enough to keep the continents readable.
   co2: {
     low: CO2_STOPS[0]!,
     high: CO2_STOPS[CO2_STOPS.length - 1]!,
     maxAlpha: 1,
     stops: CO2_STOPS,
-    domain: CO2_DOMAIN,
-    presence: { from: 64, fade: 50 },
-    opacity: 0.95,
-    baseDim: 0.7,
+    presence: { from: 1, fade: 1 },
+    opacity: 0.7,
+    baseDim: 0.35,
   },
   // Like NASA SVS 5011: glowing orange and yellow flashes over a dimmed grey Earth.
   // Rare lightning stays transparent (half of the cells with any lightning are below

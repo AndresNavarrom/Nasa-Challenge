@@ -4,8 +4,8 @@
 //
 // Decisions (docs/TIMELINE-HANDOFF.md):
 // - The timeline plays only while the planet turns by itself. One turn covers a
-//   fixed stretch of real time per cadence: one day for hourly data (smoke, CO2),
-//   one week for daily data, one year for monthly data (lightning). Smoke turns
+//   fixed stretch of real time per cadence: one day for hourly data (smoke), 30
+//   days for daily data (CO2), one year for monthly data (lightning). Smoke turns
 //   with the planet like the real Earth.
 // - Marks are placed by each instant's real time, so a gap in the data shows as
 //   a gap on the line. Layers without times (sample data) are evenly spaced.
@@ -23,7 +23,7 @@ export function framesPerTurn(cadence: Cadence | undefined, frames: number): num
     case "hour":
       return 24 / cadence.count;
     case "day":
-      return 7 / cadence.count;
+      return 30 / cadence.count;
     case "month":
       return 12 / cadence.count;
   }
@@ -155,7 +155,7 @@ export function cadenceText(cadence: Cadence | undefined): string {
 /** Speeds the person can pick for the timeline; the planet itself keeps turning at the same pace. */
 export const TIMELINE_SPEEDS = [1, 2, 4, 8] as const;
 
-/** How much real time one turn of the planet covers at `speed`: "1 day", "4 days", "2 years". */
+/** How much real time one turn of the planet covers at `speed`: "1 day", "120 days", "2 years". */
 export function turnText(cadence: Cadence | undefined, speed: number): string {
   if (!cadence) return "";
   const plural = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"}`;
@@ -164,7 +164,7 @@ export function turnText(cadence: Cadence | undefined, speed: number): string {
     case "hour":
       return plural(times, "day");
     case "day":
-      return plural(times, "week");
+      return plural(times * 30, "day");
     case "month":
       return plural(times, "year");
   }
