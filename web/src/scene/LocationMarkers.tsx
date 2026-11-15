@@ -20,6 +20,10 @@ import type { ListeningPoint } from "./listeningPoint";
 const SELECTED_ANGULAR_SIZE = 0.013;
 const PULSE_ANGULAR_RATIO = 1.3;
 const CROSSHAIR_ANGULAR_SIZE = 0.018;
+// Keep a minimum world size so the markers do not shrink away when the camera
+// zooms close, while the angular term keeps them readable from the globe view.
+const SELECTED_MIN_SIZE = 0.018;
+const CROSSHAIR_MIN_SIZE = 0.022;
 const PULSE_SECONDS = 1.6;
 
 type Position = [number, number, number];
@@ -136,17 +140,21 @@ export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: Locat
   const selectedPosition = selectedPoint ? positionFor(selectedPoint.lon, selectedPoint.lat) : null;
   const hoverPosition = hoverPoint ? positionFor(hoverPoint.lon, hoverPoint.lat) : null;
 
-  const screenScale = (sprite: Sprite | null, angularSize: number): number => {
+  const screenScale = (
+    sprite: Sprite | null,
+    angularSize: number,
+    minSize: number,
+  ): number => {
     if (!sprite) return 0;
     sprite.getWorldPosition(worldPosition);
-    return camera.position.distanceTo(worldPosition) * angularSize;
+    return Math.max(minSize, camera.position.distanceTo(worldPosition) * angularSize);
   };
 
   useFrame((state) => {
     const selected = selectedRef.current;
     const pulse = pulseRef.current;
     const crosshair = crosshairRef.current;
-    const selectedSize = screenScale(selected, SELECTED_ANGULAR_SIZE);
+    const selectedSize = screenScale(selected, SELECTED_ANGULAR_SIZE, SELECTED_MIN_SIZE);
     if (selected) selected.scale.set(selectedSize, selectedSize, 1);
 
     if (pulse) {
@@ -157,7 +165,7 @@ export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: Locat
     }
 
     if (crosshair) {
-      const crosshairSize = screenScale(crosshair, CROSSHAIR_ANGULAR_SIZE);
+      const crosshairSize = screenScale(crosshair, CROSSHAIR_ANGULAR_SIZE, CROSSHAIR_MIN_SIZE);
       crosshair.scale.set(crosshairSize, crosshairSize, 1);
     }
   });
