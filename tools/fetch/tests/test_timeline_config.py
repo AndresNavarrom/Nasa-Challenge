@@ -5,14 +5,15 @@ import json
 from timeline_config import co2_instants, lightning_instants, main, smoke_instants
 
 
-def test_smoke_is_seven_days_hour_by_hour():
+def test_smoke_is_the_fire_season_every_three_hours():
     instants = smoke_instants()
-    assert len(instants) == 168
-    assert instants[0]["date"] == "Sep 1, 2026 00:30 UTC"
-    assert instants[0]["time"] == "2026-09-01T00:30:00Z"
-    assert instants[0]["views"][0]["file"] == "geoscf/pm25_20260901_0030.png"
-    assert instants[-1]["time"] == "2026-09-07T23:30:00Z"
-    assert instants[-1]["views"][0]["file"] == "geoscf/pm25_20260907_2330.png"
+    assert len(instants) == 61 * 8
+    assert instants[0]["date"] == "Aug 1, 2026 00:30 UTC"
+    assert instants[0]["time"] == "2026-08-01T00:30:00Z"
+    assert instants[0]["views"][0]["file"] == "merra2/smoke_20260801_0030.png"
+    assert instants[1]["time"] == "2026-08-01T03:30:00Z"
+    assert instants[-1]["time"] == "2026-09-30T21:30:00Z"
+    assert instants[-1]["views"][0]["file"] == "merra2/smoke_20260930_2130.png"
 
 
 def test_co2_is_every_day_of_2020():
@@ -64,8 +65,8 @@ def test_main_rewrites_only_the_three_timed_layers(tmp_path):
     by_id = {layer["id"]: layer for layer in config["layers"]}
     assert by_id["forest"]["instants"] == json.loads("[" + one + "]")
     assert "cadence" not in by_id["forest"]
-    assert (len(by_id["smoke"]["instants"]), by_id["smoke"]["cadence"]) == (168, "PT1H")
-    assert by_id["smoke"]["grid"] == {"region": [10, 10], "global": [720, 360]}
+    assert (len(by_id["smoke"]["instants"]), by_id["smoke"]["cadence"]) == (488, "PT3H")
+    assert by_id["smoke"]["grid"] == {"region": [72, 56], "global": [360, 180]}
     assert (len(by_id["co2"]["instants"]), by_id["co2"]["cadence"]) == (366, "P1D")
     assert by_id["co2"]["grid"] == {"region": [72, 56], "global": [360, 180]}
     assert (len(by_id["lightning"]["instants"]), by_id["lightning"]["cadence"]) == (79, "P1M")

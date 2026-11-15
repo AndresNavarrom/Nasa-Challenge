@@ -68,7 +68,7 @@ x-fetch: &fetch
   init: true
   working_dir: /work
   environment:
-    # geoscf_to_png.py is imported by the tests and run by fetch-frames.sh.
+    # The converters (oco2_to_png.py, merra2_smoke_to_png.py...) import each other and are imported by the tests.
     PYTHONPATH: /work/tools/fetch
     # The source is mounted read-only: no pytest cache, no .pyc files.
     PYTEST_ADDOPTS: "-p no:cacheprovider"
@@ -244,6 +244,24 @@ services:
         bind:
           create_host_path: false
     command: ["bash", "tools/fetch/fetch-oco2.sh"]
+
+  # MERRA-2 smoke (organic + black carbon optical depth, NASA GES DISC): same
+  # Earthdata login and GES DISC authorisation as OCO-2.
+  fetch-merra2:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      # Output: data/raw/merra2/ (the daily smoke files and their grey images).
+      - ./data:/work/data
+      # The Earthdata login, read-only and only in this service (see fetch-gedi).
+      - type: bind
+        source: ~/.netrc
+        target: /root/.netrc
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["bash", "tools/fetch/fetch-merra2.sh"]
 
 volumes:
   web_node_modules:

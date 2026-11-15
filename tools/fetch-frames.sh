@@ -16,12 +16,12 @@
 # source, does: it has its own script (tools/fetch/fetch-gedi.sh), run with
 # docker compose run --rm fetch-gedi (needs a NASA Earthdata login in ~/.netrc).
 #
-# Total download is about 5 GB: Natural Earth (324 MB zip), 168 hours of
-# GEOS-CF (about 1.2 GB), two passes over the SVS 5011 lightning video (350 MB
+# Total download is about 3.5 GB: Natural Earth (324 MB zip), two passes over the SVS 5011 lightning video (350 MB
 # each, streamed, not stored: one for the map the sound uses, one for the dots
 # drawn on the planet; each only when its file is missing) and 14 frames of SVS 4950 in 4K (66 MB each as 16-bit
 # TIFF, kept as 8-bit PNG). The CO2 layer (OCO-2 GEOS, behind the Earthdata
-# login) has its own script: docker compose run --rm fetch-oco2.
+# login) has its own script: docker compose run --rm fetch-oco2, and so has the
+# smoke layer (MERRA-2): docker compose run --rm fetch-merra2.
 # Files from earlier versions of this script (SVS 5533, SVS 3615 and the SVS
 # 5196 CO2 frames) stay in data/raw/ and are no longer downloaded.
 set -euo pipefail
@@ -83,25 +83,10 @@ else
 fi
 record "$NE_TIF" "$NE_ZIP_URL" "extracted from the zip (21600 x 10800 GeoTIFF)"
 
-echo "Wildfire smoke - GEOS-CF v2 surface PM2.5, 1 to 7 September 2026, hourly (168 files)"
-# Seven days of the fire season, every hour: one turn of the planet in the app is
-# one real day of smoke. Days are kept in the image names (pm25_<yyyymmdd>_<hhmm>.png).
-for day in $(seq -f '%02g' 1 7); do
-  GEOSCF="https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D$day"
-  for hour in $(seq -w 0 23); do
-    name="GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.202609${day}_${hour}30z.R0.nc4"
-    png="geoscf/pm25_202609${day}_${hour}30.png"
-    download "geoscf/nc/$name" "$GEOSCF/$name"
-    record "geoscf/nc/$name" "$GEOSCF/$name" "downloaded as published"
-    if have "$png"; then
-      echo "  have   $png"
-    elif ! python3 "$FETCH_TOOLS/geoscf_to_png.py" "$RAW/geoscf/nc/$name" "$RAW/$png"; then
-      echo "fetch-frames: could not convert $name" >&2
-      exit 1
-    fi
-    record "$png" "$GEOSCF/$name" "PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py"
-  done
-done
+echo "Wildfire smoke - MERRA-2 carbon optical depth (downloaded by fetch-merra2, not by this script)"
+MERRA2_URL="https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary"
+record "merra2/nc/smoke_2026<mmdd>.nc4" "$MERRA2_URL" "OCEXTTAU and BCEXTTAU every third hour of each day, 1 August to 30 September 2026, through NASA OPeNDAP with a NASA Earthdata login, by tools/fetch/fetch-merra2.sh (docker compose run --rm fetch-merra2), not by this script"
+record "merra2/smoke_2026<mmdd>_<hh>30.png" "$MERRA2_URL" "organic + black carbon optical depth on 576 x 360 cells, square root of 0 to 2 as grey 0 to 255, by tools/fetch/merra2_smoke_to_png.py"
 
 echo "Lightning - ISS LIS 2017-2023 (SVS 5011)"
 LIGHTNING_VIDEO="$SVS/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4"
@@ -230,11 +215,11 @@ cat >"$SOURCES" <<EOF
 # Data sources
 
 Everything shown and heard in Earth Jukebox comes from the public sources
-below. Only GEDI L3 (forest height) and OCO-2 GEOS (CO2) need a free NASA
-Earthdata login: they are downloaded on their own with \`docker compose run --rm
-fetch-gedi\` and \`docker compose run --rm fetch-oco2\`, which read the login from
-\`~/.netrc\` (OCO-2 also needs the "NASA GESDISC DATA ARCHIVE" application
-authorised in the Earthdata profile). Keep only the \`urs.earthdata.nasa.gov\`
+below. GEDI L3 (forest height), OCO-2 GEOS (CO2) and MERRA-2 (smoke) need a
+free NASA Earthdata login: they are downloaded on their own with \`docker
+compose run --rm fetch-gedi\`, \`fetch-oco2\` and \`fetch-merra2\`, which read the
+login from \`~/.netrc\` (OCO-2 and MERRA-2 also need the "NASA GESDISC DATA
+ARCHIVE" application authorised in the Earthdata profile). Keep only the \`urs.earthdata.nasa.gov\`
 line in that file: the download containers can read all of it. No other source
 needs a login. This file is
 rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fetch\`).
@@ -244,19 +229,22 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
 | Layer | Source | Period | What the value is |
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file \`GEDI03_rh100_mean_2019108_2025190_003_01.tif\` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
-| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 to 7 September 2026, 168 hourly means (00:30 to 23:30 UTC each day) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
+| Wildfire smoke | [MERRA-2 tavg1_2d_aer_Nx (M2T1NXAER) V5.12.4](https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary) (NASA GMAO reanalysis, GES DISC), variables \`OCEXTTAU\` + \`BCEXTTAU\` (organic + black carbon aerosol optical depth at 550 nm) | 1 August to 30 September 2026, every third hour (488 hourly means, 00:30 to 21:30 UTC) | Smoke optical depth on a fixed square-root scale: **0 = 0 (byte 0), 2 or more = 1 (byte 255)**. Dust, sea salt and sulphate are left out, so only smoke from fires shows. |
 | Atmospheric CO2 | [OCO-2 GEOS Level 3 daily, 0.5x0.625 assimilated CO2, V10r](https://disc.gsfc.nasa.gov/datasets/OCO2_GEOS_L3CO2_DAY_10r/summary) (NASA GES DISC: the GEOS model with OCO-2 satellite measurements assimilated), variable \`XCO2\` | Every day of 2020 (366 daily means) | Column-averaged CO2 (XCO2) on a fixed scale: **404 ppm = 0 (byte 0), 420 ppm or more = 1 (byte 255)**, linear in between. The whole planet moves with the timeline. Fill values are 0. |
 | Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per month (79 frames) | Relative frequency (0 to 1): how often lightning was drawn at each place during that month only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one month at a time, on the timeline. |
 
 ## How each source was turned into a map
 
-- **Smoke.** GEOS-CF stores 721 latitudes (with the poles on the end rows) by
-  1440 longitudes starting at 180 W. Each app cell (1440 x 720, 0.25 degrees,
-  north row first) is the mean of the 2 x 2 block of model points around its
-  centre (tools/fetch/geoscf_to_png.py). The layer is global; its whole-planet
-  grid is kept at 720 x 360 (0.5 degree) so the browser can hold all 168
-  hours, and its Amazon grid keeps the model resolution (0.25 degrees). In the
-  app one turn of the planet is one day of smoke.
+- **Smoke.** MERRA-2 stores 361 latitudes (with the poles on the end rows) by
+  576 longitudes starting at 180 W (0.5 x 0.625 degree), the same grid as
+  OCO-2 GEOS. tools/fetch/fetch-merra2.sh asks NASA's OPeNDAP service for only
+  the organic and black carbon optical depth at every third hour of each day
+  (about 8 MB a day instead of 470 MB); tools/fetch/merra2_smoke_to_png.py adds
+  the two and averages each image cell (576 x 360) from the 2 x 2 block of
+  model points around its centre. The square-root scale lets thin haze (about
+  0.05) and thick plumes (1 or more) both show. The app grids are 360 x 180 (1
+  degree) for the planet and 72 x 56 (0.5 degree, the model's own) for the
+  Amazon. In the app one turn of the planet is one day of smoke.
 - **CO2.** OCO-2 GEOS L3 stores 361 latitudes (with the poles on the end
   rows) by 576 longitudes starting at 180 W (0.5 x 0.625 degree). Each image
   cell (576 x 360) is the mean of the 2 x 2 block of model points around its
@@ -352,8 +340,9 @@ inside a hand-drawn area around the basin.
 
 - Natural Earth: public domain
   (<https://www.naturalearthdata.com/about/terms-of-use/>).
-- GEOS-CF: NASA Global Modeling and Assimilation Office (GMAO); NASA Earth
-  science data are open, with no restrictions on use. Credit: NASA GMAO GEOS-CF.
+- MERRA-2: NASA Global Modeling and Assimilation Office (GMAO), distributed by
+  the GES DISC; NASA Earth science data are open, with no restrictions on use.
+  Credit: NASA GMAO MERRA-2.
 - GEDI L3 V3: NASA GEDI mission, distributed by the ORNL DAAC
   (doi:10.3334/ORNLDAAC/2525); NASA Earth science data are open, with no
   restrictions on use. Download needs a free NASA Earthdata login.
@@ -366,8 +355,10 @@ inside a hand-drawn area around the basin.
 ## No longer used
 
 - The old smoke frames (SVS 5533), the 1080p GEDI video, the SVS 3615 base
-  image (\`earth.jpg\`) and the SVS 5196 CO2 orbit frames (replaced by OCO-2
-  GEOS, which covers the whole planet every day) are no longer downloaded; files already in
+  image (\`earth.jpg\`), the SVS 5196 CO2 orbit frames (replaced by OCO-2
+  GEOS, which covers the whole planet every day) and the GEOS-CF PM2.5 files
+  (replaced by MERRA-2 carbon optical depth, which leaves desert dust out) are
+  no longer downloaded; files already in
   \`data/raw/\` and \`web/public/data/earth.jpg\` are kept.
 
 ## Files
