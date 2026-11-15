@@ -19,6 +19,11 @@
   --color-landing-label: #8fa0b8;
   --color-landing-accent: #5ee9b5;
   --color-landing-line: #16202f;
+  /* Titles: a step dimmer than the ink, so they never outshine the button. */
+  --color-landing-title: #c9d3e2;
+  /* The button: dark-green ink on mint, brighter mint on hover (never pure black or white). */
+  --color-landing-cta-ink: #04231a;
+  --color-landing-accent-strong: #84f2c9;
 }
 
 html,

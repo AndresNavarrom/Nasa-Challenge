@@ -1,4 +1,4 @@
-# Earth Jukebox — Listen to the Amazon
+# Earth Jukebox: Listen to the Lungs of the World
 
 Proof of concept for the NASA Space Apps Challenge 2026 challenge
 "The Earth Information Jukebox" (team Sagitta).

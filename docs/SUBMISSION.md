@@ -2,6 +2,7 @@
 
 Drafts in English for the NASA Space Apps Challenge 2026 project form,
 challenge **"The Earth Information Jukebox"**, team **Sagitta** (FR10.2).
+Project name: **Earth Jukebox: Listen to the Lungs of the World**.
 Owners: Danna Vergara (product and deliverables) with Andres Navarro Marin.
 
 > **Status: DRAFT.** Lines marked `TODO` are still open. Before submitting,
