@@ -82,7 +82,7 @@
     {
       "id": "co2",
       "title": "Atmospheric CO2",
-      "description": "Carbon dioxide moving through the atmosphere from NASA's DYAMOND simulation with the GEOS model. Over the Americas and the Atlantic it moves from 23 to 25 February 2020, every six hours; the rest of the planet is a fixed picture with each region on its own date between 14 January and 3 March 2020. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier.",
+      "description": "Carbon dioxide moving through the atmosphere from NASA's DYAMOND simulation with the GEOS model. Over the Americas and the Atlantic it moves from 23 to 25 February 2020, every six hours; the rest of the planet is a fixed picture with each region on the date of the view that covers it, between 14 January and 3 March 2020 (where two views overlap their dates are blended). It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier.",
       "source": {"title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)", "url": "https://svs.gsfc.nasa.gov/5196"},
       "static": false,
       "global": true,

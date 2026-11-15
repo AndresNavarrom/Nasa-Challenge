@@ -149,8 +149,8 @@ ROWS+="| \`web/public/data/lightning-4k.png\` | <$LIGHTNING_VIDEO> | distinct li
 
 echo "Atmospheric CO2 - DYAMOND (SVS 5196), 5760 x 3240 EXR frames"
 # The orbit animation, frame by frame, as uncompressed EXR (about 25 MB each).
-# The camera stays put while the Earth turns west under it, 0.2017 degrees per
-# frame; each frame is one model hour, frame 00001 is 14 Jan 2020 22:00 UTC.
+# The camera stays put while the Earth turns east under it, so the point under
+# the camera moves west 0.2017 degrees per frame; each frame is one model hour, frame 00001 is 14 Jan 2020 22:00 UTC.
 # 00939 to 01005 (every 6th): South America faces the camera, 23 Feb 2020
 # 00:00 UTC to 25 Feb 2020 18:00 UTC, the 12 instants of the layer.
 # 00001, 00232, 00463, 00694 and 01176: the rest of the planet (Asia and
@@ -237,13 +237,16 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
   centre (tools/fetch/geoscf_to_png.py). The layer is global, and its Amazon
   grid keeps the model resolution (0.25 degrees).
 - **CO2.** SVS 5196 is only published as a rendered globe that turns under a
-  fixed camera (0.2017 degrees west per frame, one model hour per frame), so no
+  fixed camera (the point under the camera moves 0.2017 degrees west per frame, because the
+  Earth turns east; one model hour per frame), so no
   frame shows the whole planet at one moment. The 12 instants are the frames
   where South America faces the camera (00939 to 01005, every sixth); each is
   used up to 60 degrees from the point under the camera. The rest of the planet
   comes from five more frames (00001, 00232, 00463, 00694 and 01176: 14 and 24
   January, 3 and 12 February and 3 March 2020), blended as fixed fallback views,
-  so outside the animated views each region shows its own date. Where the globe
+  so outside the animated views each region shows the date of the view that
+  covers it (where two views overlap, near 23 degrees E for example, their dates
+  are blended, up to nine days apart). Where the globe
   sits in each frame was fitted to the Natural Earth coastlines
   (tools/fetch/co2_calibrate.py). The "warmth" also picks up bright beige
   land: deserts (Sahara, Australia, Atacama) read about 0.1, a low value, more

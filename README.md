@@ -284,7 +284,8 @@ Backdrop of the planet: [Natural Earth I](https://www.naturalearthdata.com/downl
 CO2 and lightning are relative values read from rendered NASA visualizations,
 not physical measurements.** CO2 is global but a mosaic: SVS 5196 is only
 published as a turning globe, so only the Americas and the Atlantic move with the timeline and elsewhere each
-region shows its own fixed date. The globe views were fitted to real coastlines
+region shows the date of the view that covers it (where two views overlap,
+their dates are blended). The globe views were fitted to real coastlines
 (`tools/fetch/co2_calibrate.py`). CO2 is presented as global context, not as a
 measured effect of what happens in the Amazon.
 
