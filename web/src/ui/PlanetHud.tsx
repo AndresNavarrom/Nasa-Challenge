@@ -143,11 +143,6 @@ export function PlanetHud(props: PlanetHudProps) {
               Auto-rotate
             </span>
           </label>
-          {activeLayer && activeLayer.manifest.dates.length > 1 && (
-            <p className="mt-1 text-xs text-slate-400">
-              Showing the first instant: {activeLayer.manifest.dates[0]}
-            </p>
-          )}
         </div>
 
         <p

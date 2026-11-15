@@ -110,10 +110,10 @@ smoke** and **Lightning** (no more Global CO2). Lines above that name
 - [ ] **No forest gaps (FR6.1).** On the planet, forest height shows on every
       continent with no empty band of longitude between the views.
 - [ ] **Smoke, 24 instants (FR4.1).** With **Wildfire smoke** active, the
-      panel says `Showing the first instant: Sep 1, 2026 00:30 UTC` and the
-      smoke shows over the whole planet. When the timeline is wired in, its
-      dates run through all 24 hours to `Sep 1, 2026 23:30 UTC` while forest
-      and lightning keep their single date.
+      timeline bar starts at `Sep 1, 2026 00:30 UTC` and the smoke shows over
+      the whole planet. Press Play: the picture changes with the bar's date
+      through all 24 hours to `Sep 1, 2026 23:30 UTC`, one instant replacing
+      the previous one. The forest keeps its single date.
 - [ ] **Lightning (FR5).** **Lightning** is in the layer picker, brightest
       over central Africa, north-west South America and South-East Asia, and
       reads 0 % or close to it far out at sea and near the poles.
@@ -130,7 +130,8 @@ After `docker compose run --rm fetch-gedi` and `docker compose run --rm prep`.
       there are no stripes or seams, neither along GEDI's orbit tracks nor at
       about 52° N and S where the SVS 4950 fill takes over.
 - [ ] **Sharp forest like SVS 4950, 30 fps.** With **Forest height** on the planet and on the Amazon map (after `fetch-gedi` wrote `web/public/data/forest-height-*.png`), the forest is sharp (rivers and clearings show, no 0.25° blocks), brown to green to white on the GEDI colour bar with soft shaded relief and raised height like https://svs.gsfc.nasa.gov/4950, no shimmer while the planet turns, no banner about the forest images, no seam at the edge of the Amazon rectangle, and the indicator stays at 30 fps or more (also with `?lite=1`).
-- [ ] **Sharp lightning dots like SVS 5011, 30 fps.** With **Lightning** on the planet and on the Amazon map (after `fetch` wrote `web/public/data/lightning-4k.png`; the Network tab asks for it only once Lightning is chosen), the planet turns dark grey and the lightning shows as distinct orange-to-yellow dots with a soft glow like https://svs.gsfc.nasa.gov/5011, not a blur: densest and nearly white over central Africa, north-west South America and South-East Asia, separate dots (no solid patch) even over the Congo basin, scattered single dots over the oceans, none beyond about 55° N and S. Up close the dots stay crisp (no 0.25° blocks), seen whole they do not shimmer or flicker while the planet turns, there is no seam at 180° or at the edge of the Amazon rectangle, no banner about the lightning image, and the indicator stays at 30 fps or more (also with `?lite=1`). With `lightning-4k.png` renamed away, Lightning falls back to the soft grid and the banner names the file; Forest height, smoke and the sound do not change.
+- [ ] **Lightning quarters, drawn from the grids.** With the shipped data (27 quarterly instants), **Lightning** is drawn from its grids, one quarter at a time, softer than the dots below; press Play and the picture and the bar's date go from `Jan - Mar 2017` to `Jul 2023`, and what you hear matches the quarter on screen. The next check applies only if the layer is published with a single instant again.
+- [ ] **Sharp lightning dots like SVS 5011, 30 fps (single-instant lightning only).** With **Lightning** on the planet and on the Amazon map (after `fetch` wrote `web/public/data/lightning-4k.png`; the Network tab asks for it only once Lightning is chosen), the planet turns dark grey and the lightning shows as distinct orange-to-yellow dots with a soft glow like https://svs.gsfc.nasa.gov/5011, not a blur: densest and nearly white over central Africa, north-west South America and South-East Asia, separate dots (no solid patch) even over the Congo basin, scattered single dots over the oceans, none beyond about 55° N and S. Up close the dots stay crisp (no 0.25° blocks), seen whole they do not shimmer or flicker while the planet turns, there is no seam at 180° or at the edge of the Amazon rectangle, no banner about the lightning image, and the indicator stays at 30 fps or more (also with `?lite=1`). With `lightning-4k.png` renamed away, Lightning falls back to the soft grid and the banner names the file; Forest height, smoke and the sound do not change.
 
 ## Result
 

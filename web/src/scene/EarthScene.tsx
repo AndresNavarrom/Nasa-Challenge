@@ -44,7 +44,7 @@ import {
   type ViewState,
 } from "./FocusTransition";
 import { GLOBE_RADIUS, screenX01 } from "./geo";
-import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type LayerTextures } from "./layerTexture";
+import { disposeLayerTextures, layerTextureFor, rampFor, showLayerFrame, type LayerTextures } from "./layerTexture";
 import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 import {
   AMAZON_REGION_ID,
@@ -70,6 +70,8 @@ export interface EarthSceneProps {
   data: JukeboxData;
   /** null: the plain Earth, no layer drawn. */
   activeLayer: LoadedLayer | null;
+  /** Instant of the active layer to draw, from the timeline (frameIndexAt); 0 for static layers. */
+  frame: number;
   targetView: TargetView;
   lite: boolean;
   /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
@@ -114,7 +116,7 @@ const LITE_SEGMENTS = { width: 64, height: 32 };
 function emptyLayerTextures(): LayerTextures {
   const region = new DataTexture(new Uint8Array(4), 1, 1);
   region.needsUpdate = true;
-  return { global: null, region, heightGlobal: null, heightRegion: null, opacity: 0.8, baseDim: 0 };
+  return { global: null, region, heightGlobal: null, heightRegion: null, opacity: 0.8, baseDim: 0, frame: 0 };
 }
 
 /** Size of the region map: about 0.09 degrees per cell, so the outline stays smooth on the zoomed map. */
@@ -262,6 +264,7 @@ function SceneContents(props: SceneContentsProps) {
   const {
     data,
     activeLayer,
+    frame,
     targetView,
     lite,
     autoRotate,
@@ -403,7 +406,13 @@ function SceneContents(props: SceneContentsProps) {
 
   // Sharp lightning dots: requested the first time lightning is shown, then kept
   // (same rule as the forest images), so start-up does not wait for them.
-  const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER;
+  // The dots image holds the whole period at once, so it is only drawn while the
+  // lightning data has a single instant. With one instant per quarter, the timeline
+  // draws each quarter from its grids instead (one quarter at a time, never accumulated).
+  // Kept on purpose, although the shipped data has 27 instants and never takes this
+  // path: if the lightning layer is ever published with a single instant again, the
+  // sharp dots (lightning-4k.png, dotImage.ts, `lightning_dots.py render`) apply.
+  const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER && activeLayer.region.frames <= 1;
   const dotStyle = lightningActive ? dotImageFor(DOT_IMAGE_LAYER) : null;
   const [lightningWanted, setLightningWanted] = useState(lightningActive);
   useEffect(() => {
@@ -422,11 +431,15 @@ function SceneContents(props: SceneContentsProps) {
     [dotStyle, lightningTexture],
   );
 
+  // The textures are built once per layer, at the instant on screen; later instants
+  // are swapped in place below, so playing the timeline does not rebuild them.
+  const frameRef = useRef(frame);
+  frameRef.current = frame;
   const layer = useMemo(() => {
     // The plain Earth view: an empty (fully transparent) layer, so only the planet shows.
     if (activeLayer === null) return { textures: emptyLayerTextures(), error: null };
     try {
-      return { textures: layerTextureFor(activeLayer), error: null };
+      return { textures: layerTextureFor(activeLayer, frameRef.current), error: null };
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       return { textures: emptyLayerTextures(), error: message };
@@ -441,6 +454,20 @@ function SceneContents(props: SceneContentsProps) {
     }
     return () => disposeLayerTextures(layer.textures);
   }, [layer]);
+
+  // The timeline moved to another instant: it replaces the one on screen.
+  useEffect(() => {
+    if (activeLayer === null || layer.error) return;
+    try {
+      showLayerFrame(layer.textures, activeLayer, frame);
+      // This instant drew well: a banner left by an earlier one no longer applies.
+      setLayerError(null);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error("Earth Jukebox could not draw an instant of a layer:", cause);
+      setLayerError(`${message} The layer stays on its previous instant.`);
+    }
+  }, [layer, activeLayer, frame]);
 
   // One banner for every source: a good layer or image clears itself without
   // hiding a failure somewhere else.
@@ -536,9 +563,10 @@ function SceneContents(props: SceneContentsProps) {
     (hit: GlobeHit): Probe => ({
       lon: hit.lon,
       lat: hit.lat,
-      value: activeLayer ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT) : null,
+      // The reading of the instant on screen, so the indicator matches the picture.
+      value: activeLayer ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, frame) : null,
     }),
-    [activeLayer, data.bbox],
+    [activeLayer, data.bbox, frame],
   );
 
   // The pointer can deliver several moves per frame; publish the latest one once.
@@ -596,7 +624,7 @@ function SceneContents(props: SceneContentsProps) {
     [],
   );
 
-  // A new layer changes the reading under a cursor that has not moved.
+  // A new layer (or a new instant of it) changes the reading under a cursor that has not moved.
   useEffect(() => {
     lastProbeRef.current = null;
     const hit = lastHitRef.current;
