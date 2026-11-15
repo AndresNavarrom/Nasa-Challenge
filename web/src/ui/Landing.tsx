@@ -232,10 +232,10 @@ export function Landing() {
           <div className={`${content} relative gap-8`}>
             <Eyebrow>NASA SPACE APPS CHALLENGE</Eyebrow>
             <h1 className={`${calmTitle} max-w-[820px] text-[clamp(2.75rem,7vw,5rem)] leading-[1.04] tracking-[-0.04em]`}>
-              Listen to the Amazon.
+              Listen to the Lungs of the World.
             </h1>
             <p className="max-w-[540px] text-[17px] leading-[1.6] text-landing-mist sm:text-[18px]">
-              NASA Earth data about the lungs of the world, turned into sound. Every layer has its own voice.
+              NASA Earth data about the Amazon, turned into sound. Every layer has its own voice.
             </p>
             <div className="mt-4 flex flex-col items-center gap-4">
               <OpenJukebox />
