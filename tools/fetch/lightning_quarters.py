@@ -4,8 +4,9 @@ The saved lightning windows (data/raw/5011/lightning_dots_2017_2023.npz, made by
 ``lightning_dots.py collect``) hold the lightning pixels of 250 frames of the
 SVS 5011 video, one every 0.4 s. Each frame shows the last ten days of LIS
 lightning; the video runs linearly from 1 January 2017 to 31 July 2023 over
-100 s, so frame ``k`` ends about ``k x 0.4 / 100`` of the way through the period
-(about 9.6 days apart).
+100 s, so frame ``k`` of ``n`` ends about ``k / n`` of the way through the period
+(about 9.6 days apart for the 250 frames expected; the count of the saved
+windows is used, not a fixed 250).
 
 Each window is placed in the quarter that holds its middle day, and every
 quarter becomes one image: the mean yellowness (0..255, see
@@ -36,6 +37,7 @@ PERIOD_START = date(2017, 1, 1)
 PERIOD_END = date(2023, 7, 31)
 VIDEO_SECONDS = 100.0
 SAMPLE_SECONDS = 0.4  # one frame every 0.4 s (ffmpeg fps=2.5)
+EXPECTED_FRAMES = int(VIDEO_SECONDS / SAMPLE_SECONDS)  # 250; the real count comes from the saved windows
 WINDOW_DAYS = 10
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -63,10 +65,14 @@ class Quarter:
         return f"{MONTHS[first - 1]} - {MONTHS[last - 1]} {self.year}"
 
 
-def window_middle(frame: int) -> date:
-    """Middle day of the ten-day window shown by frame ``frame`` of the samples."""
+def window_middle(frame: int, frames: int = EXPECTED_FRAMES) -> date:
+    """Middle day of the ten-day window shown by frame ``frame`` of ``frames`` samples.
+
+    The frames are spread evenly over the period, so a video that gave fewer or
+    more samples than expected still covers it from start to end.
+    """
     span = (PERIOD_END - PERIOD_START).days
-    end = PERIOD_START + timedelta(days=span * frame * SAMPLE_SECONDS / VIDEO_SECONDS)
+    end = PERIOD_START + timedelta(days=span * frame / frames)
     return end - timedelta(days=WINDOW_DAYS / 2)
 
 
@@ -88,7 +94,7 @@ def windows_by_quarter(frames: int) -> dict[Quarter, list[int]]:
     """Frames of each quarter of the period; windows whose middle falls outside the period are left out."""
     groups: dict[Quarter, list[int]] = {quarter: [] for quarter in quarters_in_period()}
     for frame in range(frames):
-        middle = window_middle(frame)
+        middle = window_middle(frame, frames)
         if middle < PERIOD_START or middle > PERIOD_END:
             continue
         groups[quarter_of(middle)].append(frame)

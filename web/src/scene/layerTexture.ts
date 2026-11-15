@@ -23,6 +23,12 @@ export interface ColorRamp {
   opacity?: number;
   /** How much the base image is turned dark grey under this layer (0 = untouched, 1 = fully), for contrast. */
   baseDim?: number;
+  /**
+   * Grid value (1..255) that takes the last colour of the ramp (default 255).
+   * For layers whose values sit low on the 0..255 scale, so the colours use the
+   * values the layer really has; higher values keep the last colour.
+   */
+  domain?: number;
 }
 
 /** Lightning colours of NASA SVS 5011: orange, yellow, then pale yellow-white where it strikes most. */
@@ -33,6 +39,25 @@ export const LIGHTNING_STOPS: readonly Rgb[] = [
   [255, 240, 150],
   [255, 252, 225],
 ];
+
+/**
+ * CO2 colours, after NASA SVS 5196: amber where there is a little, then orange and
+ * red-orange, pale yellow where there is the most (big emitters, fires).
+ */
+export const CO2_STOPS: readonly Rgb[] = [
+  [110, 50, 20],
+  [190, 85, 25],
+  [235, 70, 30],
+  [255, 150, 40],
+  [255, 235, 160],
+];
+
+/**
+ * Grid value that takes the brightest CO2 colour. The CO2 "warmth" grid sits low
+ * on its scale: across the planet half the cells are 0, 99 % are below 55 and only
+ * the biggest sources (eastern China, central Africa) pass 96 (about 0.3 % of cells).
+ */
+export const CO2_DOMAIN = 96;
 
 export const LAYER_OPACITY_DEFAULT = 0.8;
 
@@ -68,7 +93,19 @@ export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {
   forest: { low: [77, 61, 38], high: [253, 239, 229], maxAlpha: 1, stops: GEDI_COLORBAR, presence: { from: 6, fade: 4 }, opacity: 0.95 },
   smoke: SMOKE_RAMP,
   aerosol: SMOKE_RAMP,
-  co2: { low: [140, 90, 10], high: [255, 196, 50], maxAlpha: 1 },
+  // Hot spots stand out over a dimmed grey Earth: the faint background haze (below
+  // 14 of 255, where 90 % of the cells are) stays transparent, CO2 fades in up to
+  // 64 and is opaque above, and the colours span 0..CO2_DOMAIN instead of 0..255.
+  co2: {
+    low: CO2_STOPS[0]!,
+    high: CO2_STOPS[CO2_STOPS.length - 1]!,
+    maxAlpha: 1,
+    stops: CO2_STOPS,
+    domain: CO2_DOMAIN,
+    presence: { from: 64, fade: 50 },
+    opacity: 0.95,
+    baseDim: 0.7,
+  },
   // Like NASA SVS 5011: glowing orange and yellow flashes over a dimmed grey Earth.
   // Rare lightning stays transparent (half of the cells with any lightning are below
   // 14 of 255), so only the active regions show; the busiest turn almost white.
@@ -92,7 +129,8 @@ export function rampFor(layerId: string): ColorRamp {
 
 /** Colour of a grid value (0..255) on a ramp, interpolating between its stops when it has them. */
 export function rampColor(ramp: ColorRamp, value: number): Rgb {
-  const t = Math.min(1, Math.max(0, value / 255));
+  const domain = ramp.domain && ramp.domain > 0 ? ramp.domain : 255;
+  const t = Math.min(1, Math.max(0, value / domain));
   const stops = ramp.stops && ramp.stops.length >= 2 ? ramp.stops : [ramp.low, ramp.high];
   const position = t * (stops.length - 1);
   const index = Math.min(stops.length - 2, Math.floor(position));
@@ -254,12 +292,17 @@ export function showLayerFrame(textures: LayerTextures, layer: LoadedLayer, fram
   const next = frameIn(layer.region, frame);
   if (next === textures.frame) return;
   const id = layer.manifest.id;
-  const redraw = (texture: DataTexture, grid: Grid): void => {
-    texture.image.data = gridToRgba(grid, frameIn(grid, next), rampFor(id), id);
-    texture.needsUpdate = true;
-  };
-  if (textures.global && layer.global) redraw(textures.global, layer.global);
-  redraw(textures.region, layer.region);
+  // Both images are computed before either texture changes, so a failure leaves
+  // the planet and the Amazon map on the same (previous) instant.
+  const ramp = rampFor(id);
+  const globalPixels = textures.global && layer.global ? gridToRgba(layer.global, frameIn(layer.global, next), ramp, id) : null;
+  const regionPixels = gridToRgba(layer.region, frameIn(layer.region, next), ramp, id);
+  if (textures.global && globalPixels) {
+    textures.global.image.data = globalPixels;
+    textures.global.needsUpdate = true;
+  }
+  textures.region.image.data = regionPixels;
+  textures.region.needsUpdate = true;
   textures.frame = next;
 }
 

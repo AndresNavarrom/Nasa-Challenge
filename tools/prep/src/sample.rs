@@ -98,7 +98,7 @@ const LAYERS: [SampleLayer; 4] = [
     },
     SampleLayer {
         id: "co2",
-        title: "Global CO2",
+        title: "Atmospheric CO2",
         description: "Carbon dioxide in the atmosphere, the global context. More CO2 makes the breathing \
                       pulse faster and heavier. SAMPLE DATA: generated values, not NASA data.",
         source_title: "DYAMOND Global Carbon Dioxide (NASA SVS 5196)",

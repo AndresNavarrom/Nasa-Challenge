@@ -56,6 +56,14 @@ def test_windows_follow_the_video_in_order_and_fill_every_quarter():
     assert 0 not in flat
 
 
+def test_windows_are_spread_over_the_frames_given_not_a_fixed_250():
+    for frames in (200, 250, 300):
+        groups = windows_by_quarter(frames)
+        # Every quarter still gets a window, July 2023 included, and none is dropped.
+        assert all(groups[quarter] for quarter in quarters_in_period())
+        assert sum(len(group) for group in groups.values()) == frames - 1  # only frame 0 lies before the period
+
+
 def test_quarter_image_is_the_mean_of_its_own_windows_only():
     dots = dots_of([[(0, 200)], [(0, 100), (5, 250)], [(7, 255)]])
     grey = mean_of_windows(dots, [0, 1])

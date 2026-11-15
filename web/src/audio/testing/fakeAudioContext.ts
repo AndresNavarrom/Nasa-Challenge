@@ -108,7 +108,7 @@ export class FakeAudioBuffer {
 }
 
 export class FakeBufferSource extends FakeNode {
-  buffer: FakeAudioBuffer | null = null;
+  buffer: unknown = null;
   loop = false;
   readonly start = vi.fn();
   readonly stop = vi.fn();
@@ -136,6 +136,10 @@ export class FakeAudioContext {
       throw this.resumeError;
     }
     this.state = "running";
+  });
+  decodedDuration = 16.6;
+  readonly decodeAudioData = vi.fn(async (_data: ArrayBuffer): Promise<AudioBuffer> => {
+    return { duration: this.decodedDuration } as AudioBuffer;
   });
   readonly addEventListener = vi.fn();
   readonly removeEventListener = vi.fn();

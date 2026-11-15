@@ -165,9 +165,10 @@ docker compose up web     # then open http://127.0.0.1:5173/
 - **Planet**: it turns slowly by itself; drag it with the mouse to turn it,
   release and it keeps turning. The active layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
-  `web/public/data/manifest.json` appears there, with no code change. Until
-  the timeline exists every layer shows its **first instant**.
-- **Amazon only layers** (CO2 today, `global: null`): drawn inside
+  `web/public/data/manifest.json` appears there, with no code change. The
+  planet shows the instant of the timeline (the first one until Play): each
+  instant replaces the previous one.
+- **Amazon only layers** (`global: null`; none today): drawn inside
   the Amazon rectangle (`region.bbox`) from their regional grid, on the planet
   and on the map, and nothing elsewhere. Layers with a global grid use it
   outside the rectangle and their regional grid inside it.
@@ -274,7 +275,7 @@ See [`data/SOURCES.md`](data/SOURCES.md) for every file and link.
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics V3](https://doi.org/10.3334/ORNLDAAC/2525) (NASA GEDI, ORNL DAAC), filled with [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950) where GEDI has no data | Global, April 2019 - July 2025 | **Measurement** on a fixed scale: 0 to 50 m canopy height |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) surface PM2.5 (NASA GMAO model analysis) | Global, 1 September 2026, 24 hourly means | **Model value** on a fixed scale: 0 to 150 µg/m³ |
-| CO2 | DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) | Amazon only, 23 - 25 February 2020, every 6 h | **Relative intensity** read from the colours of the visualization, not ppm |
+| Atmospheric CO2 | DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196), 5760 x 3240 EXR frames | **Global**: the Americas and the Atlantic animated, 23 - 25 February 2020 every 6 h; elsewhere a fixed mosaic, 14 January - 3 March 2020 | **Relative intensity** read from the colours of the visualization, not ppm |
 | Lightning | Lightning Events Detected from the ISS 2017-2023, [NASA SVS 5011](https://svs.gsfc.nasa.gov/5011) | About 55° N to 55° S, 2017 - 2023, one frame per quarter (not accumulated) | **Relative frequency** read from the visualization, not a flash count |
 
 Backdrop of the planet: [Natural Earth I](https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/)
@@ -282,9 +283,12 @@ Backdrop of the planet: [Natural Earth I](https://www.naturalearthdata.com/downl
 
 **Forest height and smoke are measured or modelled values on fixed scales.
 CO2 and lightning are relative values read from rendered NASA visualizations,
-not physical measurements.** CO2 covers the Amazon rectangle only, because its
-visualization has no flat global view, and it is presented as global context,
-not as a measured effect of what happens in the Amazon.
+not physical measurements.** CO2 is global but a mosaic: SVS 5196 is only
+published as a turning globe, so only the Americas and the Atlantic move with the timeline and elsewhere each
+region shows the date of the view that covers it (where two views overlap,
+their dates are blended). The globe views were fitted to real coastlines
+(`tools/fetch/co2_calibrate.py`). CO2 is presented as global context, not as a
+measured effect of what happens in the Amazon.
 
 ## Use of AI
 
