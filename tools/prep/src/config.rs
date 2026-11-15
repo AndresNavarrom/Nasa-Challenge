@@ -7,7 +7,12 @@ use crate::error::{PrepError, Result};
 use crate::grid::{MIN_GLOBAL, MIN_REGION};
 use crate::project::Projection;
 
-pub const LAYER_IDS: [&str; 3] = ["forest", "smoke", "co2"];
+/// Layer ids the app accepts; keep in step with `LAYER_IDS` in web/src/data/types.ts.
+/// `co2` stays accepted although the data file no longer lists it.
+pub const LAYER_IDS: [&str; 4] = ["forest", "smoke", "co2", "lightning"];
+
+/// Largest grid side, in cells (FR2.1: at least 1440).
+pub const MAX_GRID_SIDE: u32 = 2048;
 
 /// Latitude/longitude rectangle in degrees.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -75,12 +80,20 @@ impl GridSizes {
                 self.region[0], self.region[1], MIN_REGION.0, MIN_REGION.1
             )));
         }
-        const MAX_SIDE: u32 = 1024;
-        if self.global.iter().chain(self.region.iter()).any(|side| *side > MAX_SIDE) {
-            return Err(PrepError::new(format!("grid sides must not exceed {MAX_SIDE} cells")));
+        if self.global.iter().chain(self.region.iter()).any(|side| *side > MAX_GRID_SIDE) {
+            return Err(PrepError::new(format!("grid sides must not exceed {MAX_GRID_SIDE} cells")));
         }
         Ok(())
     }
+}
+
+/// Grid sizes of one layer; each side given here replaces the general `grid` (FR3).
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub struct LayerGridSizes {
+    #[serde(default)]
+    pub global: Option<[u32; 2]>,
+    #[serde(default)]
+    pub region: Option<[u32; 2]>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -99,9 +112,57 @@ fn default_bbox() -> BBox {
     BBox::AMAZON
 }
 
+/// Base image of the planet (FR1): one flat latitude/longitude map of the whole Earth.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EarthConfig {
+    /// Path relative to the raw data folder.
     pub file: String,
+    /// Sizes `[width, height]` written for the app, each as `earth-<width/1024>k.jpg` (FR1.1).
+    #[serde(default = "default_earth_sizes")]
+    pub sizes: Vec<[u32; 2]>,
+    /// Output name of the crop of `bbox` at the source's own resolution (FR1.3); none when absent.
+    #[serde(default)]
+    pub region_file: Option<String>,
+}
+
+fn default_earth_sizes() -> Vec<[u32; 2]> {
+    vec![[8192, 4096], [4096, 2048]]
+}
+
+/// Largest base image side: WebGL textures above this are not usable.
+pub const MAX_EARTH_SIDE: u32 = 16384;
+
+impl EarthConfig {
+    pub fn validate(&self) -> Result<()> {
+        if self.sizes.is_empty() {
+            return Err(PrepError::new("earth: \"sizes\" lists no size"));
+        }
+        for [width, height] in &self.sizes {
+            if *width < 512 || *height < 256 || *width > MAX_EARTH_SIDE || *height > MAX_EARTH_SIDE {
+                return Err(PrepError::new(format!(
+                    "earth: size {width} x {height} must be between 512 x 256 and {MAX_EARTH_SIDE} pixels per side"
+                )));
+            }
+        }
+        if let Some(name) = &self.region_file {
+            let plain = !name.is_empty() && !name.contains(['/', '\\']) && !name.starts_with('.');
+            if !plain || !name.ends_with(".jpg") {
+                return Err(PrepError::new(format!(
+                    "earth: \"region_file\" must be a plain .jpg file name, got \"{name}\""
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// File name the app loads for a base image of `width` pixels.
+    pub fn size_file_name(width: u32) -> String {
+        if width % 1024 == 0 {
+            format!("earth-{}k.jpg", width / 1024)
+        } else {
+            format!("earth-{width}.jpg")
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,12 +182,26 @@ pub struct LayerConfig {
     /// False when the visualization has no usable flat global view (region-only layer).
     #[serde(default = "yes")]
     pub global: bool,
+    /// Grid sizes for this layer only; missing sides use the general `grid`.
+    #[serde(default)]
+    pub grid: Option<LayerGridSizes>,
     pub value: ValueConfig,
     pub instants: Vec<InstantConfig>,
 }
 
 fn yes() -> bool {
     true
+}
+
+impl LayerConfig {
+    /// The grid sizes this layer is prepared at: its own `grid` where given, else `general`.
+    pub fn grid_sizes(&self, general: GridSizes) -> GridSizes {
+        let own = self.grid.unwrap_or_default();
+        GridSizes {
+            global: own.global.unwrap_or(general.global),
+            region: own.region.unwrap_or(general.region),
+        }
+    }
 }
 
 /// One moment in time, built from one or more frames (several globe views are blended).
@@ -235,8 +310,82 @@ impl PrepConfig {
                     layer.id
                 )));
             }
+            layer
+                .grid_sizes(self.grid)
+                .validate()
+                .map_err(|cause| PrepError::new(format!("layer \"{}\": {cause}", layer.id)))?;
+        }
+        if let Some(earth) = &self.earth {
+            earth.validate()?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A one-layer configuration with the given general `grid` and layer `grid` (JSON text or "null").
+    fn config_with(grid: &str, layer_grid: &str) -> PrepConfig {
+        let text = format!(
+            r#"{{
+              "grid": {grid},
+              "layers": [{{
+                "id": "lightning", "title": "Lightning", "description": "Test layer",
+                "source": {{ "title": "SVS 5011", "url": "https://svs.gsfc.nasa.gov/5011" }},
+                "static": true,
+                "grid": {layer_grid},
+                "value": {{ "method": "brightness" }},
+                "instants": [{{ "date": "2017 - 2023 (accumulated)", "views": [{{
+                  "file": "5011/lightning_2017_2023.png",
+                  "projection": {{ "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 }}
+                }}] }}]
+              }}]
+            }}"#
+        );
+        serde_json::from_str(&text).expect("test configuration parses")
+    }
+
+    #[test]
+    fn accepts_grids_of_1440_by_720_and_rejects_sides_above_the_cap() {
+        let fine = config_with(r#"{ "global": [1440, 720], "region": [360, 280] }"#, "null");
+        assert!(fine.validate().is_ok(), "{:?}", fine.validate());
+
+        let too_wide = config_with(r#"{ "global": [2049, 720], "region": [360, 280] }"#, "null");
+        let error = too_wide.validate().unwrap_err();
+        assert!(error.to_string().contains("2048"), "{error}");
+
+        // The cap applies to the region grid too, and the minimum still holds.
+        assert!(config_with(r#"{ "global": [1440, 720], "region": [360, 2049] }"#, "null").validate().is_err());
+        assert!(config_with(r#"{ "global": [71, 36] }"#, "null").validate().is_err());
+    }
+
+    #[test]
+    fn a_layer_grid_replaces_the_general_grid_side_by_side() {
+        let config = config_with(r#"{ "global": [1440, 720], "region": [144, 112] }"#, r#"{ "region": [360, 280] }"#);
+        assert!(config.validate().is_ok(), "{:?}", config.validate());
+
+        let sizes = config.layers[0].grid_sizes(config.grid);
+        assert_eq!(sizes.region, [360, 280]); // the layer's own region grid
+        assert_eq!(sizes.global, [1440, 720]); // the general global grid, not given by the layer
+
+        // Without a layer grid, the general one is used.
+        let plain = config_with(r#"{ "global": [1440, 720], "region": [144, 112] }"#, "null");
+        assert_eq!(plain.layers[0].grid_sizes(plain.grid).region, [144, 112]);
+
+        // A layer grid is checked with the same limits, naming the layer.
+        let bad = config_with(r#"{ "global": [1440, 720] }"#, r#"{ "region": [4096, 280] }"#);
+        let error = bad.validate().unwrap_err();
+        assert!(error.to_string().contains("lightning"), "{error}");
+    }
+
+    #[test]
+    fn lightning_and_co2_are_both_known_layer_ids() {
+        assert!(LAYER_IDS.contains(&"lightning"));
+        assert!(LAYER_IDS.contains(&"co2"));
+        assert_eq!(EarthConfig::size_file_name(8192), "earth-8k.jpg");
+        assert_eq!(EarthConfig::size_file_name(4096), "earth-4k.jpg");
     }
 }
 

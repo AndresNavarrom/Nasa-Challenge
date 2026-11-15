@@ -2,14 +2,15 @@
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
-use image::{imageops::FilterType, DynamicImage, RgbImage, RgbaImage};
+use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, ImageReader, RgbImage, RgbaImage};
 
 use crate::color::{brightness_value, colorbar_value, stretch_brightness, warmth_value, Rgb};
 use crate::config::{
-    BBox, ColorbarImage, GridOut, GridSizes, LayerConfig, LayerOut, Manifest, PrepConfig, RegionOut,
-    ValueConfig, ViewConfig,
+    BBox, ColorbarImage, EarthConfig, GridOut, GridSizes, LayerConfig, LayerOut, Manifest, PrepConfig,
+    RegionOut, ValueConfig, ViewConfig,
 };
 use crate::error::{PrepError, Result};
 use crate::grid::{check_image_size, quantize, reduce_to_grid, MIN_REGION};
@@ -18,7 +19,8 @@ use crate::grid::{check_image_size, quantize, reduce_to_grid, MIN_REGION};
 const SUPERSAMPLE: u32 = 4;
 const GLOBAL_TEXTURE: (u32, u32) = (1024, 512);
 const REGION_TEXTURE_WIDTH: u32 = 512;
-const EARTH_TEXTURE: (u32, u32) = (2048, 1024);
+/// JPEG quality of the base images (FR1).
+const EARTH_JPEG_QUALITY: u8 = 85;
 
 /// Colour -> value rule with the colour bar already resolved to a list of stops.
 pub enum ValueMethod {
@@ -375,16 +377,74 @@ fn remove_stale_global(out_dir: &Path, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Resizes the base image of the planet and stores it as `earth.jpg`.
-fn prepare_earth(file: &str, raw_dir: &Path, out_dir: &Path) -> Result<()> {
-    let path = raw_dir.join(file);
-    let image = load_rgb(&path)?;
-    check_image_size(file, image.width(), image.height(), (512, 256))?;
-    let resized = image::imageops::resize(&image, EARTH_TEXTURE.0, EARTH_TEXTURE.1, FilterType::Triangle);
-    let target = out_dir.join("earth.jpg");
-    DynamicImage::ImageRgb8(resized)
-        .save(&target)
-        .map_err(|cause| PrepError::new(format!("could not write {}: {cause}", target.display())))
+/// Pixel rectangle inside an image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PixelRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Pixels of a whole-Earth flat map (`width` x `height`, west and north edge first) covered by `bbox`.
+pub fn crop_rect(bbox: BBox, width: u32, height: u32) -> Result<PixelRect> {
+    if bbox.west < -180.0 || bbox.east > 180.0 {
+        return Err(PrepError::new(format!(
+            "the rectangle crosses the 180 degree meridian (west {} east {}); the base image crop cannot wrap",
+            bbox.west, bbox.east
+        )));
+    }
+    let column = |lon: f64| ((lon + 180.0) / 360.0 * width as f64).round() as u32;
+    let row = |lat: f64| ((90.0 - lat) / 180.0 * height as f64).round() as u32;
+    let (x0, x1) = (column(bbox.west), column(bbox.east).min(width));
+    let (y0, y1) = (row(bbox.north), row(bbox.south).min(height));
+    if x1 <= x0 || y1 <= y0 {
+        return Err(PrepError::new(format!(
+            "the rectangle covers no pixel of a {width} x {height} image"
+        )));
+    }
+    Ok(PixelRect { x: x0, y: y0, width: x1 - x0, height: y1 - y0 })
+}
+
+/// Opens a possibly very large image (the 21600 x 10800 Natural Earth TIFF is about
+/// 700 MB decoded) without the decoder's default memory limit.
+fn load_large_rgb(path: &Path) -> Result<RgbImage> {
+    let fail = |cause: String| PrepError::new(format!("could not read the image {}: {cause}", path.display()));
+    let mut reader = ImageReader::open(path)
+        .map_err(|cause| fail(cause.to_string()))?
+        .with_guessed_format()
+        .map_err(|cause| fail(cause.to_string()))?;
+    reader.no_limits();
+    Ok(reader.decode().map_err(|cause| fail(cause.to_string()))?.into_rgb8())
+}
+
+fn save_jpeg(path: &Path, image: &RgbImage) -> Result<()> {
+    let fail = |cause: String| PrepError::new(format!("could not write {}: {cause}", path.display()));
+    let file = fs::File::create(path).map_err(|cause| fail(cause.to_string()))?;
+    JpegEncoder::new_with_quality(BufWriter::new(file), EARTH_JPEG_QUALITY)
+        .encode_image(image)
+        .map_err(|cause| fail(cause.to_string()))
+}
+
+/// Writes the base image of the planet at every configured size, plus the crop of
+/// `bbox` at the source's own resolution (FR1.1, FR1.3). `earth.jpg` is no longer written.
+fn prepare_earth(earth: &EarthConfig, bbox: BBox, raw_dir: &Path, out_dir: &Path) -> Result<()> {
+    let image = load_large_rgb(&raw_dir.join(&earth.file))?;
+    check_image_size(&earth.file, image.width(), image.height(), (512, 256))?;
+    println!("  earth source {} x {}", image.width(), image.height());
+    if let Some(name) = &earth.region_file {
+        let rect = crop_rect(bbox, image.width(), image.height())?;
+        let crop = image::imageops::crop_imm(&image, rect.x, rect.y, rect.width, rect.height).to_image();
+        save_jpeg(&out_dir.join(name), &crop)?;
+        println!("  {name} written ({} x {})", rect.width, rect.height);
+    }
+    for [width, height] in &earth.sizes {
+        let resized = image::imageops::resize(&image, *width, *height, FilterType::Triangle);
+        let name = EarthConfig::size_file_name(*width);
+        save_jpeg(&out_dir.join(&name), &resized)?;
+        println!("  {name} written ({width} x {height})");
+    }
+    Ok(())
 }
 
 /// Runs the whole preparation described by `config`.
@@ -392,14 +452,40 @@ pub fn run(config: &PrepConfig, raw_dir: &Path, out_dir: &Path) -> Result<Manife
     config.validate()?;
     ensure_dir(out_dir)?;
     if let Some(earth) = &config.earth {
-        prepare_earth(&earth.file, raw_dir, out_dir)?;
-        println!("  earth.jpg written");
+        prepare_earth(earth, config.bbox, raw_dir, out_dir)?;
     }
     let mut layers = Vec::with_capacity(config.layers.len());
     for layer in &config.layers {
-        layers.push(prepare_layer(layer, config.bbox, config.grid, raw_dir, out_dir)?);
+        let sizes = layer.grid_sizes(config.grid);
+        layers.push(prepare_layer(layer, config.bbox, sizes, raw_dir, out_dir)?);
     }
     let manifest = Manifest { layers, region: RegionOut { bbox: config.bbox } };
     write_manifest(out_dir, &manifest)?;
     Ok(manifest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crop_rect_finds_the_amazon_in_the_natural_earth_image() {
+        // Natural Earth 10m: 21600 x 10800 pixels, 1 arc-minute each.
+        let rect = crop_rect(BBox::AMAZON, 21600, 10800).expect("inside the image");
+        assert_eq!(rect, PixelRect { x: 6000, y: 4920, width: 2160, height: 1680 });
+
+        // Same rectangle on the 4096 x 2048 base image: proportional, rounded to whole pixels.
+        let small = crop_rect(BBox::AMAZON, 4096, 2048).expect("inside the image");
+        assert_eq!((small.x, small.y, small.width, small.height), (1138, 933, 409, 319));
+    }
+
+    #[test]
+    fn crop_rect_rejects_rectangles_it_cannot_cut() {
+        // Across the 180 degree meridian.
+        let pacific = BBox { west: 170.0, south: -10.0, east: 190.0, north: 10.0 };
+        assert!(crop_rect(pacific, 21600, 10800).unwrap_err().to_string().contains("180"));
+        // Narrower than one pixel of a tiny image.
+        let sliver = BBox { west: 10.0, south: 0.0, east: 10.1, north: 0.1 };
+        assert!(crop_rect(sliver, 360, 180).is_err());
+    }
 }
