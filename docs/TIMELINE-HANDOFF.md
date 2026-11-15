@@ -1,9 +1,10 @@
 # Timeline — decisions and handoff
 
-Status: playback logic and audio are implemented on the `timeline` branch
-(rebased on the latest `main`). The visual frames, the timeline bar and keyboard
-support are still to be built by the interfaz owner, **Andrés
-(`AndresNavarrom`)** — this is the explicit ask on the pull request.
+Status: the timeline is static and user-driven in the app (team decision
+2026-11-15). The playback library remains available, but the app never starts
+it: the provided datasets do not have enough temporal resolution for
+play/pause or speed changes to be sonically interesting. The timeline bar is
+built; the visual frames and keyboard support are still pending.
 
 Try it now: `docker compose up web`, then open
 <http://127.0.0.1:5173/timeline-check.html>. That development page uses the real
@@ -31,8 +32,9 @@ Please build the visible half against the contract below. Work in this order:
    the position changes.
 
 The `timeline` logic is already in place: `useTimeline()` gives
-`position/playing/speed/loop/durationSeconds` and the actions; do not duplicate
-the clock. Try the sound side at `/timeline-check.html` while wiring.
+`position/playing/speed/loop/durationSeconds` and the actions; the app only uses
+`position` and `seek` for the static bar. Do not duplicate the clock. The dev
+harness still exercises the unused playback library.
 
 ## Decisions
 
@@ -41,7 +43,7 @@ the clock. Try the sound side at `/timeline-check.html` while wiring.
 | Time model | **Shared narrative position 0..1** | The layers do not share a real calendar: forest is 2019–2020, CO2 is 23–25 Feb 2020, smoke is “Jul–Aug 2024, clip 0:00…1:05”. Each layer walks its own period and shows its own label. |
 | Between instants | **Interpolate** | Audio already blends linearly between frames (`sampleGrid`); the image should crossfade between the same two frames so picture and sound stay together. |
 | End of sequence | **Loop forever** | Matches `advancePosition` and the demo loop. |
-| Speed | **0.1×–8×**, slider | “Arbitrary speed” with a safe range; speed only scales the shared position, it does not change the data. |
+| Speed | **Not used by the app** since 2026-11-15 | `playback.ts` still supports 0.1×–8× for future data, but the provided datasets lack the temporal resolution to make speed changes sonically interesting. |
 | Duration at 1× | **24 s** | `DEFAULT_DURATION_SECONDS`; a full loop is ~2 s per CO2 frame. |
 | State update rate | **30 Hz** | Enough for audio and a smooth scrubber without re-rendering the app at 60 Hz. |
 | Background tabs | Step capped at **0.25 s** | A backgrounded tab must not jump the sequence when it returns. |
@@ -54,25 +56,28 @@ the clock. Try the sound side at `/timeline-check.html` while wiring.
     crossfade, with the same mix the audio uses.
   - `dateLabelAt(layer, position)`: nearest instant’s label.
   - `advancePosition(position, Δs, duration, loop)`.
-- `web/src/lib/playback.ts` (pure, tested)
+- `web/src/lib/playback.ts` (pure, tested; **library only, not used by the app**)
   - `PlaybackState`: `position`, `playing`, `speed`, `loop`, `durationSeconds`.
   - `createPlayback(overrides)`, `playbackReducer(state, action)`.
   - Actions: `play`, `pause`, `toggle`, `seek`, `set-speed`, `set-loop`,
     `set-duration`, `advance`.
   - `MIN_SPEED`, `MAX_SPEED`, `DEFAULT_DURATION_SECONDS`.
+  - Kept for future data with more temporal resolution; the app only calls
+    `seek`.
 - `web/src/timeline/TimelineProvider.tsx`
   - `<TimelineProvider>` wraps the app; `useTimeline()` returns the state plus
     `play/pause/toggle/seek/setSpeed/setLoop/setDuration`.
-  - Runs the `requestAnimationFrame` clock while playing and publishes at
-    `TIMELINE_UPDATE_HZ` (30).
+  - Runs the `requestAnimationFrame` clock while playing, but the app never
+    starts it; the static bar only dispatches `seek`.
 - `web/src/App.tsx`
   - The app is wrapped in `TimelineProvider`.
   - `AudioListener` samples every layer with
     `framePosition(position, layer.region.frames)` and the listening point.
     Static layers have one frame, so their frame is 0.
 - `web/timeline-check.html` + `web/src/timeline/check.ts`
-  - Dev harness: start sound, play/pause, scrub, 0.1×–8×, per-layer date and
-    frame-blend readout, meter.
+  - Dev harness for the unused playback library: start sound, play/pause,
+    scrub, 0.1×–8×, per-layer date and frame-blend readout, meter. The app itself
+    is static.
 
 ## Handoff to the scene / UI owner
 
@@ -125,14 +130,9 @@ Props come from `useTimeline`:
 ```ts
 interface TimelineBarProps {
   position: number;
-  playing: boolean;
-  speed: number;
-  loop: boolean;
-  durationSeconds: number;
-  layers: LoadedLayer[];        // for the per-layer labels
+  /** The picked layer; the bar is shown only for a layer that changes over time. */
+  layer: LoadedLayer;
   onSeek(position: number): void;
-  onToggle(): void;
-  onSpeed(speed: number): void;
 }
 ```
 
@@ -145,14 +145,16 @@ interface TimelineBarProps {
   slot next to `audio`).
 
 ### 5. Keyboard / screen reader (step 14)
-Space = play/pause, ←/→ = step the position, and the existing a11y text should
-include the current date label and position.
+←/→ step the position; there is no play/pause since 2026-11-15. The existing
+a11y text should include the current date label and position.
 
-## High-speed tuning
-The audio engine smooths at 0.15 s and settles 250 ms after the last input. At
-8× a CO2 frame lasts ~0.25 s, so the settle may lag the display. After wiring,
-listen at 8× and, if needed, shorten `SETTLE_MS`/`smoothingSeconds` proportionally
-to the speed (or only settle when `speed <= 4`).
+## Playback and speed status
+The playback library (`playback.ts`, `TimelineProvider`) still supports
+play/pause and 0.1×–8×, but the app does not start it. The team decided on
+2026-11-15 that the provided datasets do not have enough temporal resolution for
+speed changes to be sonically interesting; the timeline is static and moved by
+hand. Keep the library for future data with more resolution. The dev harness
+`/timeline-check.html` still exercises it.
 
 ## Data truth and limitations
 - Values are relative intensities, not physical measurements (see `data/SOURCES.md`).
