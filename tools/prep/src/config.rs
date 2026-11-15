@@ -219,6 +219,13 @@ pub struct ViewConfig {
     /// Pixel rectangles `[x, y, width, height]` to ignore (labels, legends, date stamps).
     #[serde(default)]
     pub masks: Vec<[f64; 4]>,
+    /// How this view's colours become values; the layer's `value` when absent.
+    #[serde(default)]
+    pub value: Option<ValueConfig>,
+    /// A fallback view is only used where the main (non-fallback) views of the instant
+    /// have no data, and is never blended with them (FR3).
+    #[serde(default)]
+    pub fallback: bool,
 }
 
 /// How a pixel colour becomes a 0..1 value.
@@ -278,6 +285,51 @@ fn default_samples() -> usize {
     16
 }
 
+impl ValueConfig {
+    /// Checks what can be checked without reading files (the colour bar image is read later).
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            ValueConfig::Brightness { low, high, .. } if high <= low => {
+                Err(PrepError::new("brightness: \"high\" must be greater than \"low\""))
+            }
+            ValueConfig::Warmth { low, high } if high <= low => {
+                Err(PrepError::new("warmth: \"high\" must be greater than \"low\""))
+            }
+            ValueConfig::Colorbar { stops, image: None, .. } if stops.len() < 2 => Err(PrepError::new(
+                "colorbar: give at least two \"stops\" or an \"image\" of the colour bar",
+            )),
+            ValueConfig::Colorbar { image: Some(bar), .. } if bar.samples < 2 => {
+                Err(PrepError::new("colorbar image: \"samples\" must be at least 2"))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+impl LayerConfig {
+    /// The layer's value method, each view's own method, and at least one main view per instant.
+    fn validate_views(&self) -> Result<()> {
+        let named = |cause: PrepError| PrepError::new(format!("layer \"{}\": {cause}", self.id));
+        self.value.validate().map_err(named)?;
+        for instant in &self.instants {
+            if instant.views.iter().all(|view| view.fallback) {
+                return Err(named(PrepError::new(format!(
+                    "instant \"{}\" has only fallback views; at least one view must be a main view",
+                    instant.date
+                ))));
+            }
+            for view in &instant.views {
+                if let Some(value) = &view.value {
+                    value
+                        .validate()
+                        .map_err(|cause| named(PrepError::new(format!("view {}: {cause}", view.file))))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl PrepConfig {
     pub fn validate(&self) -> Result<()> {
         self.bbox.validate()?;
@@ -314,6 +366,7 @@ impl PrepConfig {
                 .grid_sizes(self.grid)
                 .validate()
                 .map_err(|cause| PrepError::new(format!("layer \"{}\": {cause}", layer.id)))?;
+            layer.validate_views()?;
         }
         if let Some(earth) = &self.earth {
             earth.validate()?;
@@ -378,6 +431,51 @@ mod tests {
         let bad = config_with(r#"{ "global": [1440, 720] }"#, r#"{ "region": [4096, 280] }"#);
         let error = bad.validate().unwrap_err();
         assert!(error.to_string().contains("lightning"), "{error}");
+    }
+
+    /// A forest-like layer: a main equirect view, plus one fallback view with the given `value` (JSON).
+    fn config_with_fallback_view(fallback_value: &str) -> serde_json::Result<PrepConfig> {
+        let text = format!(
+            r#"{{
+              "grid": {{ "global": [1440, 720], "region": [360, 280] }},
+              "layers": [{{
+                "id": "forest", "title": "Forest height", "description": "Test layer",
+                "source": {{ "title": "GEDI L3", "url": "https://doi.org/10.3334/ORNLDAAC/2525" }},
+                "static": true,
+                "value": {{ "method": "brightness", "low": 0, "high": 1 }},
+                "instants": [{{ "date": "Apr 2019 - Jul 2025", "views": [
+                  {{ "file": "gedi/gedi_l3_rh100_mean_0p1deg.png",
+                     "projection": {{ "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 }} }},
+                  {{ "file": "4950/4k/GEDI_global.1711.png", "fallback": true, "value": {fallback_value},
+                     "projection": {{ "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040,
+                                      "center_lon": -59.55, "center_lat": -0.38 }} }}
+                ] }}]
+              }}]
+            }}"#
+        );
+        serde_json::from_str(&text)
+    }
+
+    #[test]
+    fn fallback_view_with_its_own_value_method_validates() {
+        let colorbar = r#"{ "method": "colorbar", "stops": [[0, 0, 0], [255, 0, 0]], "max_distance": 60 }"#;
+        let config = config_with_fallback_view(colorbar).expect("parses");
+        assert!(config.validate().is_ok(), "{:?}", config.validate());
+        let views = &config.layers[0].instants[0].views;
+        assert!(!views[0].fallback && views[0].value.is_none(), "main view: layer method, not a fallback");
+        assert!(views[1].fallback && matches!(views[1].value, Some(ValueConfig::Colorbar { .. })));
+
+        // An unknown method name is rejected when the file is read.
+        assert!(config_with_fallback_view(r#"{ "method": "rainbow" }"#).is_err());
+
+        // A known method with impossible settings is rejected by validation, naming layer and view.
+        let inverted = config_with_fallback_view(r#"{ "method": "brightness", "low": 0.5, "high": 0.2 }"#).unwrap();
+        let error = inverted.validate().unwrap_err().to_string();
+        assert!(error.contains("forest") && error.contains("GEDI_global.1711.png") && error.contains("high"), "{error}");
+
+        // A colour bar with neither stops nor image is rejected too.
+        let empty_bar = config_with_fallback_view(r#"{ "method": "colorbar" }"#).unwrap();
+        assert!(empty_bar.validate().is_err());
     }
 
     #[test]
