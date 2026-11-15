@@ -1,6 +1,6 @@
 # Scenes — plan
 
-Status: implemented on `scenes`; coordinates for birds and river are filled.
+Status: implemented on `scenes`; all four scenes have data-derived coordinates.
 Feature branch: `scenes` (merged with `audio-samples` for the ARPA asset).
 Assets: `data/scenes/` (source) and `web/public/scenes/` (published).
 
@@ -19,6 +19,8 @@ Two scenes exist today:
 |---|---|---|---|
 | `birds` | `birds/birds.jpeg` (596×335) | `birds/birds.ogg` (Vorbis 48 kHz stereo) | 30.0 s |
 | `river` | `river/iss074e0492148~medium.jpg` (1280×853) | `river/amazon-river.ogg` (Vorbis 48 kHz stereo) | 30.6 s |
+| `storm` | `storm/storm.jpg` (576×324) | `storm/storm.ogg` (Vorbis 48 kHz stereo) | 30.0 s |
+| `deforestation` | `deforestation/deforestation.jpg` (1024×768) | `deforestation/deforestation.ogg` (Vorbis 48 kHz stereo) | 20.0 s |
 
 The transition is `ARPA.wav` (1.58 s). **Decided:** the loop fade starts with the transition and reaches full at 0.5 s; the remaining ~1.1 s of ARPA plays over the loop.
 
@@ -261,7 +263,11 @@ Total: roughly **10–12 h**; the audio and marker pieces can be developed in pa
 
 ## Implementation notes
 
-- Coordinates are filled: birds `(-68.546, -3.398)`, river `(-73.246, -0.868)`.
+- Coordinates are filled: birds `(-68.546, -3.398)`, river `(-73.246, -0.868)`,
+  storm `(-70.050, -13.250)`, deforestation `(-58.650, -1.050)`.
+- The storm point is the maximum of the lightning layer in the Amazon; the
+  deforestation point is a low-forest cell surrounded by tall forest in the
+  central Amazon (value 7/255, about 1.4 m on the GEDI scale).
 - `tools/scenes/prepare.py` validates them against the Amazon box and publishes
   `web/public/scenes/` (`scenes-prep` Docker service).
 - Markers are small white dots (half the previous size) with a thin white pulse
@@ -280,5 +286,5 @@ Total: roughly **10–12 h**; the audio and marker pieces can be developed in pa
 
 ## Open decisions
 
-- **Credits:** still missing the image and audio sources/licences for the two
+- **Credits:** still missing the image and audio sources/licences for the four
   scenes (`imageCredit`/`audioCredit` in `data/scenes/scenes.json`).

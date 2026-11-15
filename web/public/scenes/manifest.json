@@ -31,6 +31,32 @@
       "loopGain": 0.8,
       "imageCredit": null,
       "audioCredit": null
+    },
+    {
+      "id": "storm",
+      "title": "Amazon Storms",
+      "description": "Storms and heavy rain are part of the Amazon water cycle. Lightning is most frequent where the atmosphere is unstable, and the forest depends on this water and energy.",
+      "lon": -70.05,
+      "lat": -13.25,
+      "image": "scenes/storm/storm.jpg",
+      "imageAlt": "Rain falling over an Amazon river",
+      "loop": "scenes/storm/storm.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
+    },
+    {
+      "id": "deforestation",
+      "title": "Deforestation",
+      "description": "This point has some of the lowest forest height in the data while tall forest surrounds it: a clearing in the Amazon. Cleared and degraded forest changes the landscape and its ecosystems.",
+      "lon": -58.65,
+      "lat": -1.05,
+      "image": "scenes/deforestation/deforestation.jpg",
+      "imageAlt": "Cleared forest and fallen trees in the Amazon",
+      "loop": "scenes/deforestation/deforestation.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
     }
   ]
 }
