@@ -1,6 +1,7 @@
 // Timeline bar (plan Step 13, FR7). The timeline is static: it never moves by
 // itself. The person picks the moment with the Time slider and it stays there;
-// the bar also shows the date each changing layer is at. It only shows and
+// the bar also shows the date the picked layer is at. It is only shown for a
+// layer that changes over time (smoke, CO2), never for a static one. It only shows and
 // changes the shared clock of TimelineProvider; it owns no clock.
 //
 // Same look as the HUD: slate text, mono numbers like the place indicator, and
@@ -8,12 +9,12 @@
 
 import type { LoadedLayer } from "../data/types";
 import { dateLabelAt } from "../lib/timeline";
-import { SCRUB_STEP, formatPercent, scrubValueText, timedLayers } from "./timelineFormat";
+import { SCRUB_STEP, formatPercent, scrubValueText } from "./timelineFormat";
 
 export interface TimelineBarProps {
   position: number;
-  /** Every layer; the bar shows the date of the ones that change over time. */
-  layers: LoadedLayer[];
+  /** The picked layer, one that changes over time; the bar shows its date. */
+  layer: LoadedLayer;
   onSeek: (position: number) => void;
   className?: string;
 }
@@ -21,8 +22,8 @@ export interface TimelineBarProps {
 const slider = "w-full cursor-pointer accent-emerald-600 [color-scheme:dark]";
 
 export function TimelineBar(props: TimelineBarProps) {
-  const { position, layers, onSeek, className = "" } = props;
-  const dated = timedLayers(layers);
+  const { position, layer, onSeek, className = "" } = props;
+  const { manifest } = layer;
 
   return (
     <div data-testid="timeline-bar" className={`flex flex-col gap-2 ${className}`}>
@@ -43,16 +44,10 @@ export function TimelineBar(props: TimelineBarProps) {
         />
       </label>
 
-      {dated.length > 0 && (
-        <ul className="flex flex-col gap-1" aria-label="Date of each layer">
-          {dated.map(({ manifest }) => (
-            <li key={manifest.id} data-testid={`timeline-date-${manifest.id}`}>
-              <span className="text-slate-300">{manifest.title}</span>
-              <span className="block font-mono text-xs text-slate-400">{dateLabelAt(manifest, position)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <p data-testid={`timeline-date-${manifest.id}`}>
+        <span className="text-slate-300">{manifest.title}</span>
+        <span className="block font-mono text-xs text-slate-400">{dateLabelAt(manifest, position)}</span>
+      </p>
     </div>
   );
 }

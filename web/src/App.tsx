@@ -11,7 +11,7 @@ import { AudioStart } from "./audio/AudioStart";
 import type { SoundEngine } from "./audio/engine";
 import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
-import type { JukeboxData } from "./data/types";
+import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
 import { framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
@@ -25,6 +25,7 @@ import { PlanetHud } from "./ui/PlanetHud";
 import { TimelineBar } from "./ui/TimelineBar";
 import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
 import { layerVoices } from "./ui/soloLayer";
+import { timelineLayer } from "./ui/timelineFormat";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
@@ -164,13 +165,13 @@ function AudioListener({
  * clock, so moving the Time slider re-renders it alone, not the planet view
  * around it.
  */
-function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
+function TimelineControls({ layer }: { layer: LoadedLayer }) {
   const timeline = useTimeline();
   return (
     <TimelineBar
       className="w-56"
       position={timeline.position}
-      layers={layers}
+      layer={layer}
       onSeek={timeline.seek}
     />
   );
@@ -211,6 +212,8 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   // Starts on the plain Earth view, with no layer drawn and none sounding.
   const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const showTour = useGuidedTour();
+  // The timeline bar only for a picked layer that changes over time (smoke, CO2).
+  const timedLayer = useMemo(() => timelineLayer(data.layers, activeLayerId), [data, activeLayerId]);
 
   // The layers never mix: only the picked layer sounds (plain Earth: none).
   useEffect(() => {
@@ -226,7 +229,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         data={data}
         lite={lite}
         audio={<AudioStart engine={engine} className="w-56" />}
-        timeline={<TimelineControls layers={data.layers} />}
+        timeline={timedLayer ? <TimelineControls layer={timedLayer} /> : undefined}
         activeLayerId={activeLayerId}
         onSelectLayer={setActiveLayerId}
         onShowTour={showTour}

@@ -53,7 +53,7 @@ count, who tested). Planet-specific checks during development are in
 - [ ] **Planet (FR5)**: opens on the 3D planet, which can be turned, with the layers visible
 - [ ] **To the Amazon and back (FR5.2)**: each transition takes **2 s or less**, with no sound cut. Out: ____ s · Back: ____ s
 - [ ] **Frame rate (NFR3)**: planet, transition, map and timeline at **30 fps or more**. Lowest seen: ____ fps
-- [ ] **Timeline (FR7)**: static; it never moves by itself, the Time slider sets the moment; smoke and CO2 dates visible; picture and sound move together
+- [ ] **Timeline (FR7)**: static; it never moves by itself, the Time slider sets the moment; the bar and the date show only for the picked layer when it changes over time (smoke, CO2), never for forest or lightning; picture and sound move together
 - [ ] **Story mode (FR8)**: runs through forest, smoke and CO2 in **under 60 s**: ____ s. The text presents CO2 as global context, not as a measured effect of the Amazon
 
 ## 5. Accessibility (FR9)

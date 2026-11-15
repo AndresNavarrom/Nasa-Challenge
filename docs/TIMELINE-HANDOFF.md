@@ -15,7 +15,8 @@ of the app or the production bundle.
 Please build the visible half against the contract below. Work in this order:
 
 1. **`web/src/ui/TimelineBar.tsx`** — range `0..1` (scrub), percentage and
-   `dateLabelAt` for every non-static layer. `data-testid`: `timeline-bar`,
+   `dateLabelAt` of the picked layer only; the bar is hidden when the picked
+   layer is static (forest, lightning) or on the plain Earth view. `data-testid`: `timeline-bar`,
    `timeline-scrub`, `timeline-date-<id>`. Team decision of 2026-11-15: the
    timeline is static and set by the person, so the bar has no play/pause and
    no speed control (the provider's playback stays, unused by the app).
@@ -137,8 +138,8 @@ interface TimelineBarProps {
 
 - Range `0..1` (step 0.001) for scrubbing. No speed slider and no play/pause
   since 2026-11-15 (static timeline).
-- Show `dateLabelAt(layer.manifest, position)` for **each non-static layer**;
-  the labels are independent periods, not one date.
+- Show `dateLabelAt(layer.manifest, position)` for **the picked layer only**,
+  and only when it changes over time (team review, 2026-11-15).
 - `data-testid`: `timeline-bar`, `timeline-scrub`, `timeline-date-<id>`.
 - Dock it in `PlanetHud` like the audio control (add a `timeline?: ReactNode`
   slot next to `audio`).
