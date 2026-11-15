@@ -53,7 +53,8 @@ export interface Probe {
 
 export interface EarthSceneProps {
   data: JukeboxData;
-  activeLayer: LoadedLayer;
+  /** null: the plain Earth, no layer drawn. */
+  activeLayer: LoadedLayer | null;
   targetView: TargetView;
   lite: boolean;
   onRequestView: (view: TargetView) => void;
@@ -224,10 +225,10 @@ function SceneContents(props: SceneContentsProps) {
     setRegionError,
   );
 
-  // Sharp forest images: requested the first time the forest is shown (it is the
-  // first layer, so in practice at start-up) and then kept, so switching back to
-  // it is instant. Other layers never wait for them.
-  const forestActive = activeLayer.manifest.id === SHARP_RELIEF_LAYER;
+  // Sharp forest images: requested the first time the forest is chosen and then
+  // kept, so switching back to it is instant. The Earth view and other layers
+  // never wait for them.
+  const forestActive = activeLayer?.manifest.id === SHARP_RELIEF_LAYER;
   const [forestWanted, setForestWanted] = useState(forestActive);
   useEffect(() => {
     if (forestActive) setForestWanted(true);
@@ -285,6 +286,8 @@ function SceneContents(props: SceneContentsProps) {
   );
 
   const layer = useMemo(() => {
+    // The plain Earth view: an empty (fully transparent) layer, so only the planet shows.
+    if (activeLayer === null) return { textures: emptyLayerTextures(), error: null };
     try {
       return { textures: layerTextureFor(activeLayer), error: null };
     } catch (cause) {
@@ -371,7 +374,7 @@ function SceneContents(props: SceneContentsProps) {
     (hit: GlobeHit): Probe => ({
       lon: hit.lon,
       lat: hit.lat,
-      value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT),
+      value: activeLayer ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT) : null,
     }),
     [activeLayer, data.bbox],
   );
