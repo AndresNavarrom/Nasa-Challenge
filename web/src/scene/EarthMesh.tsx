@@ -159,8 +159,8 @@ export interface EarthMeshProps {
   onGlobeSelectPoint: (lon: number, lat: number, clientX: number) => void;
   /** Click on a region of the planet (not after a drag): visit it. */
   onGlobeFocusRegion: (lon: number, lat: number) => void;
-  /** Double-click on the map of a region (not after a drag): back to the planet. */
-  onMapDoubleClick: () => void;
+  /** Click on the map of a region (not after a drag): back to the planet. */
+  onMapBack: () => void;
   /** Touch screens: a tap on the planet (not after a drag); double taps are not reported as double-clicks. */
   onGlobeTap: (lon: number, lat: number) => void;
   /** Touch screens: a tap on the map of a region. */
@@ -499,7 +499,7 @@ export function EarthMesh({
   onHover,
   onGlobeSelectPoint,
   onGlobeFocusRegion,
-  onMapDoubleClick,
+  onMapBack,
   onGlobeTap,
   onMapTap,
 }: EarthMeshProps) {
@@ -826,11 +826,25 @@ export function EarthMesh({
 
   const handlePlaneClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
-    if (event.uv) {
-      const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
-      onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
+    // Touch screens keep their double-tap flow; a tap still selects the point.
+    if (lastPressTouch.current) {
+      if (event.uv) {
+        const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
+        onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
+      }
+      onMapTap();
+      return;
     }
-    if (lastPressTouch.current) onMapTap();
+    // Wait: a second click cancels this timer and selects the point instead.
+    if (event.nativeEvent.detail > 1) {
+      clearClickTimer();
+      return;
+    }
+    clearClickTimer();
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = null;
+      onMapBack();
+    }, SINGLE_CLICK_MS);
   };
 
   const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
@@ -839,8 +853,12 @@ export function EarthMesh({
   };
 
   const handlePlaneDoubleClick = (event: ThreeEvent<MouseEvent>) => {
+    clearClickTimer();
     if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
-    onMapDoubleClick();
+    if (event.uv) {
+      const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
+      onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
+    }
   };
 
   const handleOut = () => {

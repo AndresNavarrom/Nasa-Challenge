@@ -63,7 +63,7 @@ export function modeLabel(mode: ViewMode, regionName = "Amazon", hoveredRegionNa
     case "to-map":
       return `Flying to ${regionName}…`;
     case "map":
-      return `${regionName} map. Double-click (or double-tap) it or press Back to Earth to return.`;
+      return `${regionName} map. Click to return or double-click a point to lock its sound.`;
     case "to-globe":
       return "Back to the planet…";
   }

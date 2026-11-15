@@ -641,7 +641,7 @@ function SceneContents(props: SceneContentsProps) {
     [gl, setListeningPoint],
   );
 
-  const handleMapDoubleClick = useCallback(() => onRequestView("globe"), [onRequestView]);
+  const handleMapBack = useCallback(() => onRequestView("globe"), [onRequestView]);
 
   // Touch screens: the first tap on a region chooses it (outline and name), a second
   // tap on the same region flies there; a tap elsewhere chooses again or clears.
@@ -713,7 +713,7 @@ function SceneContents(props: SceneContentsProps) {
         onHover={handleHover}
         onGlobeSelectPoint={handleGlobeSelectPoint}
         onGlobeFocusRegion={handleGlobeFocusRegion}
-        onMapDoubleClick={handleMapDoubleClick}
+        onMapBack={handleMapBack}
         onGlobeTap={handleGlobeTap}
         onMapTap={handleMapTap}
       />
