@@ -269,3 +269,19 @@ Manual checklist: `docs/SOUND-ENGINE-CHECKLIST.md` (open
 | FR6 | Sound follows the point under the cursor (API ready for Step 12). |
 | NFR2 | Measured latency ≤ 100 ms. |
 | NFR5 | 10-minute continuous run without dropouts. |
+
+## PR #4 review follow-up (2026-11-14)
+
+- The smoother settles to the sampled value 250 ms after the pointer stops
+  moving, so the sound always matches the value on screen.
+- A non-finite sample is treated as no data (silence), not as the minimum level.
+- `engine.state` follows the context's `statechange`; `start()` is safe when the
+  engine is disposed during the `resume()` await.
+- Hover updates are coalesced to one per animation frame; the scene clears its
+  error banner, refreshes the probe value when the layer changes, and disposes a
+  planetary texture when the regional one cannot be built.
+- The audio control is docked in the HUD (no overlap) and its meter/aria value
+  updates at 10 Hz.
+- Deferred as low impact: camera distance on resize mid-transition and
+  antimeridian support in `isInsideBbox`.
+- Mute stays a fade to zero (instant unmute), by team decision.

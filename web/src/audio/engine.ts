@@ -45,6 +45,7 @@ const DEFAULT_RAMP_SECONDS = 0.05;
 const DEFAULT_VOLUME = 0.8;
 const START_FADE_SECONDS = 0.2;
 const STOP_FADE_SECONDS = 0.2;
+const SETTLE_MS = 250;
 const FOREST_HARMONY_MIX = 0.35;
 const FOREST_LOWPASS_HZ = 4000;
 const SMOKE_TONE_HZ = 180;
@@ -108,10 +109,11 @@ interface LayerRuntime {
   enabled: boolean;
   smoother: OnePoleSmoother;
   lastUpdateTime: number;
+  settleTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
 function makeLayerRuntime(): LayerRuntime {
-  return { value: null, enabled: true, smoother: new OnePoleSmoother(0), lastUpdateTime: 0 };
+  return { value: null, enabled: true, smoother: new OnePoleSmoother(0), lastUpdateTime: 0, settleTimer: undefined };
 }
 
 /** Schedules a glide; setTargetAtTime reaches ~95% of the distance in 3 time constants. */
@@ -137,6 +139,18 @@ export class WebAudioSoundEngine implements SoundEngine {
   private levelBuffer: Float32Array | undefined;
   private suspendTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Keeps `state` honest when the browser or the OS suspends the context. */
+  private readonly handleContextStateChange = (): void => {
+    const context = this.context;
+    if (!context) return;
+    const state = context.state as string;
+    if (state === "running") {
+      if (this.currentState !== "idle") this.currentState = "running";
+    } else if (this.currentState === "running") {
+      this.currentState = "suspended";
+    }
+  };
+
   constructor(options: SoundEngineOptions = {}) {
     this.injectedContext = options.context;
     this.rampSeconds = options.rampSeconds ?? DEFAULT_RAMP_SECONDS;
@@ -150,21 +164,31 @@ export class WebAudioSoundEngine implements SoundEngine {
   async start(): Promise<void> {
     if (this.currentState === "running") return;
 
-    if (!this.context) {
-      this.context = this.injectedContext ?? new AudioContext({ latencyHint: "interactive" });
+    let context = this.context;
+    if (!context) {
+      context = this.injectedContext ?? new AudioContext({ latencyHint: "interactive" });
+      this.context = context;
+      context.addEventListener("statechange", this.handleContextStateChange);
       this.buildGraph();
     }
 
     this.clearSuspendTimer();
-    await this.context.resume();
-
-    const now = this.context.currentTime;
-    const master = this.graph?.master.gain;
-    if (master) {
-      master.cancelScheduledValues(now);
-      master.setValueAtTime(0, now);
-      master.linearRampToValueAtTime(this.volume, now + START_FADE_SECONDS);
+    this.clearSettleTimers();
+    try {
+      await context.resume();
+    } catch (cause) {
+      // A dispose() during the await is not an error to show the person.
+      if (this.context !== context) return;
+      throw cause;
     }
+    if (this.context !== context || !this.graph) return;
+    const graph = this.graph;
+
+    const now = context.currentTime;
+    const master = graph.master.gain;
+    master.cancelScheduledValues(now);
+    master.setValueAtTime(0, now);
+    master.linearRampToValueAtTime(this.volume, now + START_FADE_SECONDS);
 
     this.currentState = "running";
     for (const layer of LAYER_IDS) {
@@ -183,6 +207,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     master.setValueAtTime(master.value, now);
     master.linearRampToValueAtTime(0, now + STOP_FADE_SECONDS);
     this.currentState = "suspended";
+    this.clearSettleTimers();
 
     this.clearSuspendTimer();
     this.suspendTimer = setTimeout(() => {
@@ -194,7 +219,8 @@ export class WebAudioSoundEngine implements SoundEngine {
   }
 
   setLayerIntensity(layer: LayerId, value: number | null): void {
-    this.layers[layer].value = value === null ? null : clampUnit(value);
+    // A non-finite sample is bad data, not "almost zero": silence is safer.
+    this.layers[layer].value = value === null || !Number.isFinite(value) ? null : clampUnit(value);
     if (this.currentState === "running") {
       this.applyLayer(layer, false);
     }
@@ -244,6 +270,7 @@ export class WebAudioSoundEngine implements SoundEngine {
 
   dispose(): void {
     this.clearSuspendTimer();
+    this.clearSettleTimers();
     this.currentState = "idle";
 
     const graph = this.graph;
@@ -304,8 +331,11 @@ export class WebAudioSoundEngine implements SoundEngine {
 
     const context = this.context;
     this.context = undefined;
-    if (context && !this.injectedContext) {
-      void context.close();
+    if (context) {
+      context.removeEventListener("statechange", this.handleContextStateChange);
+      if (!this.injectedContext) {
+        void context.close();
+      }
     }
   }
 
@@ -324,7 +354,47 @@ export class WebAudioSoundEngine implements SoundEngine {
       runtime.smoother.advance(dt, this.smoothingSeconds);
     }
     runtime.lastUpdateTime = now;
+    this.renderLayer(layer);
 
+    // The smoother only advances when a sample arrives. If the pointer stops,
+    // this finish brings the voice to the value the HUD shows within 250 ms.
+    if (!snap) {
+      this.scheduleSettle(layer);
+    }
+  }
+
+  private scheduleSettle(layer: LayerId): void {
+    const runtime = this.layers[layer];
+    if (runtime.settleTimer !== undefined) {
+      clearTimeout(runtime.settleTimer);
+    }
+    runtime.settleTimer = setTimeout(() => {
+      runtime.settleTimer = undefined;
+      if (this.currentState !== "running" || !this.context) return;
+      runtime.smoother.reset(runtime.value ?? 0);
+      runtime.lastUpdateTime = this.context.currentTime;
+      this.renderLayer(layer);
+    }, SETTLE_MS);
+  }
+
+  private clearSettleTimers(): void {
+    for (const layer of LAYER_IDS) {
+      const runtime = this.layers[layer];
+      if (runtime.settleTimer !== undefined) {
+        clearTimeout(runtime.settleTimer);
+        runtime.settleTimer = undefined;
+      }
+    }
+  }
+
+  /** Schedules every parameter of one layer from its current smoothed value. */
+  private renderLayer(layer: LayerId): void {
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph) return;
+
+    const runtime = this.layers[layer];
+    const now = context.currentTime;
     const smoothed = runtime.smoother.value;
     const gain = runtime.value === null || !runtime.enabled ? 0 : intensityToGain(smoothed) * LAYER_TRIM[layer];
 

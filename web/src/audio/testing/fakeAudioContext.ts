@@ -13,21 +13,25 @@ export interface ParamEvent {
 }
 
 export class FakeParam {
+  /** Value after an instant `setValueAtTime`; ramps do not change it until they would finish. */
   value = 0;
+  /** Last target scheduled with a ramp or `setTargetAtTime`; null before the first one. */
+  scheduledTarget: number | null = null;
   readonly events: ParamEvent[] = [];
 
   setValueAtTime(target: number, time: number): void {
     this.value = target;
+    this.scheduledTarget = target;
     this.events.push({ method: "setValueAtTime", target, time });
   }
 
   linearRampToValueAtTime(target: number, time: number): void {
-    this.value = target;
+    this.scheduledTarget = target;
     this.events.push({ method: "linearRampToValueAtTime", target, time });
   }
 
   setTargetAtTime(target: number, time: number, _timeConstant: number): void {
-    this.value = target;
+    this.scheduledTarget = target;
     this.events.push({ method: "setTargetAtTime", target, time });
   }
 
@@ -119,9 +123,17 @@ export class FakeAudioContext {
   readonly analysers: FakeAnalyser[] = [];
   readonly buffers: FakeAudioBuffer[] = [];
   readonly bufferSources: FakeBufferSource[] = [];
+  /** When set, resume() rejects with it (autoplay policy or a closed context). */
+  resumeError: Error | null = null;
   readonly resume = vi.fn(async (): Promise<void> => {
+    if (this.resumeError) {
+      this.state = "suspended";
+      throw this.resumeError;
+    }
     this.state = "running";
   });
+  readonly addEventListener = vi.fn();
+  readonly removeEventListener = vi.fn();
   readonly suspend = vi.fn(async (): Promise<void> => {
     this.state = "suspended";
   });

@@ -3,6 +3,7 @@
 // (FR1.4), the longitude/latitude/value indicator (FR4.4) and a frames-per-second
 // counter (NFR1).
 
+import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
@@ -18,6 +19,8 @@ export interface PlanetHudProps {
   fps: number | null;
   lite: boolean;
   sceneError: string | null;
+  /** Sound controls, docked in the bottom-right panel so they never overlap the HUD. */
+  audio?: ReactNode;
 }
 
 /** Below this the NFR1 target (30 frames per second) is missed. */
@@ -51,7 +54,7 @@ const button =
   "rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400";
 
 export function PlanetHud(props: PlanetHudProps) {
-  const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError } = props;
+  const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError, audio } = props;
   const activeLayer = layers.find((layer) => layer.manifest.id === activeLayerId);
 
   return (
@@ -117,6 +120,7 @@ export function PlanetHud(props: PlanetHudProps) {
         </div>
 
         <div className={`${panel} flex flex-col items-end gap-2`}>
+          {audio && <div className="w-full">{audio}</div>}
           <p role="status" data-testid="planet-hud-status" className="text-slate-300">
             {modeLabel(mode)}
           </p>

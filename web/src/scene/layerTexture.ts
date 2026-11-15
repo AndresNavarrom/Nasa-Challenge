@@ -88,10 +88,16 @@ export interface LayerTextures {
  */
 export function layerTextureFor(layer: LoadedLayer): LayerTextures {
   const id = layer.manifest.id;
-  return {
-    global: layer.global ? textureOf(layer.global, id, true) : null,
-    region: textureOf(layer.region, id, false),
-  };
+  let global: DataTexture | null = null;
+  try {
+    global = layer.global ? textureOf(layer.global, id, true) : null;
+    const region = textureOf(layer.region, id, false);
+    return { global, region };
+  } catch (cause) {
+    // The whole planet texture may already exist when the region throws.
+    global?.dispose();
+    throw cause;
+  }
 }
 
 export function disposeLayerTextures(textures: LayerTextures): void {

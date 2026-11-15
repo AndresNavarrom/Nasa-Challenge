@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSoundEngine, SMOKE_LAYER_TRIM } from "./engine";
 import { co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
-import { FakeAnalyser, FakeAudioContext, FakeGain, FakePanner } from "./testing/fakeAudioContext";
+import { FakeAnalyser, FakeAudioContext, FakeGain, FakePanner, type FakeParam } from "./testing/fakeAudioContext";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function setup() {
   const context = new FakeAudioContext();
@@ -11,6 +15,12 @@ function setup() {
     smoothingSeconds: 0.15,
   });
   return { context, engine };
+}
+
+/** Last value the engine scheduled on a parameter (ramps do not apply instantly in the fake). */
+function scheduled(parameter: FakeParam): number {
+  if (parameter.scheduledTarget === null) throw new Error("no value was scheduled on this parameter");
+  return parameter.scheduledTarget;
 }
 
 /** Voice gains in creation order: forest, smoke, CO2 (each connects to its panner). */
@@ -51,8 +61,8 @@ describe("sound engine", () => {
     await engine.start();
 
     const voice = forestToVoice(1);
-    expect(context.oscillators[0]?.frequency.value).toBeCloseTo(voice.frequency, 6);
-    expect(context.oscillators[1]?.frequency.value).toBeCloseTo(voice.harmonyFrequency, 6);
+    expect(scheduled(context.oscillators[0]!.frequency)).toBeCloseTo(voice.frequency, 6);
+    expect(scheduled(context.oscillators[1]!.frequency)).toBeCloseTo(voice.harmonyFrequency, 6);
     engine.dispose();
   });
 
@@ -62,10 +72,10 @@ describe("sound engine", () => {
     await engine.start();
 
     const timbre = smokeToTimbre(0.9);
-    expect(context.filters[1]?.frequency.value).toBeCloseTo(timbre.filterCutoffHz, 6);
-    expect(context.oscillators[3]?.frequency.value).toBeCloseTo(timbre.roughnessRateHz, 6);
-    expect(context.gains[4]?.gain.value).toBeCloseTo(timbre.noiseMix, 6);
-    expect(layerVoiceGain(context, 1).gain.value).toBeGreaterThan(0);
+    expect(scheduled(context.filters[1]!.frequency)).toBeCloseTo(timbre.filterCutoffHz, 6);
+    expect(scheduled(context.oscillators[3]!.frequency)).toBeCloseTo(timbre.roughnessRateHz, 6);
+    expect(scheduled(context.gains[4]!.gain)).toBeCloseTo(timbre.noiseMix, 6);
+    expect(scheduled(layerVoiceGain(context, 1).gain)).toBeGreaterThan(0);
     engine.dispose();
   });
 
@@ -75,10 +85,10 @@ describe("sound engine", () => {
     await engine.start();
 
     const breath = co2ToBreath(0.9);
-    expect(context.oscillators[4]?.frequency.value).toBeCloseTo(breath.toneHz, 6);
-    expect(context.oscillators[5]?.frequency.value).toBeCloseTo(breath.rateHz, 6);
-    expect(context.filters[2]?.frequency.value).toBeCloseTo(Math.min(4000, breath.toneHz * 3), 6);
-    expect(layerVoiceGain(context, 2).gain.value).toBeGreaterThan(0);
+    expect(scheduled(context.oscillators[4]!.frequency)).toBeCloseTo(breath.toneHz, 6);
+    expect(scheduled(context.oscillators[5]!.frequency)).toBeCloseTo(breath.rateHz, 6);
+    expect(scheduled(context.filters[2]!.frequency)).toBeCloseTo(Math.min(4000, breath.toneHz * 3), 6);
+    expect(scheduled(layerVoiceGain(context, 2).gain)).toBeGreaterThan(0);
     engine.dispose();
   });
 
@@ -90,12 +100,30 @@ describe("sound engine", () => {
       const gain = layerVoiceGain(context, index);
       context.currentTime = 0.02;
       engine.setLayerIntensity(index === 0 ? "forest" : index === 1 ? "smoke" : "co2", 0.7);
-      expect(gain.gain.value).toBeGreaterThan(0);
+      expect(scheduled(gain.gain)).toBeGreaterThan(0);
 
       context.currentTime += 0.02;
       engine.setLayerIntensity(index === 0 ? "forest" : index === 1 ? "smoke" : "co2", null);
-      expect(gain.gain.value).toBe(0);
+      expect(scheduled(gain.gain)).toBe(0);
     }
+    engine.dispose();
+  });
+
+  it("treats NaN and infinities as no data, not as the minimum level", async () => {
+    const { context, engine } = setup();
+    await engine.start();
+    const forest = layerVoiceGain(context, 0).gain;
+    const smoke = layerVoiceGain(context, 1).gain;
+    const co2 = layerVoiceGain(context, 2).gain;
+
+    context.currentTime = 0.02;
+    engine.setLayerIntensity("forest", Number.NaN);
+    engine.setLayerIntensity("smoke", Number.POSITIVE_INFINITY);
+    engine.setLayerIntensity("co2", Number.NEGATIVE_INFINITY);
+
+    expect(scheduled(forest)).toBe(0);
+    expect(scheduled(smoke)).toBe(0);
+    expect(scheduled(co2)).toBe(0);
     engine.dispose();
   });
 
@@ -111,6 +139,39 @@ describe("sound engine", () => {
     engine.dispose();
   });
 
+  it("settles to the target after the pointer stops moving", async () => {
+    vi.useFakeTimers();
+    const { context, engine } = setup();
+    await engine.start();
+    const gain = layerVoiceGain(context, 0);
+
+    context.currentTime = 0.02;
+    engine.setLayerIntensity("forest", 1);
+    expect(scheduled(gain.gain)).toBeLessThan(intensityToGain(1));
+
+    vi.advanceTimersByTime(300);
+    expect(scheduled(gain.gain)).toBeCloseTo(intensityToGain(1), 6);
+    expect(scheduled(context.oscillators[0]!.frequency)).toBeCloseTo(forestToVoice(1).frequency, 6);
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps at most one settle timer per layer while the pointer moves", async () => {
+    vi.useFakeTimers();
+    const { context, engine } = setup();
+    await engine.start();
+
+    for (let frame = 0; frame < 20; frame += 1) {
+      context.currentTime += 1 / 60;
+      engine.setLayerIntensity("forest", 0.5);
+    }
+    expect(vi.getTimerCount()).toBe(1);
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("mutes one layer without touching the others", async () => {
     const { context, engine } = setup();
     engine.setLayerIntensity("smoke", 0.8);
@@ -119,10 +180,10 @@ describe("sound engine", () => {
     const smoke = layerVoiceGain(context, 1);
     const co2 = layerVoiceGain(context, 2);
 
-    expect(smoke.gain.value).toBeGreaterThan(0);
+    expect(scheduled(smoke.gain)).toBeGreaterThan(0);
     engine.setLayerEnabled("smoke", false);
-    expect(smoke.gain.value).toBe(0);
-    expect(co2.gain.value).toBeGreaterThan(0);
+    expect(scheduled(smoke.gain)).toBe(0);
+    expect(scheduled(co2.gain)).toBeGreaterThan(0);
     engine.dispose();
   });
 
@@ -134,9 +195,9 @@ describe("sound engine", () => {
 
     const [forest, smoke] = layerVoiceGains(context);
     if (!forest || !smoke) throw new Error("the forest and smoke gains were not created");
-    expect(forest.gain.value).toBeCloseTo(intensityToGain(0.7), 6);
-    expect(smoke.gain.value).toBeCloseTo(intensityToGain(0.7) * SMOKE_LAYER_TRIM, 6);
-    expect(smoke.gain.value).toBeGreaterThan(forest.gain.value);
+    expect(scheduled(forest.gain)).toBeCloseTo(intensityToGain(0.7), 6);
+    expect(scheduled(smoke.gain)).toBeCloseTo(intensityToGain(0.7) * SMOKE_LAYER_TRIM, 6);
+    expect(scheduled(smoke.gain)).toBeGreaterThan(scheduled(forest.gain));
     engine.dispose();
   });
 
@@ -151,11 +212,11 @@ describe("sound engine", () => {
     const [forest, smoke, co2] = layerVoiceGains(context);
     if (!forest || !smoke || !co2) throw new Error("the three voice gains were not created");
     for (const gain of [forest, smoke, co2]) {
-      expect(gain.gain.value).toBeGreaterThan(0);
+      expect(scheduled(gain.gain)).toBeGreaterThan(0);
     }
-    expect(smoke.gain.value).toBeGreaterThan(forest.gain.value);
+    expect(scheduled(smoke.gain)).toBeGreaterThan(scheduled(forest.gain));
     for (const panner of context.panners) {
-      expect(panner.pan.value).toBeCloseTo(positionToPan(0.2), 6);
+      expect(scheduled(panner.pan)).toBeCloseTo(positionToPan(0.2), 6);
     }
     engine.dispose();
   });
@@ -165,19 +226,20 @@ describe("sound engine", () => {
     await engine.start();
     const gains = layerVoiceGains(context);
 
-    engine.setLayerIntensity("forest", Number.NaN);
-    engine.setLayerIntensity("smoke", -3);
-    engine.setLayerIntensity("co2", 9);
+    engine.setLayerIntensity("forest", -3);
+    engine.setLayerIntensity("smoke", 9);
     engine.setPan(Number.NaN);
 
     for (const gain of gains) {
-      expect(Number.isFinite(gain.gain.value)).toBe(true);
+      expect(Number.isFinite(scheduled(gain.gain))).toBe(true);
     }
     for (const osc of context.oscillators) {
-      expect(Number.isFinite(osc.frequency.value)).toBe(true);
+      if (osc.frequency.scheduledTarget !== null) {
+        expect(Number.isFinite(osc.frequency.scheduledTarget)).toBe(true);
+      }
     }
     for (const panner of context.panners) {
-      expect(Number.isFinite(panner.pan.value)).toBe(true);
+      expect(Number.isFinite(scheduled(panner.pan))).toBe(true);
     }
     engine.dispose();
   });
@@ -189,6 +251,49 @@ describe("sound engine", () => {
     await engine.start();
     expect(engine.getLatencyMs()).toBeCloseTo(30, 6);
     engine.dispose();
+  });
+
+  it("surfaces a resume failure and stays idle", async () => {
+    const { context, engine } = setup();
+    context.resumeError = new Error("autoplay blocked");
+    await expect(engine.start()).rejects.toThrow("autoplay blocked");
+    expect(engine.state).toBe("idle");
+    engine.dispose();
+  });
+
+  it("stops safely when disposed during the resume await", async () => {
+    const { context, engine } = setup();
+    let release: (() => void) | undefined;
+    context.resume.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    const startPromise = engine.start();
+    engine.dispose();
+    release?.();
+    await expect(startPromise).resolves.toBeUndefined();
+    expect(engine.state).toBe("idle");
+  });
+
+  it("follows the context when the browser suspends it", async () => {
+    const { context, engine } = setup();
+    await engine.start();
+    const listener = context.addEventListener.mock.calls[0]?.[1] as (() => void) | undefined;
+    expect(typeof listener).toBe("function");
+
+    context.state = "suspended";
+    listener?.();
+    expect(engine.state).toBe("suspended");
+
+    context.state = "running";
+    listener?.();
+    expect(engine.state).toBe("running");
+
+    engine.dispose();
+    expect(context.removeEventListener).toHaveBeenCalled();
   });
 
   it("fades out on stop and releases every node on dispose", async () => {

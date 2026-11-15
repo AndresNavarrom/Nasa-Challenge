@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AudioStart } from "./audio/AudioStart";
+import type { SoundEngine } from "./audio/engine";
 import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
@@ -26,7 +27,7 @@ function defaultLayerId(data: JukeboxData): string {
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. */
-function PlanetView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; audio?: ReactNode }) {
   const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
@@ -75,6 +76,7 @@ function PlanetView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         fps={fps}
         lite={lite}
         sceneError={sceneError}
+        audio={audio}
       />
     </>
   );
@@ -86,8 +88,7 @@ function PlanetView({ data, lite }: { data: JukeboxData; lite: boolean }) {
  * without knowing about audio. The first instant is used until the timeline of
  * Step 13 exists.
  */
-function AudioListener({ data }: { data: JukeboxData }) {
-  const engine = useSoundEngine();
+function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngine }) {
   const point = useListeningPoint();
 
   useEffect(() => {
@@ -103,18 +104,15 @@ function AudioListener({ data }: { data: JukeboxData }) {
     engine.setPan(point.screenX);
   }, [engine, data, point]);
 
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
-      <AudioStart engine={engine} className="pointer-events-auto w-64" />
-    </div>
-  );
+  return null;
 }
 
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+  const engine = useSoundEngine();
   return (
     <>
-      <PlanetView data={data} lite={lite} />
-      <AudioListener data={data} />
+      <PlanetView data={data} lite={lite} audio={<AudioStart engine={engine} className="w-56" />} />
+      <AudioListener data={data} engine={engine} />
     </>
   );
 }

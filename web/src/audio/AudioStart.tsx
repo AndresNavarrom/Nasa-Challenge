@@ -4,10 +4,12 @@
 // started from this button. The component is self-contained: it creates its own
 // engine unless one is injected, and it disposes only what it owns.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createSoundEngine, type SoundEngine } from "./engine";
 
 const FULL_VOLUME = 0.8;
+/** The meter and aria-valuenow change at most this often; the ear does not need 60 Hz. */
+const LEVEL_INTERVAL_MS = 100;
 
 export interface AudioStartProps {
   engine?: SoundEngine;
@@ -26,6 +28,7 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
+  const lastLevelAt = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -42,7 +45,16 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
     }
     let frame = 0;
     const tick = (): void => {
-      setLevel(engine.getOutputLevel());
+      // The system (or the page) can suspend the context; do not keep saying "Mute".
+      if (engine.state !== "running") {
+        setRunning(false);
+        return;
+      }
+      const now = performance.now();
+      if (now - lastLevelAt.current >= LEVEL_INTERVAL_MS) {
+        lastLevelAt.current = now;
+        setLevel(engine.getOutputLevel());
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -61,6 +73,8 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
   };
 
   const handleMute = (): void => {
+    // Mute is a fade to zero, not a context suspend: unmuting is instant and
+    // needs no extra user gesture (team decision on the PR review).
     const nextMuted = !muted;
     engine.setMasterVolume(nextMuted ? 0 : FULL_VOLUME);
     setMuted(nextMuted);

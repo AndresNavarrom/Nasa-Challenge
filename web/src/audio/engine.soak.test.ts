@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LAYER_IDS } from "../data/types";
 import { createSoundEngine } from "./engine";
 import { FakeAudioContext } from "./testing/fakeAudioContext";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function setup() {
   const context = new FakeAudioContext();
@@ -21,11 +25,6 @@ describe("sound engine soak (B3)", () => {
 
     // 10 minutes at 30 updates per second: the demo frame-rate target.
     const frames = 30 * 60 * 10;
-    LAYER_IDS.forEach((layer, index) => {
-      const initial = (index + 1) / (LAYER_IDS.length + 1);
-      engine.setLayerIntensity(layer, initial);
-    });
-
     for (let frame = 0; frame < frames; frame += 1) {
       context.currentTime += 1 / 30;
       const phase = (frame / frames) * Math.PI * 2;
@@ -49,16 +48,42 @@ describe("sound engine soak (B3)", () => {
     expect(context.panners).toHaveLength(panners);
 
     for (const gain of context.gains) {
-      expect(Number.isFinite(gain.gain.value)).toBe(true);
+      if (gain.gain.scheduledTarget !== null) {
+        expect(Number.isFinite(gain.gain.scheduledTarget)).toBe(true);
+      }
     }
     for (const oscillator of context.oscillators) {
-      expect(Number.isFinite(oscillator.frequency.value)).toBe(true);
+      if (oscillator.frequency.scheduledTarget !== null) {
+        expect(Number.isFinite(oscillator.frequency.scheduledTarget)).toBe(true);
+      }
     }
     for (const panner of context.panners) {
-      expect(Number.isFinite(panner.pan.value)).toBe(true);
+      if (panner.pan.scheduledTarget !== null) {
+        expect(Number.isFinite(panner.pan.scheduledTarget)).toBe(true);
+      }
     }
 
     engine.dispose();
+  });
+
+  it("settles every layer and leaves no timers after a 10-minute fake run", async () => {
+    vi.useFakeTimers();
+    const { context, engine } = setup();
+    await engine.start();
+
+    for (let second = 0; second < 600; second += 1) {
+      context.currentTime += 1;
+      LAYER_IDS.forEach((layer, index) => {
+        engine.setLayerIntensity(layer, (Math.sin(second / 30 + index) + 1) / 2);
+      });
+      engine.setPan((Math.sin(second / 20) + 1) / 2);
+      vi.advanceTimersByTime(1000);
+    }
+
+    // One settle timer per layer at most, and none of them is leaked.
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(LAYER_IDS.length);
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("survives repeated stop/start cycles without duplicating the graph", async () => {

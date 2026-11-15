@@ -42,7 +42,7 @@ export interface EarthSceneProps {
   onProbe: (probe: Probe | null) => void;
   onFps: (fps: number) => void;
   /** A problem that leaves the view usable (for example earth.jpg missing). */
-  onSceneError: (message: string) => void;
+  onSceneError: (message: string | null) => void;
 }
 
 const CAMERA_FOV = 45;
@@ -72,7 +72,7 @@ function halfResolution(texture: Texture): Texture {
 }
 
 /** Loads earth.jpg; on failure reports a message and leaves the texture null. */
-function useBaseTexture(url: string, lite: boolean, onError: (message: string) => void): Texture | null {
+function useBaseTexture(url: string, lite: boolean, onError: (message: string | null) => void): Texture | null {
   const [texture, setTexture] = useState<Texture | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
@@ -80,6 +80,7 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string) =
   useEffect(() => {
     let cancelled = false;
     let loaded: Texture | null = null;
+    onErrorRef.current(null);
     new TextureLoader().load(
       url,
       (result) => {
@@ -89,6 +90,7 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string) =
         }
         loaded = lite ? halfResolution(result) : result;
         setTexture(loaded);
+        onErrorRef.current(null);
       },
       undefined,
       (cause) => {
@@ -143,8 +145,11 @@ function SceneContents(props: SceneContentsProps) {
   const targetRef = useRef<TargetView>(targetView);
   targetRef.current = targetView;
   const cancelRef = useRef<CancelTransition | null>(null);
+  const lastHit = useRef<GlobeHit | null>(null);
+  const [baseError, setBaseError] = useState<string | null>(null);
+  const [layerError, setLayerError] = useState<string | null>(null);
 
-  const baseTexture = useBaseTexture(`${data.baseUrl}earth.jpg`, lite, onSceneError);
+  const baseTexture = useBaseTexture(`${data.baseUrl}earth.jpg`, lite, setBaseError);
 
   const layer = useMemo(() => {
     try {
@@ -157,10 +162,18 @@ function SceneContents(props: SceneContentsProps) {
   useEffect(() => {
     if (layer.error) {
       console.error("Earth Jukebox could not draw a layer:", layer.error);
-      onSceneError(`${layer.error} The layer is not drawn.`);
+      setLayerError(`${layer.error} The layer is not drawn.`);
+    } else {
+      setLayerError(null);
     }
     return () => disposeLayerTextures(layer.textures);
-  }, [layer, onSceneError]);
+  }, [layer]);
+
+  // One banner for both sources: a good layer clears itself without hiding a
+  // base-image failure, and vice versa.
+  useEffect(() => {
+    onSceneError(layerError ?? baseError ?? null);
+  }, [layerError, baseError, onSceneError]);
 
   const setMode = (next: ViewMode) => {
     modeRef.current = next;
@@ -168,6 +181,7 @@ function SceneContents(props: SceneContentsProps) {
     onModeChange(next);
     if (next === "to-map" || next === "to-globe") {
       // The listening point is null during the whole transition.
+      lastHit.current = null;
       setListeningPoint(null);
       onProbe(null);
     }
@@ -216,19 +230,59 @@ function SceneContents(props: SceneContentsProps) {
     camera.lookAt(0, 0, 0);
   });
 
+  const probeFor = useCallback(
+    (hit: GlobeHit): Probe => ({
+      lon: hit.lon,
+      lat: hit.lat,
+      value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT),
+    }),
+    [activeLayer, data.bbox],
+  );
+
+  // The pointer can deliver several moves per frame; publish the latest one once.
+  const pendingHover = useRef<GlobeHit | null | undefined>(undefined);
+  const hoverFrame = useRef<number | null>(null);
+
+  const publishHover = useCallback(() => {
+    hoverFrame.current = null;
+    const hit = pendingHover.current;
+    pendingHover.current = undefined;
+    if (hit === undefined) return;
+    if (!hit || modeRef.current === "to-map" || modeRef.current === "to-globe") {
+      lastHit.current = null;
+      setListeningPoint(null);
+      onProbe(null);
+      return;
+    }
+    lastHit.current = hit;
+    const rect = gl.domElement.getBoundingClientRect();
+    setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
+    onProbe(probeFor(hit));
+  }, [gl, setListeningPoint, onProbe, probeFor]);
+
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
-      if (!hit || modeRef.current === "to-map" || modeRef.current === "to-globe") {
-        setListeningPoint(null);
-        onProbe(null);
-        return;
+      pendingHover.current = hit;
+      if (hoverFrame.current === null) {
+        hoverFrame.current = requestAnimationFrame(publishHover);
       }
-      const rect = gl.domElement.getBoundingClientRect();
-      setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
-      onProbe({ lon: hit.lon, lat: hit.lat, value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT) });
     },
-    [gl, activeLayer, data.bbox, setListeningPoint, onProbe],
+    [publishHover],
   );
+
+  useEffect(
+    () => () => {
+      if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
+    },
+    [],
+  );
+
+  // Switching layers does not move the pointer, so refresh the value on screen.
+  useEffect(() => {
+    const hit = lastHit.current;
+    if (!hit || modeRef.current === "to-map" || modeRef.current === "to-globe") return;
+    onProbe(probeFor(hit));
+  }, [probeFor, onProbe]);
 
   const handleGlobeClick = useCallback(
     (lon: number, lat: number) => {
