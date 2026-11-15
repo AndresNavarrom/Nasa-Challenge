@@ -14,7 +14,7 @@ import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
 import { frameBlend, frameIndexAt, framePosition } from "./lib/timeline";
-import { SpinAccumulator, positionPerTurn } from "./lib/timelineTrack";
+import { SpinAccumulator, playDelta, positionPerTurn } from "./lib/timelineTrack";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import { loadScenes } from "./scenes/loadScenes";
 import type { SceneDefinition, ScenesManifest } from "./scenes/types";
@@ -104,20 +104,31 @@ function PlanetView({
         ? tracked
         : framesAt(positionRef.current, layerFrames, !lite);
   const frame = frames.nearest;
-  // The timeline plays with the planet's own turn: one turn moves it by a day of
-  // hourly data or a year of monthly data (positionPerTurn). Handed on about 30
-  // times a second; a drag, Auto-rotate off or the map view stop the turn and so
-  // the timeline. Only the actions are read here, so this view does not re-render
-  // as the timeline moves.
+  // The timeline plays on its own clock at the pace of the planet's turn: one
+  // turn's time moves it by a day of hourly data or a year of monthly data
+  // (positionPerTurn). Only the person pauses it (the pause button on the line);
+  // a zoom into a region, a drag or Auto-rotate off do not. Handed on about 30
+  // times a second; only the actions are read here, so this view does not
+  // re-render as the timeline moves.
   const { step } = useTimelineActions();
+  const [timelinePlaying, setTimelinePlaying] = useState(true);
   const perTurnRef = useRef(0);
   perTurnRef.current = activeLayer ? positionPerTurn(activeLayer.manifest) : 0;
-  const spinRef = useRef<SpinAccumulator | null>(null);
-  spinRef.current ??= new SpinAccumulator(1000 / TIMELINE_UPDATE_HZ, step);
-  useEffect(() => spinRef.current?.reset(), [activeLayer]);
-  const handleSpin = useCallback((radians: number) => {
-    spinRef.current?.add((radians / (2 * Math.PI)) * perTurnRef.current, performance.now());
-  }, []);
+  const clockRef = useRef<SpinAccumulator | null>(null);
+  clockRef.current ??= new SpinAccumulator(1000 / TIMELINE_UPDATE_HZ, step);
+  useEffect(() => clockRef.current?.reset(), [activeLayer]);
+  useEffect(() => {
+    if (!timelinePlaying) return;
+    let frameId = 0;
+    let last = performance.now();
+    const tick = (now: number): void => {
+      clockRef.current?.add(playDelta((now - last) / 1000, perTurnRef.current), now);
+      last = now;
+      frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [timelinePlaying]);
   const selectedPoint = useListeningPoint();
   const selectedValue =
     selectedPoint && activeLayer
@@ -216,7 +227,6 @@ function PlanetView({
           targetView={targetView}
           lite={lite}
           autoRotate={autoRotate}
-          onSpin={handleSpin}
           onRequestView={requestView}
           regions={regions}
           focusRegionId={focusRegionId}
@@ -251,7 +261,11 @@ function PlanetView({
         audio={audio}
         timeline={
           activeLayer ? (
-            <TimelineControls layer={activeLayer} playing={autoRotate && mode === "globe"} />
+            <TimelineControls
+              layer={activeLayer}
+              playing={timelinePlaying}
+              onTogglePlay={() => setTimelinePlaying((playing) => !playing)}
+            />
           ) : undefined
         }
         onShowTour={onShowTour}
@@ -371,13 +385,15 @@ function AudioListener({
  * The timeline line bound to the shared clock. Only this component reads the
  * clock, so the moving playhead re-renders it alone, not the planet view around it.
  */
-function TimelineControls({ layer, playing }: { layer: LoadedLayer; playing: boolean }) {
+function TimelineControls(props: { layer: LoadedLayer; playing: boolean; onTogglePlay: () => void }) {
+  const { layer, playing, onTogglePlay } = props;
   const timeline = useTimeline();
   return (
     <TimelineTrack
       position={timeline.position}
       layer={layer}
       playing={playing}
+      onTogglePlay={onTogglePlay}
       onSeek={timeline.seek}
       speed={timeline.speed}
       onSpeed={timeline.setSpeed}
