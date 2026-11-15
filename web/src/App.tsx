@@ -13,7 +13,7 @@ import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
-import { frameIndexAt, framePosition } from "./lib/timeline";
+import { frameIndexAt } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import { loadScenes } from "./scenes/loadScenes";
 import type { SceneDefinition, ScenesManifest } from "./scenes/types";
@@ -249,10 +249,11 @@ function AudioListener({
       return;
     }
     for (const layer of data.layers) {
-      // Shared normalized position -> this layer's own fractional instant.
-      // Static layers have one frame, so framePosition returns 0 and
-      // sampleLayerAt ignores time for them.
-      const frame = framePosition(position, layer.region.frames);
+      // Shared normalized position -> the instant of this layer on screen (the
+      // nearest one, like the picture and the probe), so what is heard is what is
+      // seen. Static layers have one frame, so this is 0 and sampleLayerAt ignores
+      // time for them.
+      const frame = frameIndexAt(position, layer.region.frames);
       engine.setLayerIntensity(
         layer.manifest.id,
         sampleLayerAt(layer, data.bbox, point.lon, point.lat, frame),
