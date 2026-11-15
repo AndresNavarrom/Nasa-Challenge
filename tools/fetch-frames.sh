@@ -203,7 +203,9 @@ NE_COUNTRIES_URL="https://raw.githubusercontent.com/nvkelso/natural-earth-vector
 download "naturalearth/ne_50m_admin_0_countries.geojson" "$NE_COUNTRIES_URL"
 record "naturalearth/ne_50m_admin_0_countries.geojson" "$NE_COUNTRIES_URL" "downloaded as published"
 REGIONS_JSON="$ROOT/web/public/data/regions.json"
-if [[ "$FORCE" != "1" && -s "$REGIONS_JSON" && "$REGIONS_JSON" -nt "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" ]]; then
+# Rebuilt when missing, older than the countries file or older than the script itself.
+if [[ "$FORCE" != "1" && -s "$REGIONS_JSON" && "$REGIONS_JSON" -nt "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" \
+    && "$REGIONS_JSON" -nt "$FETCH_TOOLS/world_regions.py" ]]; then
   echo "  have   web/public/data/regions.json"
 elif ! python3 "$FETCH_TOOLS/world_regions.py" "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" "$REGIONS_JSON"; then
   echo "fetch-frames: could not build web/public/data/regions.json" >&2
@@ -301,7 +303,9 @@ SUBREGION field) and each subregion's countries are merged. Russia is a region
 of its own, Melanesia, Micronesia and Polynesia are joined as Pacific Islands,
 the open-ocean islands are left out, and France's overseas departments go with
 the region they lie in. Outlines are simplified (Douglas-Peucker, 0.05 degree)
-and rings under 0.02 square degrees are dropped. The Amazon is drawn on top as
+without breaking shared borders (each border between two countries is simplified
+once and used by both, so a region has no gaps inside), and islands under 0.02
+square degrees are dropped. The Amazon is drawn on top as
 its own region: the app keeps the forest (GEDI height of about 5 m or more)
 inside a hand-drawn area around the basin.
 
