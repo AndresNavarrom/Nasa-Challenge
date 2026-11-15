@@ -188,8 +188,9 @@ docker compose up web     # then open http://127.0.0.1:5173/
   or press **Amazon**; the planet turns, flattens into the map and the camera
   moves close (1.6 s). Double-click the map or press **Back to Earth** to
   return (1.4 s) and the planet turns again. The regional view uses the same
-  instruments as the overview: the selected point's left-right position sets
-  pan and the layer value sets a discrete pitch over one octave; lightning
+  base instruments as the overview, enriched with detuned/sub voices, chorus,
+  reverb and air textures; the selected point's left-right position sets pan
+  and the layer value sets a discrete pitch over one octave. Lightning
   retriggers decaying notes at 90–120 bpm, and forest birds also play there.
 - **Indicator** (bottom left): longitude, latitude and the active layer's
   value (0 to 100 %) for the point under the cursor; the region map also shows

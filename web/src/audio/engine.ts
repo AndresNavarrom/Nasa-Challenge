@@ -16,6 +16,7 @@ import {
   OVERVIEW_INSTRUMENTS,
   OVERVIEW_LAYER_GAIN,
   OVERVIEW_ROWS,
+  REGIONAL_ENRICHMENT,
   pitchForValue,
   type OverviewColumn,
 } from "./overview";
@@ -200,11 +201,30 @@ interface OverviewState {
   enabled: boolean;
 }
 
+interface RegionalFx {
+  dry: GainNode;
+  chorusSend: GainNode;
+  chorusDelay: DelayNode;
+  chorusWet: GainNode;
+  chorusLfo: OscillatorNode;
+  chorusDepth: GainNode;
+  reverbSend: GainNode;
+  reverb: ConvolverNode;
+  reverbWet: GainNode;
+}
+
 interface RegionalVoice {
-  oscillator: OscillatorNode;
+  oscillators: OscillatorNode[];
+  oscillatorGains: GainNode[];
   filter: BiquadFilterNode;
   gain: GainNode;
   panner: StereoPannerNode;
+  fx: RegionalFx;
+  sampleSource: AudioBufferSourceNode | null;
+  sampleFilter: BiquadFilterNode | null;
+  sampleGain: GainNode | null;
+  sampleLayer: LayerId | null;
+  sampleToken: number;
 }
 
 interface RegionalState {
@@ -558,7 +578,10 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.regional.max = range && Number.isFinite(range.max) ? clampUnit(range.max) : 1;
 
     if (layer === "lightning") {
-      if (this.regionalVoice) this.fadeRegional(0);
+      if (this.regionalVoice) {
+        this.fadeRegional(0);
+        this.stopRegionalSample(this.regionalVoice);
+      }
       if (this.currentState === "running" && this.regional.value !== null && this.regional.value > 0) {
         this.startRegionalLightning();
       } else {
@@ -573,6 +596,7 @@ export class WebAudioSoundEngine implements SoundEngine {
       this.applyRegionalPoint();
     } else if (this.regionalVoice) {
       this.fadeRegional(0);
+      this.fadeRegionalSample(0);
     }
   }
 
@@ -581,9 +605,6 @@ export class WebAudioSoundEngine implements SoundEngine {
     const graph = this.graph;
     if (!context || !graph) return undefined;
     if (this.regionalVoice) return this.regionalVoice;
-    const oscillator = context.createOscillator();
-    oscillator.type = "sine";
-    oscillator.frequency.value = OVERVIEW_BASE_HZ;
     const filter = context.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.value = 1600;
@@ -592,13 +613,103 @@ export class WebAudioSoundEngine implements SoundEngine {
     gain.gain.value = 0;
     const panner = context.createStereoPanner();
     panner.pan.value = 0;
-    oscillator.connect(filter);
     filter.connect(gain);
     gain.connect(panner);
-    panner.connect(graph.bus);
-    oscillator.start();
-    this.regionalVoice = { oscillator, filter, gain, panner };
-    return this.regionalVoice;
+
+    const oscillators: OscillatorNode[] = [];
+    const oscillatorGains: GainNode[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.value = OVERVIEW_BASE_HZ;
+      const oscillatorGain = context.createGain();
+      oscillatorGain.gain.value = index === 0 ? 1 : 0;
+      oscillator.connect(oscillatorGain);
+      oscillatorGain.connect(filter);
+      oscillator.start();
+      oscillators.push(oscillator);
+      oscillatorGains.push(oscillatorGain);
+    }
+
+    const fx = this.buildRegionalFx(context, graph.bus, panner);
+    const voice: RegionalVoice = {
+      oscillators,
+      oscillatorGains,
+      filter,
+      gain,
+      panner,
+      fx,
+      sampleSource: null,
+      sampleFilter: null,
+      sampleGain: null,
+      sampleLayer: null,
+      sampleToken: 0,
+    };
+    this.regionalVoice = voice;
+    return voice;
+  }
+
+  private buildRegionalFx(context: AudioContext, bus: GainNode, source: StereoPannerNode): RegionalFx {
+    const dry = context.createGain();
+    dry.gain.value = 0.78;
+    source.connect(dry);
+    dry.connect(bus);
+
+    const chorusSend = context.createGain();
+    chorusSend.gain.value = 0;
+    const chorusDelay = context.createDelay(0.1);
+    chorusDelay.delayTime.value = 0.025;
+    const chorusWet = context.createGain();
+    chorusWet.gain.value = 0.55;
+    const chorusLfo = context.createOscillator();
+    chorusLfo.type = "sine";
+    chorusLfo.frequency.value = 0.33;
+    const chorusDepth = context.createGain();
+    chorusDepth.gain.value = 0.0025;
+    source.connect(chorusSend);
+    chorusSend.connect(chorusDelay);
+    chorusDelay.connect(chorusWet);
+    chorusWet.connect(bus);
+    chorusLfo.connect(chorusDepth);
+    chorusDepth.connect(chorusDelay.delayTime);
+    chorusLfo.start();
+
+    const reverbSend = context.createGain();
+    reverbSend.gain.value = 0;
+    const reverb = context.createConvolver();
+    reverb.buffer = this.buildReverbImpulse(context);
+    const reverbWet = context.createGain();
+    reverbWet.gain.value = 0.7;
+    source.connect(reverbSend);
+    reverbSend.connect(reverb);
+    reverb.connect(reverbWet);
+    reverbWet.connect(bus);
+
+    return {
+      dry,
+      chorusSend,
+      chorusDelay,
+      chorusWet,
+      chorusLfo,
+      chorusDepth,
+      reverbSend,
+      reverb,
+      reverbWet,
+    };
+  }
+
+  private buildReverbImpulse(context: AudioContext): AudioBuffer {
+    const seconds = 2.2;
+    const length = Math.max(1, Math.floor(context.sampleRate * seconds));
+    const buffer = context.createBuffer(2, length, context.sampleRate);
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      const data = buffer.getChannelData(channel);
+      for (let index = 0; index < data.length; index += 1) {
+        const decay = (1 - index / data.length) ** 2.6;
+        data[index] = (Math.random() * 2 - 1) * decay;
+      }
+    }
+    return buffer;
   }
 
   private startRegional(): void {
@@ -619,11 +730,9 @@ export class WebAudioSoundEngine implements SoundEngine {
     const layer = this.regional.layer;
     if (!context || !voice || !layer) return;
     const instrument = OVERVIEW_INSTRUMENTS[layer];
+    const enrichment = REGIONAL_ENRICHMENT[layer];
     const now = context.currentTime;
     const value = this.regional.value;
-    voice.oscillator.type = instrument.wave;
-    rampParameter(voice.filter.frequency, instrument.filterHz, now, this.rampSeconds);
-    rampParameter(voice.filter.Q, instrument.filterQ, now, this.rampSeconds);
     const span = this.regional.max - this.regional.min;
     const amount =
       value === null ? 0 : span > 0 ? (value - this.regional.min) / span : 0.5;
@@ -631,12 +740,100 @@ export class WebAudioSoundEngine implements SoundEngine {
       pitchForValue(amount, instrument.scale, 0, 1) *
       2 ** (instrument.detuneCents / 1200) *
       2 ** instrument.octave;
-    rampParameter(voice.oscillator.frequency, pitch, now, this.rampSeconds);
+
+    voice.oscillators.forEach((oscillator) => {
+      oscillator.type = instrument.wave;
+    });
+    rampParameter(voice.oscillators[0]!.frequency, pitch, now, this.rampSeconds);
+    rampParameter(
+      voice.oscillators[1]!.frequency,
+      pitch * 2 ** (enrichment.detuneCents / 1200),
+      now,
+      this.rampSeconds,
+    );
+    rampParameter(
+      voice.oscillators[2]!.frequency,
+      pitch * 2 ** (enrichment.subOctave / 12),
+      now,
+      this.rampSeconds,
+    );
+    rampParameter(voice.oscillatorGains[0]!.gain, 1, now, this.rampSeconds);
+    rampParameter(voice.oscillatorGains[1]!.gain, 0.35, now, this.rampSeconds);
+    rampParameter(voice.oscillatorGains[2]!.gain, enrichment.subGain, now, this.rampSeconds);
+    rampParameter(voice.filter.frequency, instrument.filterHz, now, this.rampSeconds);
+    rampParameter(voice.filter.Q, instrument.filterQ, now, this.rampSeconds);
     rampParameter(voice.panner.pan, positionToPan(this.regional.pan), now, this.rampSeconds);
+    rampParameter(voice.fx.chorusSend.gain, enrichment.chorusSend, now, this.rampSeconds);
+    rampParameter(voice.fx.reverbSend.gain, enrichment.reverbSend, now, this.rampSeconds);
+
+    this.configureRegionalSample(layer, voice);
+    if (voice.sampleGain) {
+      const sampleGain = value !== null && value > 0 ? enrichment.sample?.gain ?? 0 : 0;
+      rampParameter(voice.sampleGain.gain, sampleGain, now, Math.max(0.01, instrument.releaseSeconds));
+    }
+
     const target = value !== null && value > 0 ? instrument.gain * REGIONAL_POINT_GAIN : 0;
     const ramp =
       target < voice.gain.gain.value ? instrument.releaseSeconds : instrument.attackSeconds;
     rampParameter(voice.gain.gain, target, now, Math.max(0.01, ramp));
+  }
+
+  private configureRegionalSample(layer: LayerId, voice: RegionalVoice): void {
+    if (voice.sampleLayer === layer) return;
+    voice.sampleLayer = layer;
+    voice.sampleToken += 1;
+    const token = voice.sampleToken;
+    this.stopRegionalSample(voice);
+    const config = REGIONAL_ENRICHMENT[layer].sample;
+    if (!config) return;
+    void this.loadSceneBuffer(config.url).then((buffer) => {
+      if (this.regionalVoice !== voice || voice.sampleToken !== token || this.regional.layer !== layer) {
+        return;
+      }
+      const context = this.context;
+      if (!context) return;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      const filter = context.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = config.filterHz;
+      filter.Q.value = config.filterQ;
+      const gain = context.createGain();
+      gain.gain.value = 0;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(voice.panner);
+      source.start();
+      voice.sampleSource = source;
+      voice.sampleFilter = filter;
+      voice.sampleGain = gain;
+    }).catch((cause: unknown) => {
+      console.warn("Earth Jukebox: a regional texture sample could not be loaded.", cause);
+    });
+  }
+
+  private stopRegionalSample(voice: RegionalVoice): void {
+    if (voice.sampleSource) {
+      try {
+        voice.sampleSource.stop();
+      } catch {
+        // Already stopped.
+      }
+      voice.sampleSource.disconnect();
+      voice.sampleSource = null;
+    }
+    voice.sampleFilter?.disconnect();
+    voice.sampleFilter = null;
+    voice.sampleGain?.disconnect();
+    voice.sampleGain = null;
+  }
+
+  private fadeRegionalSample(target: number): void {
+    const voice = this.regionalVoice;
+    const context = this.context;
+    if (!voice?.sampleGain || !context) return;
+    rampParameter(voice.sampleGain.gain, target, context.currentTime, this.rampSeconds);
   }
 
   private startRegionalLightning(): void {
@@ -880,16 +1077,35 @@ export class WebAudioSoundEngine implements SoundEngine {
       overview.bus.disconnect();
     }
     if (this.regionalVoice) {
+      const voice = this.regionalVoice;
+      for (const oscillator of voice.oscillators) {
+        try {
+          oscillator.stop();
+        } catch {
+          // Already stopped.
+        }
+      }
       try {
-        this.regionalVoice.oscillator.stop();
+        voice.fx.chorusLfo.stop();
       } catch {
         // Already stopped.
       }
+      this.stopRegionalSample(voice);
       for (const node of [
-        this.regionalVoice.oscillator,
-        this.regionalVoice.filter,
-        this.regionalVoice.gain,
-        this.regionalVoice.panner,
+        ...voice.oscillators,
+        ...voice.oscillatorGains,
+        voice.filter,
+        voice.gain,
+        voice.panner,
+        voice.fx.dry,
+        voice.fx.chorusSend,
+        voice.fx.chorusDelay,
+        voice.fx.chorusWet,
+        voice.fx.chorusLfo,
+        voice.fx.chorusDepth,
+        voice.fx.reverbSend,
+        voice.fx.reverb,
+        voice.fx.reverbWet,
       ]) {
         node.disconnect();
       }

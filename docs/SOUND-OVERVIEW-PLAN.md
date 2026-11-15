@@ -81,10 +81,15 @@ still apply.
 - `EarthMesh` samples the visible screen field and publishes it through a ref.
 - `DataAudio` turns the field into all columns and updates the engine every 100 ms.
 - Globe and return transitions use the overview; the region map uses the same
-  instruments in a single regional voice (value -> discrete pitch across one
-  octave of the visible range, screen X -> pan). A separate regional gain keeps
-  that single voice below the overview mix. Lightning uses decaying notes at a
+  base waveform/scale/filter, enriched with a detuned companion, a sub-octave,
+  a short chorus and a generated reverb. The value is a discrete pitch across
+  one octave of the visible range; screen X is the pan. A separate regional gain
+  keeps the voice below the overview mix. Lightning uses decaying notes at a
   value-dependent 90–120 bpm instead of a sustained note.
+- Smoke and CO2 add looped air textures from the existing sample library; the
+  forest bird ambience already plays in both views.
+- The selected marker uses the focused region bounds on the map and is also
+  drawn on the globe.
 - Forest birds also play in the regional view; the selected marker is drawn on
   both the globe and the regional map.
 - Auto-rotate, drag, and the map still control data time as before.

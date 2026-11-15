@@ -21,7 +21,8 @@ describe("regional point instrument", () => {
     expect(context.oscillators).toHaveLength(6);
 
     engine.setRegionalPoint("co2", 0.5, 0.2);
-    expect(context.oscillators).toHaveLength(7);
+    // Base voices + three regional oscillators + the chorus LFO.
+    expect(context.oscillators).toHaveLength(10);
     const oscillator = context.oscillators[6]!;
     const instrument = OVERVIEW_INSTRUMENTS.co2;
     const expectedPitch =
@@ -30,11 +31,13 @@ describe("regional point instrument", () => {
       2 ** instrument.octave;
     expect(oscillator.type).toBe("sawtooth");
     expect(scheduled(oscillator.frequency)).toBeCloseTo(expectedPitch, 5);
-    expect(scheduled(context.panners[4]!.pan)).toBeCloseTo(positionToPan(0.2), 6);
-    expect(context.gains.at(-1)!.gain.scheduledTarget ?? 0).toBeGreaterThan(0);
+    const regionalPanner = context.panners[4]!;
+    const regionalGain = context.gains.find((gain) => gain.connections.includes(regionalPanner))!;
+    expect(scheduled(regionalPanner.pan)).toBeCloseTo(positionToPan(0.2), 6);
+    expect(regionalGain.gain.scheduledTarget ?? 0).toBeGreaterThan(0);
 
     engine.setRegionalPoint(null, null, 0);
-    expect(scheduled(context.gains.at(-1)!.gain)).toBe(0);
+    expect(scheduled(regionalGain.gain)).toBe(0);
     engine.dispose();
   });
 
@@ -93,7 +96,8 @@ describe("regional point instrument", () => {
     const engine = createSoundEngine({ context: context.asAudioContext(), lightningSampleUrl: null });
     engine.setRegionalPoint("forest", 0.8, 0.8);
     await engine.start();
-    expect(context.oscillators).toHaveLength(7);
+    // Base voices + three regional oscillators + the chorus LFO.
+    expect(context.oscillators).toHaveLength(10);
     expect(context.oscillators[6]!.type).toBe("triangle");
     engine.dispose();
   });

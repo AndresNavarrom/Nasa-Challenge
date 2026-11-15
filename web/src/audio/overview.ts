@@ -101,6 +101,73 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
   },
 };
 
+
+/** Extra detail layered under the regional point voice. */
+export interface RegionalSample {
+  url: string;
+  gain: number;
+  filterHz: number;
+  filterQ: number;
+}
+
+export interface RegionalEnrichment {
+  /** Detuned companion oscillator, in cents. */
+  detuneCents: number;
+  /** Sub oscillator octave offset; 0 disables it. */
+  subOctave: number;
+  /** Level of the sub oscillator relative to the main one. */
+  subGain: number;
+  /** Sends to the shared regional chorus and reverb. */
+  chorusSend: number;
+  reverbSend: number;
+  /** A sustained sample bed under the synth, when one exists. */
+  sample?: RegionalSample;
+}
+
+/** Per-layer regional detail; the base waveform/scale still comes from OVERVIEW_INSTRUMENTS. */
+export const REGIONAL_ENRICHMENT: Record<LayerId, RegionalEnrichment> = {
+  forest: {
+    detuneCents: 7,
+    subOctave: -12,
+    subGain: 0.18,
+    chorusSend: 0.18,
+    reverbSend: 0.18,
+  },
+  smoke: {
+    detuneCents: -6,
+    subOctave: -12,
+    subGain: 0.14,
+    chorusSend: 0.2,
+    reverbSend: 0.26,
+    sample: {
+      url: "./audio/samples/aire-denso.ogg",
+      gain: 0.11,
+      filterHz: 1200,
+      filterQ: 0.7,
+    },
+  },
+  co2: {
+    detuneCents: 6,
+    subOctave: -12,
+    subGain: 0.2,
+    chorusSend: 0.2,
+    reverbSend: 0.3,
+    sample: {
+      url: "./audio/samples/aire-largo.ogg",
+      gain: 0.09,
+      filterHz: 850,
+      filterQ: 0.8,
+    },
+  },
+  lightning: {
+    detuneCents: 12,
+    subOctave: 0,
+    subGain: 0,
+    chorusSend: 0.08,
+    reverbSend: 0.16,
+  },
+};
+
 /** One sampled screen cell: where it is on screen and where it is on the globe. */
 export interface VisibleCell {
   lon: number;
