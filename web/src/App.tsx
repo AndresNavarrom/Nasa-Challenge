@@ -102,6 +102,11 @@ function PlanetView({
       : tracked?.layerId === activeLayer.manifest.id
         ? tracked.frame
         : frameIndexAt(positionRef.current, layerFrames);
+  const selectedPoint = useListeningPoint();
+  const selectedValue =
+    selectedPoint && activeLayer
+      ? sampleLayerAt(activeLayer, data.bbox, selectedPoint.lon, selectedPoint.lat, frame)
+      : null;
   // The regions of the world (the Amazon alone until regions.json arrives, or if it
   // cannot be read), the one the map view visits and the one under the cursor.
   // null while regions.json loads, so the region map is built once, with all of them.
@@ -221,6 +226,7 @@ function PlanetView({
         fps={fps}
         lite={lite}
         sceneError={sceneError}
+        selectedValue={selectedValue}
         audio={audio}
         timeline={timeline}
         onShowTour={onShowTour}

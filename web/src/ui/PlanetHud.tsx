@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
+import { useListeningPoint } from "../scene/listeningPoint";
 import { layerChoices, layerForChoice } from "./layerChoice";
 import { TOUR_BUTTON_TEST_ID } from "./tourSteps";
 
@@ -30,6 +31,8 @@ export interface PlanetHudProps {
   fps: number | null;
   lite: boolean;
   sceneError: string | null;
+  /** Value of the active layer at the selected point, or null when there is no data there. */
+  selectedValue?: number | null;
   /** Sound controls, docked in the bottom-right panel so they never overlap the HUD. */
   audio?: ReactNode;
   /** Timeline bar (play, position, speed, dates), docked above the sound controls. */
@@ -55,12 +58,12 @@ export function modeLabel(mode: ViewMode, regionName = "Amazon", hoveredRegionNa
   switch (mode) {
     case "globe":
       return hoveredRegionName
-        ? `${hoveredRegionName}: double-click (or tap again) to fly there.`
-        : "Planet view. Drag to turn it; double-click any region of the world or press Amazon.";
+        ? `${hoveredRegionName}: click (or tap again) to fly there.`
+        : "Planet view. Drag to turn it; click any region to fly there, or double-click a point to lock its sound.";
     case "to-map":
       return `Flying to ${regionName}…`;
     case "map":
-      return `${regionName} map. Double-click (or double-tap) it or press Back to Earth to return.`;
+      return `${regionName} map. Click to return or double-click a point to lock its sound.`;
     case "to-globe":
       return "Back to the planet…";
   }
@@ -87,12 +90,14 @@ export function PlanetHud(props: PlanetHudProps) {
     fps,
     lite,
     sceneError,
+    selectedValue = null,
     audio,
     timeline,
     onShowTour,
   } = props;
   // null on the plain Earth view.
   const activeLayer = layerForChoice(layers, activeLayerId);
+  const selectedPoint = useListeningPoint();
 
   return (
     <div
@@ -168,9 +173,10 @@ export function PlanetHud(props: PlanetHudProps) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div
           data-testid="planet-hud-probe"
-          className={`${panel} min-w-56 font-mono`}
+          className={`${panel} min-w-56 font-mono text-slate-400`}
           aria-live="off"
         >
+          <p className="text-slate-400">Hover</p>
           {probe ? (
             <>
               <p>
@@ -192,10 +198,26 @@ export function PlanetHud(props: PlanetHudProps) {
               )}
             </>
           ) : (
-            <p className="text-slate-400">
-              Move the cursor over the planet or the map.
-            </p>
+            <p className="text-slate-400">—</p>
           )}
+          <div className="mt-2 text-slate-100" data-testid="planet-hud-selected-coords">
+            <p>Selected</p>
+            {selectedPoint ? (
+              <>
+                <p>{`${formatLongitude(selectedPoint.lon)}, ${formatLatitude(selectedPoint.lat)}`}</p>
+                {activeLayer && (
+                  <p data-testid="planet-hud-selected-value">
+                    {activeLayer.manifest.title}:{" "}
+                    {selectedValue === null
+                      ? "no data here"
+                      : `${Math.round(selectedValue * 100)} %`}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p>click the planet or map</p>
+            )}
+          </div>
         </div>
 
         <div className={`${panel} flex flex-col items-end gap-2`}>

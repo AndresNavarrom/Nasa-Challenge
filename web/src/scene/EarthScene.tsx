@@ -45,7 +45,7 @@ import {
 } from "./FocusTransition";
 import { GLOBE_RADIUS, screenX01 } from "./geo";
 import { disposeLayerTextures, layerTextureFor, rampFor, showLayerFrame, type LayerTextures } from "./layerTexture";
-import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
+import { useListeningPoint, useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 import {
   AMAZON_REGION_ID,
   DEFAULT_REGIONS,
@@ -283,6 +283,8 @@ function SceneContents(props: SceneContentsProps) {
     focusedScene,
     setListeningPoint,
   } = props;
+  const selectedPoint = useListeningPoint();
+  const [hoverPoint, setHoverPoint] = useState<{ lon: number; lat: number } | null>(null);
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
@@ -484,8 +486,9 @@ function SceneContents(props: SceneContentsProps) {
     setModeState(next);
     onModeChange(next);
     if (next === "to-map" || next === "to-globe") {
-      // The indicator hides during the transition, but the listening point stays
-      // where it was so the sound does not cut out (FR5.2).
+      // The indicator and crosshair hide during the transition, but the selected
+      // point stays so the sound does not cut out (FR5.2).
+      setHoverPoint(null);
       onProbe(null);
       lastProbeRef.current = null;
       touchSelected.current = null;
@@ -583,27 +586,26 @@ function SceneContents(props: SceneContentsProps) {
     lastHitRef.current = hit;
     if (!hit) {
       lastProbeRef.current = null;
-      setListeningPoint(null);
+      setHoverPoint(null);
       onProbe(null);
       // A region chosen with a tap stays chosen when the finger lifts.
       if (touchSelected.current === null) showHoverRegion(null);
       return;
     }
+    setHoverPoint({ lon: hit.lon, lat: hit.lat });
     // Regions are only picked on the planet; on the map there is no outline. On touch
     // screens taps choose the region (handleGlobeTap), not the moving finger.
     if (!hit.touch) {
       touchSelected.current = null;
       showHoverRegion(modeRef.current === "globe" ? regionAt(hit.lon, hit.lat) : null);
     }
-    const rect = gl.domElement.getBoundingClientRect();
-    setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
     const probe = probeFor(hit);
     // The cursor may rest while the point is looked up again; do not repaint for the same reading.
     const last = lastProbeRef.current;
     if (last && last.lon === probe.lon && last.lat === probe.lat && last.value === probe.value) return;
     lastProbeRef.current = probe;
     onProbe(probe);
-  }, [gl, setListeningPoint, onProbe, probeFor, showHoverRegion, regionAt]);
+  }, [gl, onProbe, probeFor, showHoverRegion, regionAt]);
 
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
@@ -631,7 +633,15 @@ function SceneContents(props: SceneContentsProps) {
     if (hit) handleHover(hit);
   }, [handleHover]);
 
-  const handleMapDoubleClick = useCallback(() => onRequestView("globe"), [onRequestView]);
+  const handleGlobeSelectPoint = useCallback(
+    (lon: number, lat: number, clientX: number) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      setListeningPoint({ lon, lat, screenX: screenX01(clientX, rect.left, rect.width) });
+    },
+    [gl, setListeningPoint],
+  );
+
+  const handleMapBack = useCallback(() => onRequestView("globe"), [onRequestView]);
 
   // Touch screens: the first tap on a region chooses it (outline and name), a second
   // tap on the same region flies there; a tap elsewhere chooses again or clears.
@@ -667,7 +677,7 @@ function SceneContents(props: SceneContentsProps) {
     }
   }, [onRequestView]);
 
-  const handleGlobeDoubleClick = useCallback(
+  const handleGlobeFocusRegion = useCallback(
     (lon: number, lat: number) => {
       const index = regionAt(lon, lat);
       const region = index === null ? undefined : knownRegions[index];
@@ -698,9 +708,12 @@ function SceneContents(props: SceneContentsProps) {
         scenes={focusRegionId === AMAZON_REGION_ID ? scenes : undefined}
         onSceneSelect={onSceneSelect}
         onSceneHover={onSceneHover}
+        selectedPoint={selectedPoint}
+        hoverPoint={hoverPoint}
         onHover={handleHover}
-        onGlobeDoubleClick={handleGlobeDoubleClick}
-        onMapDoubleClick={handleMapDoubleClick}
+        onGlobeSelectPoint={handleGlobeSelectPoint}
+        onGlobeFocusRegion={handleGlobeFocusRegion}
+        onMapBack={handleMapBack}
         onGlobeTap={handleGlobeTap}
         onMapTap={handleMapTap}
       />
