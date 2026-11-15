@@ -2,9 +2,9 @@
 // the flat Amazon map. Both are billboard sprites: they face the camera and stay
 // legible while the planet turns or the map zooms.
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { CanvasTexture, SpriteMaterial, type Sprite } from "three";
+import { CanvasTexture, SpriteMaterial, Vector3, type Sprite } from "three";
 import type { BoundingBox } from "../data/types";
 import {
   GLOBE_RADIUS,
@@ -15,9 +15,11 @@ import {
 } from "./geo";
 import type { ListeningPoint } from "./listeningPoint";
 
-const SELECTED_SIZE = 0.018;
-const PULSE_SIZE = 0.022;
-const CROSSHAIR_SIZE = 0.024;
+// Angular sizes: multiplied by the camera distance so the markers keep a
+// similar size on screen when the map is zoomed in or the planet is far away.
+const SELECTED_ANGULAR_SIZE = 0.013;
+const PULSE_ANGULAR_RATIO = 1.3;
+const CROSSHAIR_ANGULAR_SIZE = 0.018;
 const PULSE_SECONDS = 1.6;
 
 type Position = [number, number, number];
@@ -38,8 +40,12 @@ function selectedTexture(): CanvasTexture {
   return canvasTexture((context) => {
     context.clearRect(0, 0, 64, 64);
     context.beginPath();
-    context.arc(32, 32, 25, 0, Math.PI * 2);
+    context.arc(32, 32, 26, 0, Math.PI * 2);
     context.fillStyle = "#ffffff";
+    context.fill();
+    context.beginPath();
+    context.arc(32, 32, 20, 0, Math.PI * 2);
+    context.fillStyle = "#22c55e";
     context.fill();
   });
 }
@@ -50,7 +56,7 @@ function pulseTexture(): CanvasTexture {
     context.beginPath();
     context.arc(32, 32, 24, 0, Math.PI * 2);
     context.strokeStyle = "#ffffff";
-    context.lineWidth = 3;
+    context.lineWidth = 6;
     context.stroke();
   });
 }
@@ -92,7 +98,11 @@ export interface LocationMarkersProps {
 }
 
 export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: LocationMarkersProps) {
+  const selectedRef = useRef<Sprite>(null);
   const pulseRef = useRef<Sprite>(null);
+  const crosshairRef = useRef<Sprite>(null);
+  const camera = useThree((state) => state.camera);
+  const worldPosition = useMemo(() => new Vector3(), []);
   const selectedMap = useMemo(selectedTexture, []);
   const pulseMap = useMemo(pulseTexture, []);
   const crosshairMap = useMemo(crosshairTexture, []);
@@ -126,23 +136,48 @@ export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: Locat
   const selectedPosition = selectedPoint ? positionFor(selectedPoint.lon, selectedPoint.lat) : null;
   const hoverPosition = hoverPoint ? positionFor(hoverPoint.lon, hoverPoint.lat) : null;
 
+  const screenScale = (sprite: Sprite | null, angularSize: number): number => {
+    if (!sprite) return 0;
+    sprite.getWorldPosition(worldPosition);
+    return camera.position.distanceTo(worldPosition) * angularSize;
+  };
+
   useFrame((state) => {
+    const selected = selectedRef.current;
     const pulse = pulseRef.current;
-    if (!pulse) return;
-    const progress = (state.clock.elapsedTime % PULSE_SECONDS) / PULSE_SECONDS;
-    pulse.scale.setScalar(PULSE_SIZE * (1 + progress * 0.8));
-    pulseMaterial.opacity = 0.7 * (1 - progress);
+    const crosshair = crosshairRef.current;
+    const selectedSize = screenScale(selected, SELECTED_ANGULAR_SIZE);
+    if (selected) selected.scale.set(selectedSize, selectedSize, 1);
+
+    if (pulse) {
+      const progress = (state.clock.elapsedTime % PULSE_SECONDS) / PULSE_SECONDS;
+      const pulseSize = selectedSize * PULSE_ANGULAR_RATIO * (1 + progress * 0.8);
+      pulse.scale.set(pulseSize, pulseSize, 1);
+      pulseMaterial.opacity = 0.7 * (1 - progress);
+    }
+
+    if (crosshair) {
+      const crosshairSize = screenScale(crosshair, CROSSHAIR_ANGULAR_SIZE);
+      crosshair.scale.set(crosshairSize, crosshairSize, 1);
+    }
   });
 
   return (
     <group>
       {selectedPosition && (
         <>
-          <sprite position={selectedPosition} scale={[SELECTED_SIZE, SELECTED_SIZE, 1]} material={selectedMaterial} renderOrder={10} raycast={() => {}} />
+          <sprite
+            ref={selectedRef}
+            position={selectedPosition}
+            scale={[SELECTED_ANGULAR_SIZE, SELECTED_ANGULAR_SIZE, 1]}
+            material={selectedMaterial}
+            renderOrder={10}
+            raycast={() => {}}
+          />
           <sprite
             ref={pulseRef}
             position={selectedPosition}
-            scale={[PULSE_SIZE, PULSE_SIZE, 1]}
+            scale={[SELECTED_ANGULAR_SIZE * PULSE_ANGULAR_RATIO, SELECTED_ANGULAR_SIZE * PULSE_ANGULAR_RATIO, 1]}
             material={pulseMaterial}
             renderOrder={9}
             raycast={() => {}}
@@ -150,7 +185,14 @@ export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: Locat
         </>
       )}
       {hoverPosition && (
-        <sprite position={hoverPosition} scale={[CROSSHAIR_SIZE, CROSSHAIR_SIZE, 1]} material={crosshairMaterial} renderOrder={11} raycast={() => {}} />
+        <sprite
+          ref={crosshairRef}
+          position={hoverPosition}
+          scale={[CROSSHAIR_ANGULAR_SIZE, CROSSHAIR_ANGULAR_SIZE, 1]}
+          material={crosshairMaterial}
+          renderOrder={11}
+          raycast={() => {}}
+        />
       )}
     </group>
   );
