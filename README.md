@@ -164,8 +164,9 @@ docker compose up web     # then open http://127.0.0.1:5173/
 
 - **Planet**: it turns slowly by itself. Click a point to lock its sound; then
   drag to move that point and hear the change. Hold **Shift** and drag to turn
-  the planet, or leave the auto-rotate switch on. The active layer is drawn over
-  `earth.jpg`.
+  the planet, or leave the auto-rotate switch on. On a touch screen a finger drag
+  turns the planet (there is no Shift) and a tap locks the point. The active
+  layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked
