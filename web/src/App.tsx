@@ -18,7 +18,7 @@ import {
   loadLayerGrids,
   type JukeboxCatalog,
 } from "./data/loadManifest";
-import type { JukeboxData, LayerId, LoadedLayer } from "./data/types";
+import type { JukeboxData, LayerId, LayerManifest, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
 import { frameBlend, frameIndexAt } from "./lib/timeline";
 import { SpinAccumulator, playDelta, positionPerTurn } from "./lib/timelineTrack";
@@ -52,6 +52,13 @@ type LoadState =
  * without waiting for them.
  */
 const START_LAYER_IDS: readonly LayerId[] = ["forest"];
+
+/** Approximate download size of a layer's grids, used to open the smallest timed layer in the tour. */
+function layerGridBytes(layer: LayerManifest): number {
+  const bytes = (grid: LayerManifest["region"] | null): number =>
+    grid ? grid.width * grid.height * grid.frames : 0;
+  return bytes(layer.global) + bytes(layer.region);
+}
 
 /** Data voices fade to this level while a scene popup is open, over 0.6 s. */
 const SCENE_DATA_DUCK = 0.12;
@@ -514,17 +521,19 @@ function JukeboxView({
     (action: TourAction) => {
       if (action === "show-timeline") {
         if (previousLayerRef.current === null) previousLayerRef.current = activeLayerId;
-        const current = layerForChoice(data.layers, activeLayerId);
-        if (current === null || current.manifest.static) {
-          const timed = data.layers.find((layer) => !layer.manifest.static);
-          if (timed) setActiveLayerId(timed.manifest.id);
+        const current = catalog.manifest.layers.find((layer) => layer.id === activeLayerId);
+        if (!current || current.static) {
+          const timed = catalog.manifest.layers
+            .filter((layer) => !layer.static)
+            .sort((a, b) => layerGridBytes(a) - layerGridBytes(b))[0];
+          if (timed) selectLayer(timed.id);
         }
         return;
       }
-      if (previousLayerRef.current !== null) setActiveLayerId(previousLayerRef.current);
+      if (previousLayerRef.current !== null) selectLayer(previousLayerRef.current);
       previousLayerRef.current = null;
     },
-    [activeLayerId, data.layers],
+    [activeLayerId, catalog, selectLayer],
   );
   const showTour = useGuidedTour(handleTourAction);
   const [scenes, setScenes] = useState<ScenesManifest | null>(null);
