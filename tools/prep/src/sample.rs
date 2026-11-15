@@ -178,6 +178,9 @@ pub fn run(out_dir: &Path, bbox: BBox, sizes: GridSizes) -> Result<Manifest> {
             is_static: layer.is_static,
             sample: true,
             dates,
+            // Sample data has no real calendar: the app spaces its instants evenly.
+            times: Vec::new(),
+            cadence: None,
             global: Some(write_area(out_dir, layer.id, "global", &global)?),
             region: write_area(out_dir, layer.id, "region", &region)?,
         });

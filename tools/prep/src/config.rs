@@ -185,6 +185,11 @@ pub struct LayerConfig {
     /// Grid sizes for this layer only; missing sides use the general `grid`.
     #[serde(default)]
     pub grid: Option<LayerGridSizes>,
+    /// How far apart the instants are, as an ISO 8601 duration (`PT1H`, `P1M`). The
+    /// app spaces the timeline marks and paces the playback with it. Layers that
+    /// change over time need it together with a `time` on every instant.
+    #[serde(default)]
+    pub cadence: Option<String>,
     pub value: ValueConfig,
     pub instants: Vec<InstantConfig>,
 }
@@ -208,6 +213,11 @@ impl LayerConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstantConfig {
     pub date: String,
+    /// Start of the instant in UTC, ISO 8601 (`2026-09-01T00:30:00Z`); the app places
+    /// the instant on the timeline with it. Required, with `cadence`, on every
+    /// instant of a layer that changes over time.
+    #[serde(default)]
+    pub time: Option<String>,
     pub views: Vec<ViewConfig>,
 }
 
@@ -306,7 +316,66 @@ impl ValueConfig {
     }
 }
 
+/// True for `YYYY-MM-DDTHH:MM:SSZ`, the only time form the app reads.
+fn is_utc_time(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let digit = |index: usize| bytes.get(index).is_some_and(u8::is_ascii_digit);
+    bytes.len() == 20
+        && [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18].into_iter().all(digit)
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[10] == b'T'
+        && bytes[13] == b':'
+        && bytes[16] == b':'
+        && bytes[19] == b'Z'
+}
+
+/// True for the ISO 8601 durations the app reads: `PT<n>H` or `P<n>M` / `P<n>D`.
+fn is_cadence(text: &str) -> bool {
+    let (number, unit) = if let Some(rest) = text.strip_prefix("PT") {
+        (rest.strip_suffix('H'), true)
+    } else if let Some(rest) = text.strip_prefix('P') {
+        (rest.strip_suffix('M').or_else(|| rest.strip_suffix('D')), true)
+    } else {
+        (None, false)
+    };
+    unit && number.is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && n != "0")
+}
+
 impl LayerConfig {
+    /// A layer that changes over time names its `cadence` and gives every instant a
+    /// `time`, in order; a static layer may leave both out.
+    fn validate_times(&self) -> Result<()> {
+        let named = |message: String| PrepError::new(format!("layer \"{}\": {message}", self.id));
+        let timed = self.instants.iter().filter(|instant| instant.time.is_some()).count();
+        if self.is_static && self.cadence.is_none() && timed == 0 {
+            return Ok(());
+        }
+        let Some(cadence) = &self.cadence else {
+            return Err(named("needs a \"cadence\" (ISO 8601, such as \"PT1H\" or \"P1M\")".into()));
+        };
+        if !is_cadence(cadence) {
+            return Err(named(format!("cadence \"{cadence}\" must look like \"PT1H\", \"P1D\" or \"P1M\"")));
+        }
+        let mut previous: Option<&str> = None;
+        for instant in &self.instants {
+            let Some(time) = instant.time.as_deref() else {
+                return Err(named(format!("instant \"{}\" has no \"time\"", instant.date)));
+            };
+            if !is_utc_time(time) {
+                return Err(named(format!(
+                    "instant \"{}\": time \"{time}\" must look like \"2026-09-01T00:30:00Z\"",
+                    instant.date
+                )));
+            }
+            if previous.is_some_and(|before| before >= time) {
+                return Err(named(format!("instant \"{}\" is not later than the one before it", instant.date)));
+            }
+            previous = Some(time);
+        }
+        Ok(())
+    }
+
     /// The layer's value method, each view's own method, and at least one main view per instant.
     fn validate_views(&self) -> Result<()> {
         let named = |cause: PrepError| PrepError::new(format!("layer \"{}\": {cause}", self.id));
@@ -367,6 +436,7 @@ impl PrepConfig {
                 .validate()
                 .map_err(|cause| PrepError::new(format!("layer \"{}\": {cause}", layer.id)))?;
             layer.validate_views()?;
+            layer.validate_times()?;
         }
         if let Some(earth) = &self.earth {
             earth.validate()?;
@@ -485,6 +555,46 @@ mod tests {
         assert_eq!(EarthConfig::size_file_name(8192), "earth-8k.jpg");
         assert_eq!(EarthConfig::size_file_name(4096), "earth-4k.jpg");
     }
+
+    /// A two-instant layer with the given cadence and instant times (JSON values or "null").
+    fn timed_config(cadence: &str, first: &str, second: &str) -> PrepConfig {
+        let view = r#"{ "file": "a.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } }"#;
+        let text = format!(
+            r#"{{ "layers": [{{
+                "id": "smoke", "title": "Smoke", "description": "Test layer",
+                "source": {{ "title": "GEOS-CF", "url": "https://example.org" }},
+                "cadence": {cadence}, "value": {{ "method": "brightness" }},
+                "instants": [
+                  {{ "date": "first", "time": {first}, "views": [{view}] }},
+                  {{ "date": "second", "time": {second}, "views": [{view}] }}
+                ] }}] }}"#
+        );
+        serde_json::from_str(&text).expect("test configuration parses")
+    }
+
+    #[test]
+    fn a_layer_that_changes_over_time_names_its_cadence_and_the_time_of_every_instant() {
+        let fine = timed_config(r#""PT1H""#, r#""2026-09-01T00:30:00Z""#, r#""2026-09-01T01:30:00Z""#);
+        assert!(fine.validate().is_ok(), "{:?}", fine.validate());
+        assert!(timed_config(r#""P1M""#, r#""2017-01-01T00:00:00Z""#, r#""2017-02-01T00:00:00Z""#).validate().is_ok());
+
+        let no_cadence = timed_config("null", r#""2026-09-01T00:30:00Z""#, r#""2026-09-01T01:30:00Z""#);
+        assert!(no_cadence.validate().unwrap_err().to_string().contains("cadence"));
+        let missing_time = timed_config(r#""PT1H""#, r#""2026-09-01T00:30:00Z""#, "null");
+        assert!(missing_time.validate().unwrap_err().to_string().contains("no \"time\""));
+        let out_of_order = timed_config(r#""PT1H""#, r#""2026-09-01T01:30:00Z""#, r#""2026-09-01T00:30:00Z""#);
+        assert!(out_of_order.validate().unwrap_err().to_string().contains("not later"));
+        let bad_time = timed_config(r#""PT1H""#, r#""Sep 1, 2026""#, r#""2026-09-01T01:30:00Z""#);
+        assert!(bad_time.validate().unwrap_err().to_string().contains("must look like"));
+        let bad_cadence = timed_config(r#""hourly""#, r#""2026-09-01T00:30:00Z""#, r#""2026-09-01T01:30:00Z""#);
+        assert!(bad_cadence.validate().unwrap_err().to_string().contains("cadence"));
+    }
+
+    #[test]
+    fn a_static_layer_needs_no_times() {
+        let config = config_with(r#"{ "global": [1440, 720], "region": [360, 280] }"#, "null");
+        assert!(config.validate().is_ok(), "{:?}", config.validate());
+    }
 }
 
 // ---- Output manifest (read by web/src/data/loadManifest.ts) ----
@@ -511,6 +621,12 @@ pub struct LayerOut {
     /// True when the values are generated sample data rather than NASA frames.
     pub sample: bool,
     pub dates: Vec<String>,
+    /// Start of each instant in UTC (ISO 8601); empty when the layer gives none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub times: Vec<String>,
+    /// Spacing of the instants (ISO 8601 duration); absent for static layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cadence: Option<String>,
     pub global: Option<GridOut>,
     pub region: GridOut,
 }

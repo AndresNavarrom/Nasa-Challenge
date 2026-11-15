@@ -347,7 +347,19 @@ pub struct AreaOutput {
     pub texture: RgbaImage,
 }
 
-/// Writes `<id>_<suffix>.bin` and `<id>_<suffix>.png`; returns the manifest entry.
+/// Gzip of `bytes`: the grids are mostly smooth or empty, so they shrink 5 to 12
+/// times, and the app inflates them in the browser (DecompressionStream).
+fn gzip(bytes: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Write;
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    encoder
+        .write_all(bytes)
+        .and_then(|()| encoder.finish())
+        .map_err(|cause| PrepError::new(format!("could not compress a grid: {cause}")))
+}
+
+/// Writes `<id>_<suffix>.bin.gz` (every frame, gzip) and `<id>_<suffix>.png`; returns
+/// the manifest entry. A plain `.bin` left by an earlier run is removed.
 pub fn write_area(out_dir: &Path, id: &str, suffix: &str, area: &AreaOutput) -> Result<GridOut> {
     let cells = area.width as usize * area.height as usize;
     if area.frames.is_empty() || area.frames.iter().any(|frame| frame.len() != cells) {
@@ -356,9 +368,10 @@ pub fn write_area(out_dir: &Path, id: &str, suffix: &str, area: &AreaOutput) -> 
             area.width, area.height
         )));
     }
-    let file = format!("{id}_{suffix}.bin");
+    let file = format!("{id}_{suffix}.bin.gz");
     let texture = format!("{id}_{suffix}.png");
-    write_file(&out_dir.join(&file), &area.frames.concat())?;
+    write_file(&out_dir.join(&file), &gzip(&area.frames.concat())?)?;
+    remove_if_present(&out_dir.join(format!("{id}_{suffix}.bin")))?;
     save_picture(&out_dir.join(&texture), &area.texture)?;
     Ok(GridOut {
         width: area.width,
@@ -505,23 +518,29 @@ fn prepare_layer(
         is_static: layer.is_static,
         sample: false,
         dates: layer.instants.iter().map(|instant| instant.date.clone()).collect(),
+        times: layer.instants.iter().filter_map(|instant| instant.time.clone()).collect(),
+        cadence: layer.cadence.clone(),
         global: global_out,
         region: region_out,
     })
 }
 
+fn remove_if_present(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => {
+            println!("  removed stale {}", path.display());
+            Ok(())
+        }
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(cause) => Err(PrepError::new(format!("could not remove {}: {cause}", path.display()))),
+    }
+}
+
 /// A region-only layer must not leave global files from an earlier run (for example
 /// `--sample`) next to the new manifest.
 fn remove_stale_global(out_dir: &Path, id: &str) -> Result<()> {
-    for extension in ["bin", "png"] {
-        let path = out_dir.join(format!("{id}_global.{extension}"));
-        match fs::remove_file(&path) {
-            Ok(()) => println!("  removed stale {}", path.display()),
-            Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => {}
-            Err(cause) => {
-                return Err(PrepError::new(format!("could not remove {}: {cause}", path.display())))
-            }
-        }
+    for extension in ["bin", "bin.gz", "png"] {
+        remove_if_present(&out_dir.join(format!("{id}_global.{extension}")))?;
     }
     Ok(())
 }
@@ -696,6 +715,24 @@ mod tests {
         assert!((coverage.fallback_percent() - 25.0).abs() < 1e-9);
         // A grid with no data at all reports 0 %, not a division by zero.
         assert_eq!(coverage_report(&[Empty, Empty]).primary_percent(), 0.0);
+    }
+
+    #[test]
+    fn write_area_stores_every_frame_gzip_compressed_and_drops_an_old_plain_grid() {
+        use std::io::Read;
+        let dir = std::env::temp_dir().join(format!("jukebox-prep-gz-{}", std::process::id()));
+        ensure_dir(&dir).unwrap();
+        fs::write(dir.join("smoke_region.bin"), b"old").unwrap();
+        let area = AreaOutput { width: 2, height: 1, frames: vec![vec![1, 2], vec![3, 4]], texture: RgbaImage::new(2, 1) };
+
+        let out = write_area(&dir, "smoke", "region", &area).unwrap();
+
+        assert_eq!((out.file.as_str(), out.frames), ("smoke_region.bin.gz", 2));
+        let mut inflated = Vec::new();
+        flate2::read::GzDecoder::new(fs::File::open(dir.join(&out.file)).unwrap()).read_to_end(&mut inflated).unwrap();
+        assert_eq!(inflated, vec![1, 2, 3, 4]);
+        assert!(!dir.join("smoke_region.bin").exists());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
