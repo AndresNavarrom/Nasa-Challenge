@@ -37,7 +37,7 @@ describe("landing page or jukebox", () => {
 
 describe("landing layout and colours", () => {
   it("is split into three full-height sections", () => {
-    expect(landingSource.match(/<section\s/g)).toHaveLength(3);
+    expect(landingSource.match(/<section\b/g)).toHaveLength(3);
     for (const id of ["listen", "layers", "about"]) {
       expect(landingSource).toContain(`data-testid="landing-section-${id}"`);
     }
