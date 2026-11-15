@@ -26,6 +26,7 @@ import {
   type Texture,
   type WebGLRenderer,
 } from "three";
+import type { VisibleField } from "../audio/overview";
 import type { JukeboxData, LoadedLayer } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
 import { sceneMapPosition } from "../scenes/geometry";
@@ -105,6 +106,8 @@ export interface EarthSceneProps {
   /** Scene whose popup is open; the map zooms towards its point. */
   focusedScene?: SceneDefinition | null;
   onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
+  /** Visible screen field for the overview scan; null while the globe is not visible. */
+  onOverviewField?: (field: VisibleField | null) => void;
 }
 
 const CAMERA_FOV = 45;
@@ -299,6 +302,7 @@ function SceneContents(props: SceneContentsProps) {
     onSceneSelect,
     onSceneHover,
     focusedScene,
+    onOverviewField,
     setListeningPoint,
   } = props;
   const selectedPoint = useListeningPoint();
@@ -779,6 +783,7 @@ function SceneContents(props: SceneContentsProps) {
         onMapBack={handleMapBack}
         onGlobeTap={handleGlobeTap}
         onMapTap={handleMapTap}
+        onOverviewField={onOverviewField}
       />
       <FpsProbe onFps={onFps} />
     </>

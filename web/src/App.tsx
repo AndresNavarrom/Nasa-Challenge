@@ -8,12 +8,14 @@ import {
   type ReactNode,
 } from "react";
 import { AudioStart } from "./audio/AudioStart";
+import { DataAudio } from "./audio/DataAudio";
 import type { SoundEngine } from "./audio/engine";
+import type { VisibleField } from "./audio/overview";
 import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
-import { frameBlend, frameIndexAt, framePosition } from "./lib/timeline";
+import { frameBlend, frameIndexAt } from "./lib/timeline";
 import { SpinAccumulator, playDelta, positionPerTurn } from "./lib/timelineTrack";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import { loadScenes } from "./scenes/loadScenes";
@@ -49,6 +51,7 @@ function readLiteMode(search: string): boolean {
 
 interface PlanetViewProps {
   data: JukeboxData;
+  engine: SoundEngine;
   lite: boolean;
   audio?: ReactNode;
   /** The layer picker's value: a layer id or EARTH_VIEW_ID. */
@@ -64,6 +67,7 @@ interface PlanetViewProps {
 /** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
 function PlanetView({
   data,
+  engine,
   lite,
   audio,
   activeLayerId,
@@ -88,6 +92,10 @@ function PlanetView({
   const [sceneHover, setSceneHover] = useState<{ scene: SceneDefinition; x: number; y: number } | null>(null);
   // The planet starts turning by itself; the "Auto-rotate" switch stops it.
   const [autoRotate, setAutoRotate] = useState(true);
+  const overviewFieldRef = useRef<VisibleField | null>(null);
+  const handleOverviewField = useCallback((field: VisibleField | null) => {
+    overviewFieldRef.current = field;
+  }, []);
 
   // null: the plain Earth view, no layer drawn.
   const activeLayer = useMemo(
@@ -242,8 +250,17 @@ function PlanetView({
           onSceneSelect={handleSceneSelect}
           onSceneHover={handleSceneHover}
           focusedScene={focusedScene}
+          onOverviewField={handleOverviewField}
         />
       </div>
+      <DataAudio
+        data={data}
+        engine={engine}
+        activeLayer={activeLayer}
+        mode={mode}
+        fade={!lite}
+        overviewFieldRef={overviewFieldRef}
+      />
       <PlanetHud
         layers={data.layers}
         activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
@@ -334,52 +351,6 @@ function FrameTracker({
   useEffect(() => {
     onFrames({ layerId, from, to, nearest });
   }, [layerId, from, to, nearest, onFrames]);
-  return null;
-}
-
-/**
- * Feeds the sound engine from the point under the cursor and the shared
- * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
- * ListeningPointProvider, so the scene publishes the point without knowing
- * about audio. The timeline moves with the planet's turn and with the line
- * under the planet.
- */
-function AudioListener({
-  data,
-  engine,
-  fade,
-}: {
-  data: JukeboxData;
-  engine: SoundEngine;
-  /** Blend the two instants around the position like the picture does (off in lite mode). */
-  fade: boolean;
-}) {
-  const point = useListeningPoint();
-  const { position } = useTimeline();
-
-  useEffect(() => {
-    if (!point) {
-      for (const layer of data.layers) {
-        engine.setLayerIntensity(layer.manifest.id, null);
-      }
-      return;
-    }
-    for (const layer of data.layers) {
-      // Shared normalized position -> the same blend of the two instants around
-      // it that the picture fades between (the nearest instant alone in lite
-      // mode), so what is heard is what is seen. Static layers have one frame,
-      // so this is 0 and sampleLayerAt ignores time for them.
-      const frame = fade
-        ? framePosition(position, layer.region.frames)
-        : frameIndexAt(position, layer.region.frames);
-      engine.setLayerIntensity(
-        layer.manifest.id,
-        sampleLayerAt(layer, data.bbox, point.lon, point.lat, frame),
-      );
-    }
-    engine.setPan(point.screenX);
-  }, [engine, data, point, position, fade]);
-
   return null;
 }
 
@@ -509,6 +480,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
     <>
       <PlanetView
         data={data}
+        engine={engine}
         lite={lite}
         audio={<AudioStart engine={engine} className="w-full sm:w-56" />}
         activeLayerId={activeLayerId}
@@ -519,7 +491,6 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         onCloseScene={closeScene}
         focusedScene={openScene}
       />
-      <AudioListener data={data} engine={engine} fade={!lite} />
       {openScene && (
         <ScenePopup scene={openScene} onClose={closeScene} audioError={sceneAudioError} />
       )}

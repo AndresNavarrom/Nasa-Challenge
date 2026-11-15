@@ -63,7 +63,7 @@ export function modeLabel(mode: ViewMode, regionName = "Amazon", hoveredRegionNa
     case "globe":
       return hoveredRegionName
         ? `${hoveredRegionName}: double-click (or tap again) to fly there.`
-        : "Planet view. Click a point to lock its sound; drag to move it (Shift-drag turns the planet); double-click a region to fly there.";
+        : "Overview of the visible planet. Drag to turn it; double-click a region to fly there.";
     case "to-map":
       return `Flying to ${regionName}…`;
     case "map":
@@ -207,24 +207,26 @@ export function PlanetHud(props: PlanetHudProps) {
           ) : (
             <p className="text-slate-400">—</p>
           )}
-          <div className="mt-2 text-slate-100" data-testid="planet-hud-selected-coords">
-            <p>Selected</p>
-            {selectedPoint ? (
-              <>
-                <p>{`${formatLongitude(selectedPoint.lon)}, ${formatLatitude(selectedPoint.lat)}`}</p>
-                {activeLayer && (
-                  <p data-testid="planet-hud-selected-value">
-                    {activeLayer.manifest.title}:{" "}
-                    {selectedValue === null
-                      ? "no data here"
-                      : `${Math.round(selectedValue * 100)} %`}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p>click the planet or map</p>
-            )}
-          </div>
+          {(mode === "map" || mode === "to-map") && (
+            <div className="mt-2 text-slate-100" data-testid="planet-hud-selected-coords">
+              <p>Selected</p>
+              {selectedPoint ? (
+                <>
+                  <p>{`${formatLongitude(selectedPoint.lon)}, ${formatLatitude(selectedPoint.lat)}`}</p>
+                  {activeLayer && (
+                    <p data-testid="planet-hud-selected-value">
+                      {activeLayer.manifest.title}:{" "}
+                      {selectedValue === null
+                        ? "no data here"
+                        : `${Math.round(selectedValue * 100)} %`}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p>click the map</p>
+              )}
+            </div>
+          )}
         </div>
 
         {timeline && (

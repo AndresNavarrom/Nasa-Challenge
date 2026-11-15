@@ -162,11 +162,16 @@ The interface opens on the 3D planet (code in `web/src/scene/` and
 docker compose up web     # then open http://127.0.0.1:5173/
 ```
 
-- **Planet**: it turns slowly by itself. Click a point to lock its sound; then
-  drag to move that point and hear the change. Hold **Shift** and drag to turn
-  the planet, or leave the auto-rotate switch on. On a touch screen a finger drag
-  turns the planet (there is no Shift) and a tap locks the point. The active
-  layer is drawn over `earth.jpg`.
+- **Planet**: it turns slowly by itself. The overview plays the visible globe
+  all at once: screen position sets the stereo side, latitude sets the pitch
+  (poles low, equator high), and the layer value sets the volume. The timeline
+  plays on its own clock, so Auto-rotate off stops the planet but the data frame
+  and the field keep going. The forest overview adds sparse bird excerpts from
+  `audio/samples/oajaros-suaves.ogg` when the visible forest is dense enough.
+  Drag to turn the planet; double-click a region to fly there. On a touch screen
+  a finger drag turns the planet and a double tap flies to a region. Point
+  locking belongs to the regional map; the globe uses the visible-area overview.
+  The active layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked
@@ -186,15 +191,21 @@ docker compose up web     # then open http://127.0.0.1:5173/
 - **To a region and back**: double-click a region (the cursor becomes a hand)
   or press **Amazon**; the planet turns, flattens into the map and the camera
   moves close (1.6 s). Double-click the map or press **Back to Earth** to
-  return (1.4 s) and the planet turns again.
+  return (1.4 s) and the planet turns again. The regional view uses the same
+  base instruments as the overview, enriched with detuned/sub voices, chorus,
+  reverb and air textures; the selected point's left-right position sets pan
+  and the layer value sets a discrete pitch over one octave. Lightning
+  retriggers decaying notes at 90–120 bpm (0 is the lowest note at 90 bpm, not
+  silence), and forest birds play while the visible/selected forest value is at
+  least 0.25.
 - **Indicator** (bottom left): longitude, latitude and the active layer's
-  value (0 to 100 %) for the point under the cursor and for the locked point,
-  or "no data here".
-- **Listening point** for the sound engine:
+  value (0 to 100 %) for the point under the cursor; the region map also shows
+  the locked point, or "no data here".
+- **Listening point** for the region map:
   `useListeningPoint()` from `web/src/scene/listeningPoint.tsx` returns the
   locked point as `{ lon, lat, screenX }` (`screenX` 0 at the left edge of the
-  canvas, 1 at the right), or `null` until a point is selected. Clicking or
-  dragging the planet/map updates it; hovering no longer changes the sound.
+  canvas, 1 at the right), or `null` until a point is selected. Only the region
+  map selects a point now; the globe uses the visible-area overview.
 - **Frames per second** (top right): the average over the last second; green
   at 30 or more (the target), red below. The browser's own performance monitor
   (Chrome DevTools, "Performance monitor") gives the same figure as a backup.
