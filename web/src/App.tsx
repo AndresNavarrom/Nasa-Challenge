@@ -18,6 +18,7 @@ import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import { loadScenes } from "./scenes/loadScenes";
 import type { SceneDefinition, ScenesManifest } from "./scenes/types";
 import type { ViewMode } from "./scene/FocusTransition";
+import { AMAZON_REGION_ID, DEFAULT_REGIONS, loadWorldRegions, regionById, type Region } from "./scene/regions";
 import {
   ListeningPointProvider,
   useListeningPoint,
@@ -101,7 +102,31 @@ function PlanetView({
       : tracked?.layerId === activeLayer.manifest.id
         ? tracked.frame
         : frameIndexAt(positionRef.current, layerFrames);
-  const showAmazon = useCallback(() => setTargetView("map"), []);
+  // The regions of the world (the Amazon alone until regions.json arrives, or if it
+  // cannot be read), the one the map view visits and the one under the cursor.
+  // null while regions.json loads, so the region map is built once, with all of them.
+  const [regions, setRegions] = useState<readonly Region[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadWorldRegions(data.baseUrl)
+      .then((loaded) => {
+        if (!cancelled) setRegions(loaded);
+      })
+      .catch((cause: unknown) => {
+        console.error("Earth Jukebox could not load the world regions; only the Amazon is outlined:", cause);
+        if (!cancelled) setRegions(DEFAULT_REGIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.baseUrl]);
+  const [focusRegionId, setFocusRegionId] = useState(AMAZON_REGION_ID);
+  const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+  const visitRegion = useCallback((regionId: string) => {
+    setFocusRegionId(regionId);
+    setTargetView("map");
+  }, []);
+  const showAmazon = useCallback(() => visitRegion(AMAZON_REGION_ID), [visitRegion]);
   const showEarth = useCallback(() => {
     setSceneHover(null);
     onCloseScene?.();
@@ -128,6 +153,15 @@ function PlanetView({
   useEffect(() => {
     if (targetView !== "map") setSceneHover(null);
   }, [targetView]);
+  // Every way back to the planet (the button, a double-click or double-tap on the
+  // map) closes the open scene too.
+  const requestView = useCallback(
+    (view: TargetView) => {
+      if (view === "globe") showEarth();
+      else setTargetView(view);
+    },
+    [showEarth],
+  );
 
   if (data.layers.length === 0) {
     return (
@@ -157,7 +191,11 @@ function PlanetView({
           targetView={targetView}
           lite={lite}
           autoRotate={autoRotate}
-          onRequestView={setTargetView}
+          onRequestView={requestView}
+          regions={regions}
+          focusRegionId={focusRegionId}
+          onFocusRegion={visitRegion}
+          onHoverRegion={setHoveredRegionId}
           onModeChange={setMode}
           onProbe={setProbe}
           onFps={setFps}
@@ -177,6 +215,8 @@ function PlanetView({
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
+        regionName={regionById(focusRegionId, regions ?? DEFAULT_REGIONS)?.name ?? "Amazon"}
+        hoveredRegionName={hoveredRegionId ? (regionById(hoveredRegionId, regions ?? DEFAULT_REGIONS)?.name ?? null) : null}
         probe={probe}
         fps={fps}
         lite={lite}
