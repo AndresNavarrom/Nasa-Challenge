@@ -31,6 +31,7 @@ import { EarthMesh, type DotImage, type GlobeHit, type ReliefImages } from "./Ea
 import {
   GLOBE_CAMERA_Z,
   createViewState,
+  globeCameraZ,
   mapCameraZ,
   playFocus,
   playReturn,
@@ -346,13 +347,17 @@ function SceneContents(props: SceneContentsProps) {
       });
     } else if (target === "globe" && current === "map") {
       setMode("to-globe");
-      cancelRef.current = playReturn(view.current, {
-        instant,
-        onComplete: () => {
-          setMode("globe");
-          advanceRef.current();
+      cancelRef.current = playReturn(
+        view.current,
+        {
+          instant,
+          onComplete: () => {
+            setMode("globe");
+            advanceRef.current();
+          },
         },
-      });
+        globeCameraZ(CAMERA_FOV, size.width / size.height),
+      );
     }
   };
   useEffect(() => {
@@ -365,6 +370,9 @@ function SceneContents(props: SceneContentsProps) {
     if (modeRef.current === "map") {
       // Keep the Amazon framed if the window is resized while on the map.
       state.cameraZ = mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height);
+    } else if (modeRef.current === "globe") {
+      // Keep the whole planet on screen, also on a phone held upright or turned.
+      state.cameraZ = globeCameraZ(CAMERA_FOV, size.width / size.height);
     }
     camera.position.set(0, 0, state.cameraZ);
     camera.lookAt(0, 0, 0);
