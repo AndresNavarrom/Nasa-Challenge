@@ -268,7 +268,10 @@ function SceneContents(props: SceneContentsProps) {
 
   // Sharp lightning dots: requested the first time lightning is shown, then kept
   // (same rule as the forest images), so start-up does not wait for them.
-  const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER;
+  // The dots image holds the whole period at once, so it is only drawn while the
+  // lightning data has a single instant. With one instant per quarter, the timeline
+  // draws each quarter from its grids instead (one quarter at a time, never accumulated).
+  const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER && activeLayer.region.frames <= 1;
   const dotStyle = lightningActive ? dotImageFor(DOT_IMAGE_LAYER) : null;
   const [lightningWanted, setLightningWanted] = useState(lightningActive);
   useEffect(() => {

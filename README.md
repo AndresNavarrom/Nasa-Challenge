@@ -275,7 +275,7 @@ See [`data/SOURCES.md`](data/SOURCES.md) for every file and link.
 | Forest height | [GEDI L3 Gridded Land Surface Metrics V3](https://doi.org/10.3334/ORNLDAAC/2525) (NASA GEDI, ORNL DAAC), filled with [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950) where GEDI has no data | Global, April 2019 - July 2025 | **Measurement** on a fixed scale: 0 to 50 m canopy height |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) surface PM2.5 (NASA GMAO model analysis) | Global, 1 September 2026, 24 hourly means | **Model value** on a fixed scale: 0 to 150 µg/m³ |
 | CO2 | DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) | Amazon only, 23 - 25 February 2020, every 6 h | **Relative intensity** read from the colours of the visualization, not ppm |
-| Lightning | Lightning Events Detected from the ISS 2017-2023, [NASA SVS 5011](https://svs.gsfc.nasa.gov/5011) | About 55° N to 55° S, 2017 - 2023 accumulated | **Relative frequency** read from the visualization, not a flash count |
+| Lightning | Lightning Events Detected from the ISS 2017-2023, [NASA SVS 5011](https://svs.gsfc.nasa.gov/5011) | About 55° N to 55° S, 2017 - 2023, one frame per quarter (not accumulated) | **Relative frequency** read from the visualization, not a flash count |
 
 Backdrop of the planet: [Natural Earth I](https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/)
 (public domain); it carries no data values.

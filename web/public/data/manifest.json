@@ -115,27 +115,53 @@
     {
       "id": "lightning",
       "title": "Lightning",
-      "description": "How often lightning was seen from the International Space Station (NASA's LIS instrument) between January 2017 and July 2023, all years accumulated. Brighter means lightning in more of the ten-day windows of the period; it is a relative frequency read from a NASA visualization, not a flash count. LIS sees only between about 55° N and 55° S.",
+      "description": "Where lightning was seen from the International Space Station (NASA's LIS instrument), quarter by quarter from January 2017 to July 2023. Each frame shows only its own three months, nothing accumulated. Brighter means lightning in more of the ten-day windows of that quarter; it is a relative frequency read from a NASA visualization, not a flash count. LIS sees only between about 55° N and 55° S.",
       "source": {
         "title": "Lightning Events Detected from the ISS 2017-2023 (NASA SVS 5011)",
         "url": "https://svs.gsfc.nasa.gov/5011"
       },
-      "static": true,
+      "static": false,
       "sample": false,
       "dates": [
-        "2017 - 2023 (accumulated)"
+        "Jan - Mar 2017",
+        "Apr - Jun 2017",
+        "Jul - Sep 2017",
+        "Oct - Dec 2017",
+        "Jan - Mar 2018",
+        "Apr - Jun 2018",
+        "Jul - Sep 2018",
+        "Oct - Dec 2018",
+        "Jan - Mar 2019",
+        "Apr - Jun 2019",
+        "Jul - Sep 2019",
+        "Oct - Dec 2019",
+        "Jan - Mar 2020",
+        "Apr - Jun 2020",
+        "Jul - Sep 2020",
+        "Oct - Dec 2020",
+        "Jan - Mar 2021",
+        "Apr - Jun 2021",
+        "Jul - Sep 2021",
+        "Oct - Dec 2021",
+        "Jan - Mar 2022",
+        "Apr - Jun 2022",
+        "Jul - Sep 2022",
+        "Oct - Dec 2022",
+        "Jan - Mar 2023",
+        "Apr - Jun 2023",
+        "Jul 2023"
       ],
       "global": {
         "width": 1440,
         "height": 720,
-        "frames": 1,
+        "frames": 27,
         "file": "lightning_global.bin",
         "texture": "lightning_global.png"
       },
       "region": {
         "width": 360,
         "height": 280,
-        "frames": 1,
+        "frames": 27,
         "file": "lightning_region.bin",
         "texture": "lightning_region.png"
       }
