@@ -143,6 +143,8 @@ function SceneContents(props: SceneContentsProps) {
   const targetRef = useRef<TargetView>(targetView);
   targetRef.current = targetView;
   const cancelRef = useRef<CancelTransition | null>(null);
+  const lastHitRef = useRef<GlobeHit | null>(null);
+  const lastProbeRef = useRef<Probe | null>(null);
 
   const baseTexture = useBaseTexture(`${data.baseUrl}earth.jpg`, lite, onSceneError);
 
@@ -167,9 +169,10 @@ function SceneContents(props: SceneContentsProps) {
     setModeState(next);
     onModeChange(next);
     if (next === "to-map" || next === "to-globe") {
-      // The listening point is null during the whole transition.
-      setListeningPoint(null);
+      // The indicator hides during the transition, but the listening point stays
+      // where it was so the sound does not cut out (FR5.2).
       onProbe(null);
+      lastProbeRef.current = null;
     }
   };
 
@@ -218,17 +221,34 @@ function SceneContents(props: SceneContentsProps) {
 
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
-      if (!hit || modeRef.current === "to-map" || modeRef.current === "to-globe") {
+      // While the view changes, keep the last point (and the sound) as it is.
+      if (modeRef.current === "to-map" || modeRef.current === "to-globe") return;
+      lastHitRef.current = hit;
+      if (!hit) {
         setListeningPoint(null);
+        lastProbeRef.current = null;
         onProbe(null);
         return;
       }
       const rect = gl.domElement.getBoundingClientRect();
       setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
-      onProbe({ lon: hit.lon, lat: hit.lat, value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT) });
+      const value = sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT);
+      // The cursor may rest while the point is looked up again; do not repaint for the same reading.
+      const last = lastProbeRef.current;
+      if (last && last.lon === hit.lon && last.lat === hit.lat && last.value === value) return;
+      const probe = { lon: hit.lon, lat: hit.lat, value };
+      lastProbeRef.current = probe;
+      onProbe(probe);
     },
     [gl, activeLayer, data.bbox, setListeningPoint, onProbe],
   );
+
+  // A new layer changes the reading under a cursor that has not moved.
+  useEffect(() => {
+    lastProbeRef.current = null;
+    const hit = lastHitRef.current;
+    if (hit) handleHover(hit);
+  }, [handleHover]);
 
   const handleGlobeClick = useCallback(
     (lon: number, lat: number) => {
