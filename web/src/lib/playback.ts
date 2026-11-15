@@ -5,7 +5,7 @@
 //   that position; the layers do not share a real calendar, so the timeline is a
 //   narrative sequence, not a unified date.
 // - The sequence loops forever by default.
-// - Speed is a multiplier over the sequence duration: 0.1x to 8x.
+// - Speed is a multiplier over the sequence duration: 0.1x to 32x.
 // - At 1x the whole sequence lasts DEFAULT_DURATION_SECONDS.
 //
 // This module is pure so it can be tested without React or Web Audio.
@@ -16,7 +16,7 @@ import { stepPosition } from "./timelineTrack";
 /** Slowest playback speed. */
 export const MIN_SPEED = 0.1;
 /** Fastest playback speed. */
-export const MAX_SPEED = 8;
+export const MAX_SPEED = 32;
 /** Length of the whole sequence at 1x, in seconds. */
 export const DEFAULT_DURATION_SECONDS = 24;
 

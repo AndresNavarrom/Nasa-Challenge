@@ -9,8 +9,9 @@
 // keeps turning and the timeline goes on from there. Arrow keys move one instant,
 // Page Up / Page Down one turn (a day or a year), Home / End to the ends.
 //
-// Speed buttons (4x and 8x, starting at 4x) make each turn cover more real time; the planet keeps
-// its pace, and the header says how much one turn covers ("1 turn = 4 days").
+// A speed slider (4×–32×, starting at 4×) makes each turn cover more real
+// time; the planet keeps its pace, and the header says how much one turn
+// covers ("1 turn = 4 days").
 //
 // A static layer (forest) shows the same line dimmed, with its one period.
 // It only shows and changes the shared clock of TimelineProvider; it owns no clock.
@@ -26,7 +27,9 @@ import {
   positionOfFrame,
   timelineTicks,
   turnText,
-  TIMELINE_SPEEDS,
+  TIMELINE_MAX_SPEED,
+  TIMELINE_MIN_SPEED,
+  TIMELINE_SPEED_STEP,
 } from "../lib/timelineTrack";
 import { isTimed, trackValueText } from "./timelineFormat";
 
@@ -123,22 +126,22 @@ export function TimelineTrack(props: TimelineTrackProps) {
 
       {timed && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div role="group" aria-label="Timeline speed" className="flex gap-1">
-            {TIMELINE_SPEEDS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                data-testid={`timeline-speed-${value}`}
-                aria-pressed={speed === value}
-                className={`rounded px-2 py-0.5 font-mono ${
-                  speed === value ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                }`}
-                onClick={() => onSpeed(value)}
-              >
-                {value}×
-              </button>
-            ))}
-          </div>
+          <label className="flex flex-1 items-center gap-2">
+            <span className="text-slate-400">Speed</span>
+            <input
+              type="range"
+              data-testid="timeline-speed"
+              className="w-24 accent-emerald-600 [color-scheme:dark]"
+              min={TIMELINE_MIN_SPEED}
+              max={TIMELINE_MAX_SPEED}
+              step={TIMELINE_SPEED_STEP}
+              value={speed}
+              aria-label="Timeline speed"
+              aria-valuetext={`${speed} times`}
+              onChange={(event) => onSpeed(Number(event.target.value))}
+            />
+            <span className="font-mono text-slate-100">{speed}×</span>
+          </label>
           {manifest.cadence && (
             <span data-testid="timeline-turn" className="text-slate-400">
               1 turn = {turnText(manifest.cadence, speed)}

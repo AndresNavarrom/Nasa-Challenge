@@ -21,7 +21,7 @@ the play/pause clock of `playback.ts`, which the app no longer uses.
 | Marks | **One per instant, placed by its real time**; the marks that start a day (hourly) or a year (monthly) are labelled | A gap in the data would show as a gap on the line. Layers without times (sample data) are evenly spaced. |
 | Between instants | **Crossfade** of the picture (two textures and `uFrameMix` in the shader) and **the same blend in the sound** (`framePosition`) | Picture and sound stay together and the animation is smooth. `?lite=1` keeps the nearest instant alone. |
 | Date shown | The **nearest** instant's label | Matches what the picture is closest to. |
-| Speed | **4× and 8×** buttons on the line, starting at 4× (team decision, 2026-11-15: 1× and 2× were too slow); the planet keeps its pace and each turn covers that many times the real time (at 4×, one turn = 4 days of smoke). The line says it: `1 turn = 4 days` | Faster animation without a dizzying planet, and the turn ↔ time relation stays true. Shared by all layers. |
+| Speed | **4×–32× slider** on the line, starting at 4× (team decision, 2026-11-15: 1× and 2× were too slow); the planet keeps its pace and each turn covers that many times the real time (at 4×, one turn = 4 days of smoke). The line says it: `1 turn = 4 days` | Faster animation without a dizzying planet, and the turn ↔ time relation stays true. Shared by all layers. |
 | Dragging the line | **The planet keeps turning**; playing goes on from the picked moment | Decision of 2026-11-15. |
 | Forest (static) | A **dimmed line** with its one period, `Apr 2019 – Jul 2025` | The layout does not jump when the layer changes. |
 | End of the data | **Starts again** from the beginning | Like the demo loop. |
@@ -58,7 +58,7 @@ browser can hold every instant.
   which does not re-render as the position moves.
 - `web/src/ui/TimelineTrack.tsx`: the line. `data-testid`: `timeline-track`,
   `timeline-scrub` (the `role="slider"` line), `timeline-date-<id>`,
-  `timeline-play` (pause button), `timeline-playing` ("fixed layer"), `timeline-speed-<4|8>`, `timeline-turn`. Keys: ←/→
+  `timeline-play` (pause button), `timeline-playing` ("fixed layer"), `timeline-speed`, `timeline-turn`. Keys: ←/→
   one instant, Page Up/Down one turn, Home/End.
 - `web/src/scene/layerTexture.ts`: `showLayerBlend(textures, layer, from, to)`
   keeps the earlier and later instants; moving on by one only computes the new

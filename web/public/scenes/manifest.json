@@ -9,7 +9,7 @@
     {
       "id": "birds",
       "title": "Birds of the Amazon Rainforest",
-      "description": "Aves: The Amazon is one of the most biodiverse regions in the world, home to more than 1,300 bird species, representing one-third of all bird species on the planet.",
+      "description": "The Amazon is one of the most biodiverse regions in the world, home to more than 1,300 bird species, representing one-third of all bird species on the planet.",
       "lon": -68.546,
       "lat": -3.398,
       "image": "scenes/birds/birds.jpg",
@@ -28,6 +28,19 @@
       "image": "scenes/river/river.jpg",
       "imageAlt": "The Amazon River seen from the International Space Station",
       "loop": "scenes/river/river.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
+    },
+    {
+      "id": "ocean",
+      "title": "Ocean",
+      "description": "Ocean: The Amazon River connects the rainforest to the Atlantic Ocean, carrying enormous amounts of freshwater, nutrients and sediments into the sea. This interaction supports marine ecosystems, influences coastal environments and creates a vital connection between the Amazon rainforest and the ocean.",
+      "lon": -50.08944,
+      "lat": 0.70778,
+      "image": "scenes/ocean/ocean.jpg",
+      "imageAlt": "The Amazon River meeting the Atlantic Ocean",
+      "loop": "scenes/ocean/ocean.ogg",
       "loopGain": 0.8,
       "imageCredit": null,
       "audioCredit": null

@@ -83,10 +83,18 @@ The same with Docker Compose directly:
 
 ```bash
 docker compose build app        # needs internet; again after any change to web/ or server/
-docker compose up               # http://127.0.0.1:8080, Ctrl+C to stop
+docker compose up               # http://127.0.0.1:8080 (landing page), Ctrl+C to stop
 docker compose up -d            # same, in the background
 docker compose down             # stop and remove the containers
 ```
+
+The address opens the **landing page** (`web/src/ui/Landing.tsx`, from the
+Figma design "Landing Option B (Deep field)"); **Open the jukebox** goes to
+`http://127.0.0.1:8080/#jukebox`, the 3D planet, and the browser's back button
+returns to the landing page. The jukebox code and its Earth data load only
+then, so the landing page opens at once. Its fonts (Sora, Inter, JetBrains
+Mono) are bundled with `@fontsource-variable`, so nothing comes from the
+internet.
 
 The `app` image holds the built interface, the prepared data and the release
 server binary, so once it is built the app starts in about a second and needs
@@ -178,8 +186,8 @@ docker compose up web     # then open http://127.0.0.1:5173/
   layer, at its real time (three hours of smoke, a day of CO2, a month of
   lightning). It plays by itself at the pace of the planet's turn: one turn is one day of
   smoke, 30 days of CO2 and one year of lightning, and the picture and the sound fade from one
-  instant to the next. The 4× and 8× buttons (4× to start) make each turn cover more time
-  (the line shows `1 turn = …`); the planet keeps its pace. It keeps playing on the map
+  instant to the next. The 4×–32× speed slider (4× to start) makes each turn cover
+  more time (the line shows `1 turn = …`); the planet keeps its pace. It keeps playing on the map
   view, during a drag and with Auto-rotate off; only the **❚❚ Pause** button
   on the line stops it (**▶ Play** goes on). Click
   or drag along the line (or use the arrow keys, Page Up/Down for a whole
@@ -209,7 +217,8 @@ docker compose up web     # then open http://127.0.0.1:5173/
 - **Frames per second** (top right): the average over the last second; green
   at 30 or more (the target), red below. The browser's own performance monitor
   (Chrome DevTools, "Performance monitor") gives the same figure as a backup.
-- **Lite mode (plan B)**: open `http://127.0.0.1:5173/?lite=1`. Half-resolution
+- **Lite mode (plan B)**: open `http://127.0.0.1:5173/?lite=1#jukebox` (or the landing page with
+  `?lite=1`, which **Open the jukebox** keeps). Half-resolution
   planet image, fewer mesh segments, no antialiasing, and the view switches to
   the map at once instead of flattening. The counter shows `· lite`.
 - If `earth.jpg` cannot be loaded, a warning appears and the planet is drawn
