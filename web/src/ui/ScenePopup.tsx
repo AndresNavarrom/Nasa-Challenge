@@ -70,40 +70,38 @@ export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProp
         src={`./${scene.image}`}
         alt={scene.imageAlt}
         data-testid="scene-popup-image"
-        className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 ${
+        className={`absolute inset-0 h-full w-full border border-white/60 object-cover transition-transform duration-500 ${
           shown ? "scale-100" : "scale-105"
         }`}
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-slate-950/20" />
       <div
-        className="absolute right-4 top-4 z-10 max-h-[calc(100%-2rem)] w-full max-w-md overflow-auto rounded-xl bg-slate-950/80 p-5 text-slate-100 shadow-xl backdrop-blur"
+        className="absolute right-4 top-4 z-10 max-h-[calc(100%-2rem)] w-full max-w-md overflow-auto rounded-xl bg-slate-950/80 p-5 pr-14 text-slate-100 shadow-xl backdrop-blur"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="scene-popup-title" data-testid="scene-popup-title" className="text-xl font-semibold">
-              {scene.title}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300" data-testid="scene-popup-description">
-              {scene.description}
-            </p>
-            {audioError && (
-              <p role="alert" className="mt-2 text-sm text-amber-300">
-                {audioError}
-              </p>
-            )}
-          </div>
-          <button
-            ref={closeRef}
-            type="button"
-            data-testid="scene-popup-close"
-            aria-label="Close scene"
-            onClick={requestClose}
-            className="shrink-0 rounded-md border border-slate-500 px-3 py-1.5 text-sm hover:border-slate-300"
-          >
-            Close
-          </button>
-        </div>
+        <button
+          ref={closeRef}
+          type="button"
+          data-testid="scene-popup-close"
+          aria-label="Close scene"
+          onClick={requestClose}
+          className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-500 text-slate-200 hover:border-slate-300 hover:bg-slate-800"
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+          </svg>
+        </button>
+        <h2 id="scene-popup-title" data-testid="scene-popup-title" className="text-xl font-semibold">
+          {scene.title}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-300" data-testid="scene-popup-description">
+          {scene.description}
+        </p>
+        {audioError && (
+          <p role="alert" className="mt-2 text-sm text-amber-300">
+            {audioError}
+          </p>
+        )}
       </div>
     </div>
   );

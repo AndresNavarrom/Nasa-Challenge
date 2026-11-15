@@ -265,10 +265,11 @@ Total: roughly **10–12 h**; the audio and marker pieces can be developed in pa
 - `tools/scenes/prepare.py` validates them against the Amazon box and publishes
   `web/public/scenes/` (`scenes-prep` Docker service).
 - Markers are small white dots (half the previous size) with a thin white pulse
-  ring that expands to about twice the dot radius; the title appears in a DOM
-  tooltip centred just above the dot on hover. They fade in over 0.5 s when the
-  map appears. The popup fills the window with a small margin and puts the title
-  and description in a card at the top right.
+  ring that expands to about twice the dot radius. All pulses use the shared
+  scene clock, so they are in phase. The title appears in a DOM tooltip centred
+  just above the dot on hover. They fade in over 0.5 s when the map appears.
+  The popup fills the window with a small margin, a border on the image, and an
+  X close button in the card at the top right.
 - The map camera zooms towards the scene point first; the popup starts its
   fade/scale only after that zoom. On close the popup fades out first, then the
   camera zooms back out.

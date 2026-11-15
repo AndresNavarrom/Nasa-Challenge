@@ -28,14 +28,13 @@ interface SceneMarkerProps {
   scene: SceneDefinition;
   x: number;
   y: number;
-  index: number;
   dotMaterial: MeshBasicMaterial;
   fadeRef: RefObject<number>;
   onSelect: (scene: SceneDefinition) => void;
   onHover: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
 }
 
-function SceneMarker({ scene, x, y, index, dotMaterial, fadeRef, onSelect, onHover }: SceneMarkerProps) {
+function SceneMarker({ scene, x, y, dotMaterial, fadeRef, onSelect, onHover }: SceneMarkerProps) {
   const gl = useThree((state) => state.gl);
   const camera = useThree((state) => state.camera);
   const ringRef = useRef<Mesh>(null);
@@ -50,13 +49,11 @@ function SceneMarker({ scene, x, y, index, dotMaterial, fadeRef, onSelect, onHov
       }),
     [],
   );
-  const phase = useRef((index * 0.55) % PULSE_SECONDS);
-
   useEffect(() => () => ringMaterial.dispose(), [ringMaterial]);
 
-  useFrame((_, delta) => {
-    phase.current = (phase.current + Math.min(0.1, delta)) % PULSE_SECONDS;
-    const progress = phase.current / PULSE_SECONDS;
+  useFrame((state) => {
+    // Use the shared scene clock, so every pulse is in phase.
+    const progress = (state.clock.elapsedTime % PULSE_SECONDS) / PULSE_SECONDS;
     ringRef.current?.scale.setScalar(1 + progress * 1.1);
     ringMaterial.opacity = 0.6 * (1 - progress) * fadeRef.current;
   });
@@ -134,13 +131,12 @@ export function SceneMarkers({ scenes, bbox, onSelect, onHover }: SceneMarkersPr
 
   return (
     <group>
-      {points.map(({ scene, x, y }, index) => (
+      {points.map(({ scene, x, y }) => (
         <SceneMarker
           key={scene.id}
           scene={scene}
           x={x}
           y={y}
-          index={index}
           dotMaterial={dotMaterial}
           fadeRef={fade}
           onSelect={onSelect}
