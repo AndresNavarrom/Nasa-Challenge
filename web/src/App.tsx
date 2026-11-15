@@ -5,9 +5,11 @@ import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
+import { framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
 import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
+import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
 import { PlanetHud } from "./ui/PlanetHud";
 
 type LoadState =
@@ -90,6 +92,7 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
  */
 function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngine }) {
   const point = useListeningPoint();
+  const { position } = useTimeline();
 
   useEffect(() => {
     if (!point) {
@@ -99,10 +102,14 @@ function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngin
       return;
     }
     for (const layer of data.layers) {
-      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, point.lon, point.lat, 0));
+      // Shared normalized position -> this layer's own fractional instant.
+      // Static layers have one frame, so framePosition returns 0 and
+      // sampleLayerAt ignores time for them.
+      const frame = framePosition(position, layer.region.frames);
+      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, point.lon, point.lat, frame));
     }
     engine.setPan(point.screenX);
-  }, [engine, data, point]);
+  }, [engine, data, point, position]);
 
   return null;
 }
@@ -142,28 +149,30 @@ export default function App() {
   }, []);
 
   return (
-    <ListeningPointProvider>
-      <main className="relative h-full w-full overflow-hidden">
-        {state.status === "loading" && (
-          <div className="flex h-full flex-col items-center justify-center gap-2">
-            <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-            <p role="status" data-testid="data-loading">
-              Loading data…
-            </p>
-          </div>
-        )}
+    <TimelineProvider>
+      <ListeningPointProvider>
+        <main className="relative h-full w-full overflow-hidden">
+          {state.status === "loading" && (
+            <div className="flex h-full flex-col items-center justify-center gap-2">
+              <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+              <p role="status" data-testid="data-loading">
+                Loading data…
+              </p>
+            </div>
+          )}
 
-        {state.status === "error" && (
-          <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-8">
-            <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-            <p role="alert" data-testid="data-error" className="rounded border border-red-400 p-4 text-red-200">
-              {state.message}
-            </p>
-          </div>
-        )}
+          {state.status === "error" && (
+            <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-8">
+              <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+              <p role="alert" data-testid="data-error" className="rounded border border-red-400 p-4 text-red-200">
+                {state.message}
+              </p>
+            </div>
+          )}
 
-        {state.status === "ready" && <JukeboxView data={state.data} lite={lite} />}
-      </main>
-    </ListeningPointProvider>
+          {state.status === "ready" && <JukeboxView data={state.data} lite={lite} />}
+        </main>
+      </ListeningPointProvider>
+    </TimelineProvider>
   );
 }

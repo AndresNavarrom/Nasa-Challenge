@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayerManifest } from "../data/types";
-import { advancePosition, dateLabelAt, framePosition } from "./timeline";
+import { advancePosition, dateLabelAt, frameBlend, framePosition } from "./timeline";
 
 type Dated = Pick<LayerManifest, "static" | "dates">;
 
@@ -46,5 +46,24 @@ describe("timeline", () => {
     expect(advancePosition(0.9, 4, 20)).toBeCloseTo(0.1, 6); // wrapped around
     expect(advancePosition(0.9, 4, 20, false)).toBe(1); // stops at the end without looping
     expect(advancePosition(0.5, 1, 0)).toBe(0.5); // invalid duration: stay put
+  });
+
+  it("gives the two instants to crossfade for any position", () => {
+    // Exact instants: no blend needed.
+    expect(frameBlend(0, 5)).toEqual({ from: 0, to: 1, mix: 0 });
+    expect(frameBlend(0.5, 5)).toEqual({ from: 2, to: 3, mix: 0 });
+    expect(frameBlend(1, 5)).toEqual({ from: 4, to: 4, mix: 0 });
+
+    // Between two instants, the mix matches the fractional frame the audio uses.
+    const between = frameBlend(0.3, 5);
+    expect(between.from).toBe(1);
+    expect(between.to).toBe(2);
+    expect(between.mix).toBeCloseTo(0.2, 6);
+
+    // A single-frame (static) layer never blends and never leaves the range.
+    expect(frameBlend(0.7, 1)).toEqual({ from: 0, to: 0, mix: 0 });
+    expect(frameBlend(0.7, 0)).toEqual({ from: 0, to: 0, mix: 0 });
+    expect(frameBlend(-1, 5)).toEqual({ from: 0, to: 1, mix: 0 });
+    expect(frameBlend(9, 5)).toEqual({ from: 4, to: 4, mix: 0 });
   });
 });
