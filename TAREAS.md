@@ -47,7 +47,7 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 - [ ] **Panel lateral completo**: hoy hay selector de capa y casillas “Listen to”, no un panel lateral.
 - [ ] **Paso 14**: teclado (capas, reproducir/pausar, flechas para el punto), `web/src/ui/a11y.ts` con su prueba y texto para lector de pantalla (capa, lugar y valor bajo/medio/alto).
 - [ ] **30 fps** con audio y en el portátil de la demo.
-- [ ] Cambiar el título **“Global CO2”** en `data/prep-config.json` y `web/public/data/manifest.json` y regenerar los datos: la capa solo cubre la Amazonía.
+- [x] Título **“Atmospheric CO2”**, capa CO2 global, en alta resolución y con contraste (PR #13).
 - [x] Barra de tiempo, fechas, selector de capa, casillas “Listen to” y `data-testid` de esos controles.
 
 ### Sonido (Fernando)
@@ -77,7 +77,7 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 1. **Planeta dibuja el instante de la línea de tiempo** (pasos 3–5 del handoff) y revisión con `PLANET-CHECKLIST.md`.
 2. **Unir PR #11** y hacer la prueba sin cable en los dos portátiles.
 3. **Accesibilidad y modo historia** si queda tiempo.
-4. **Título del CO2** y regeneración de datos.
+4. ~~**Título del CO2** y regeneración de datos~~: hecho en la PR #13.
 5. **PR de `audio-samples`** para que la muestra de tormenta llegue a `main`.
 6. Video, formulario y envío.
 
@@ -119,7 +119,7 @@ docker compose run --rm fetch             # descargar las fuentes de datos
 
 ## Tres cosas que hay que saber
 
-- **Cobertura:** bosque, humo y rayos son globales; el CO2 solo cubre la Amazonía y fuera de la región no se ve ni suena.
+- **Cobertura:** las cuatro capas son globales. El CO2 es un mosaico: sobre las Américas y el Atlántico se mueve con la línea de tiempo (23 a 25 de febrero de 2020); en el resto del planeta cada región tiene la fecha de la vista que la cubre, entre el 14 de enero y el 3 de marzo de 2020, y queda fija (donde dos vistas se solapan, por ejemplo cerca de 23° E, sus fechas se mezclan, con hasta nueve días de diferencia).
 - **Escalas:** el bosque es altura GEDI de 0 a 50 m y el humo es PM2.5 de GEOS-CF de 0 a 150 µg/m³; **el CO2 y los rayos son valores relativos** leídos de visualizaciones de la NASA (intensidad y frecuencia, no mediciones). Está en `data/SOURCES.md`.
 - **El CO2 se presenta como contexto global**, no como efecto medido de lo que pasa en la Amazonía.
 

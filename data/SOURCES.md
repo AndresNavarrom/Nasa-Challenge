@@ -14,7 +14,7 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file `GEDI03_rh100_mean_2019108_2025190_003_01.tif` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file `aqc_tavg_1hr_glo_L1440x721_slv`, variable `PM25_RH35` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
-| Global CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 12 frames of the orbiting-globe video | 23 - 25 February 2020, every 6 hours | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. **Amazon only.** Not ppm. |
+| Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 17 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every 6 hours, where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
 | Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, accumulated | Relative frequency (0 to 1): how often lightning was drawn at each place across the whole period, read from the video frames. Not a flash count. The planet view draws the lightning dots of the video themselves (`web/public/data/lightning-4k.png`), coloured by that frequency; the sound uses the frequency grids only. |
 
 ## How each source was turned into a map
@@ -24,6 +24,21 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
   north row first) is the mean of the 2 x 2 block of model points around its
   centre (tools/fetch/geoscf_to_png.py). The layer is global, and its Amazon
   grid keeps the model resolution (0.25 degrees).
+- **CO2.** SVS 5196 is only published as a rendered globe that turns under a
+  fixed camera (the point under the camera moves 0.2017 degrees west per frame, because the
+  Earth turns east; one model hour per frame), so no
+  frame shows the whole planet at one moment. The 12 instants are the frames
+  where South America faces the camera (00939 to 01005, every sixth); each is
+  used up to 60 degrees from the point under the camera. The rest of the planet
+  comes from five more frames (00001, 00232, 00463, 00694 and 01176: 14 and 24
+  January, 3 and 12 February and 3 March 2020), blended as fixed fallback views,
+  so outside the animated views each region shows the date of the view that
+  covers it (where two views overlap, near 23 degrees E for example, their dates
+  are blended, up to nine days apart). Where the globe
+  sits in each frame was fitted to the Natural Earth coastlines
+  (tools/fetch/co2_calibrate.py). The "warmth" also picks up bright beige
+  land: deserts (Sahara, Australia, Atacama) read about 0.1, a low value, more
+  than the Amazon itself in February 2020 (about 0.04).
 - **Lightning.** The video shows a 10-day roving window: each frame holds only
   the last ten days and its last frame is empty, so no single frame holds the
   accumulated period. One frame every 0.4 s of the video (about every 10 days

@@ -68,9 +68,11 @@ TODO: confirm against the final app.
 - The interface is React with three.js for the planet and GSAP for the
   transition. A small Rust (Axum) server serves everything from the laptop, so
   the whole demo runs **without internet**, packaged in Docker.
-- CO2 only has usable data over the Amazon, so on the planet it is seen and
-  heard over that region only. It is presented as global context, not as a
-  measured effect of what happens in the Amazon.
+- CO2 is global but a mosaic: NASA only publishes it as a turning globe, so only
+  the Americas and the Atlantic move with the timeline (23 to 25 February 2020)
+  and the rest of the planet is a fixed picture, each region on the date of the
+  view that covers it. It is presented as global context, not as a measured
+  effect of what happens in the Amazon.
 
 ### Benefits
 
