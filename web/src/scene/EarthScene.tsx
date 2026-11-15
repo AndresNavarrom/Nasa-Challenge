@@ -45,7 +45,7 @@ export interface EarthSceneProps {
   onProbe: (probe: Probe | null) => void;
   onFps: (fps: number) => void;
   /** A problem that leaves the view usable (for example a base image missing). */
-  onSceneError: (message: string) => void;
+  onSceneError: (message: string | null) => void;
 }
 
 const CAMERA_FOV = 45;
@@ -72,8 +72,9 @@ function readMaxTextureSize(gl: WebGLRenderer): number | null {
 /**
  * Loads an image as a texture. On failure it logs the cause, reports
  * `failureMessage` and leaves the texture null, so the caller draws without it.
+ * A success (or a new URL) clears the message, so a fixed image stops the banner.
  */
-function useImageTexture(url: string, failureMessage: string, onError: (message: string) => void): Texture | null {
+function useImageTexture(url: string, failureMessage: string, onError: (message: string | null) => void): Texture | null {
   const [texture, setTexture] = useState<Texture | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
@@ -83,6 +84,7 @@ function useImageTexture(url: string, failureMessage: string, onError: (message:
   useEffect(() => {
     let cancelled = false;
     let loaded: Texture | null = null;
+    onErrorRef.current(null);
     new TextureLoader().load(
       url,
       (result) => {
@@ -92,6 +94,7 @@ function useImageTexture(url: string, failureMessage: string, onError: (message:
         }
         loaded = result;
         setTexture(loaded);
+        onErrorRef.current(null);
       },
       undefined,
       (cause) => {
@@ -146,19 +149,22 @@ function SceneContents(props: SceneContentsProps) {
   const cancelRef = useRef<CancelTransition | null>(null);
   const lastHitRef = useRef<GlobeHit | null>(null);
   const lastProbeRef = useRef<Probe | null>(null);
+  const [baseError, setBaseError] = useState<string | null>(null);
+  const [regionError, setRegionError] = useState<string | null>(null);
+  const [layerError, setLayerError] = useState<string | null>(null);
 
   const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
   const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
   const baseTexture = useImageTexture(
     baseUrl,
     `The planet image (${baseUrl}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
-    onSceneError,
+    setBaseError,
   );
   const regionUrl = `${data.baseUrl}${REGION_BASE_IMAGE}`;
   const regionBaseTexture = useImageTexture(
     regionUrl,
     `The detailed Amazon image (${regionUrl}) could not be loaded, so the Amazon is drawn from the planet image. Everything else still works.`,
-    onSceneError,
+    setRegionError,
   );
 
   const layer = useMemo(() => {
@@ -172,10 +178,18 @@ function SceneContents(props: SceneContentsProps) {
   useEffect(() => {
     if (layer.error) {
       console.error("Earth Jukebox could not draw a layer:", layer.error);
-      onSceneError(`${layer.error} The layer is not drawn.`);
+      setLayerError(`${layer.error} The layer is not drawn.`);
+    } else {
+      setLayerError(null);
     }
     return () => disposeLayerTextures(layer.textures);
-  }, [layer, onSceneError]);
+  }, [layer]);
+
+  // One banner for every source: a good layer or image clears itself without
+  // hiding a failure somewhere else.
+  useEffect(() => {
+    onSceneError(layerError ?? baseError ?? regionError ?? null);
+  }, [layerError, baseError, regionError, onSceneError]);
 
   const setMode = (next: ViewMode) => {
     modeRef.current = next;
@@ -232,28 +246,60 @@ function SceneContents(props: SceneContentsProps) {
     camera.lookAt(0, 0, 0);
   });
 
+  const probeFor = useCallback(
+    (hit: GlobeHit): Probe => ({
+      lon: hit.lon,
+      lat: hit.lat,
+      value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT),
+    }),
+    [activeLayer, data.bbox],
+  );
+
+  // The pointer can deliver several moves per frame; publish the latest one once.
+  const pendingHover = useRef<GlobeHit | null | undefined>(undefined);
+  const hoverFrame = useRef<number | null>(null);
+
+  const publishHover = useCallback(() => {
+    hoverFrame.current = null;
+    const hit = pendingHover.current;
+    pendingHover.current = undefined;
+    if (hit === undefined) return;
+    // While the view changes, keep the last point (and the sound) as it is.
+    if (modeRef.current === "to-map" || modeRef.current === "to-globe") return;
+    lastHitRef.current = hit;
+    if (!hit) {
+      lastProbeRef.current = null;
+      setListeningPoint(null);
+      onProbe(null);
+      return;
+    }
+    const rect = gl.domElement.getBoundingClientRect();
+    setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
+    const probe = probeFor(hit);
+    // The cursor may rest while the point is looked up again; do not repaint for the same reading.
+    const last = lastProbeRef.current;
+    if (last && last.lon === probe.lon && last.lat === probe.lat && last.value === probe.value) return;
+    lastProbeRef.current = probe;
+    onProbe(probe);
+  }, [gl, setListeningPoint, onProbe, probeFor]);
+
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
       // While the view changes, keep the last point (and the sound) as it is.
       if (modeRef.current === "to-map" || modeRef.current === "to-globe") return;
-      lastHitRef.current = hit;
-      if (!hit) {
-        setListeningPoint(null);
-        lastProbeRef.current = null;
-        onProbe(null);
-        return;
+      pendingHover.current = hit;
+      if (hoverFrame.current === null) {
+        hoverFrame.current = requestAnimationFrame(publishHover);
       }
-      const rect = gl.domElement.getBoundingClientRect();
-      setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
-      const value = sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT);
-      // The cursor may rest while the point is looked up again; do not repaint for the same reading.
-      const last = lastProbeRef.current;
-      if (last && last.lon === hit.lon && last.lat === hit.lat && last.value === value) return;
-      const probe = { lon: hit.lon, lat: hit.lat, value };
-      lastProbeRef.current = probe;
-      onProbe(probe);
     },
-    [gl, activeLayer, data.bbox, setListeningPoint, onProbe],
+    [publishHover],
+  );
+
+  useEffect(
+    () => () => {
+      if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
+    },
+    [],
   );
 
   // A new layer changes the reading under a cursor that has not moved.

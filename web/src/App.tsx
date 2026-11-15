@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AudioStart } from "./audio/AudioStart";
+import type { SoundEngine } from "./audio/engine";
+import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
+import { sampleLayerAt } from "./lib/interpolate";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
-import { ListeningPointProvider } from "./scene/listeningPoint";
+import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
 import { PlanetHud } from "./ui/PlanetHud";
 
 type LoadState =
@@ -23,7 +27,7 @@ function defaultLayerId(data: JukeboxData): string {
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. */
-function PlanetView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; audio?: ReactNode }) {
   const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
@@ -72,15 +76,50 @@ function PlanetView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         fps={fps}
         lite={lite}
         sceneError={sceneError}
+        audio={audio}
       />
     </>
   );
 }
 
 /**
+ * Feeds the sound engine from the point under the cursor (plan Step 10, FR3 and
+ * FR6). Lives inside ListeningPointProvider, so the scene publishes the point
+ * without knowing about audio. The first instant is used until the timeline of
+ * Step 13 exists.
+ */
+function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngine }) {
+  const point = useListeningPoint();
+
+  useEffect(() => {
+    if (!point) {
+      for (const layer of data.layers) {
+        engine.setLayerIntensity(layer.manifest.id, null);
+      }
+      return;
+    }
+    for (const layer of data.layers) {
+      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, point.lon, point.lat, 0));
+    }
+    engine.setPan(point.screenX);
+  }, [engine, data, point]);
+
+  return null;
+}
+
+function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+  const engine = useSoundEngine();
+  return (
+    <>
+      <PlanetView data={data} lite={lite} audio={<AudioStart engine={engine} className="w-56" />} />
+      <AudioListener data={data} engine={engine} />
+    </>
+  );
+}
+
+/**
  * Loads the prepared data, then shows the 3D planet with the Amazon map
- * transition (plan Step 12). The sound engine reads the listening point from
- * ListeningPointProvider (see scene/listeningPoint.tsx).
+ * transition (plan Step 12) and the sound of the listening point (Step 10).
  */
 export default function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -123,7 +162,7 @@ export default function App() {
           </div>
         )}
 
-        {state.status === "ready" && <PlanetView data={state.data} lite={lite} />}
+        {state.status === "ready" && <JukeboxView data={state.data} lite={lite} />}
       </main>
     </ListeningPointProvider>
   );

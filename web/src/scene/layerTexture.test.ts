@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
-import type { Grid } from "../data/types";
-import { FIRST_INSTANT, LAYER_RAMPS, NEUTRAL_RAMP, gridToRgba, rampFor, type ColorRamp } from "./layerTexture";
+import { describe, expect, it, vi } from "vitest";
+import { DataTexture } from "three";
+import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
+import {
+  FIRST_INSTANT,
+  LAYER_RAMPS,
+  NEUTRAL_RAMP,
+  gridToRgba,
+  layerTextureFor,
+  rampFor,
+  type ColorRamp,
+} from "./layerTexture";
 
 const TEST_RAMP: ColorRamp = { low: [0, 0, 0], high: [255, 100, 50], maxAlpha: 1 };
 
@@ -35,5 +44,28 @@ describe("gridToRgba errors (FR1.3)", () => {
 
     const grid: Grid = { width: 1, height: 1, frames: 1, data: Uint8Array.from([7]) };
     expect(() => gridToRgba(grid, 1, TEST_RAMP, "forest")).toThrow(/Layer "forest": instant 1 does not exist/);
+  });
+
+  it("disposes the whole-planet texture when the regional one cannot be built", () => {
+    const manifest: LayerManifest = {
+      id: "forest",
+      title: "Forest",
+      description: "Test layer",
+      source: { title: "Test", url: "https://example.com" },
+      static: true,
+      sample: true,
+      dates: ["2020-01-01"],
+      global: { width: 1, height: 1, frames: 1, file: "global.bin", texture: "global.png" },
+      region: { width: 2, height: 2, frames: 1, file: "region.bin", texture: "region.png" },
+    };
+    const global: Grid = { width: 1, height: 1, frames: 1, data: Uint8Array.from([1]) };
+    // Four cells declared, one byte present: the regional texture throws.
+    const region: Grid = { width: 2, height: 2, frames: 1, data: Uint8Array.from([1]) };
+    const layer: LoadedLayer = { manifest, global, region };
+
+    const dispose = vi.spyOn(DataTexture.prototype, "dispose");
+    expect(() => layerTextureFor(layer)).toThrow(/Layer "forest"/);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    dispose.mockRestore();
   });
 });

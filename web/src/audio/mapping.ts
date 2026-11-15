@@ -111,3 +111,35 @@ export function intensityToGain(value: number | null): number {
   if (value === null) return 0;
   return MIN_ACTIVE_GAIN + (1 - MIN_ACTIVE_GAIN) * clampUnit(value) ** 0.7;
 }
+
+export interface LightningPercussion {
+  /** Hits per second; 0 means the layer is silent. */
+  rateHz: number;
+  /** Pitch of the body of one hit, in Hz. */
+  pitchHz: number;
+  /** How long one hit rings, in seconds. */
+  decaySeconds: number;
+}
+
+/** A relative frequency of 1.0 means this many hits per second. */
+export const LIGHTNING_MAX_HITS_PER_SECOND = 6;
+export const LIGHTNING_MIN_PITCH_HZ = 90;
+export const LIGHTNING_MAX_PITCH_HZ = 330;
+
+/**
+ * Lightning relative frequency (0..1) to percussion. The mapping is exact and
+ * linear, with no perception curve:
+ * - strike rate: value x 6 hits per second (0.5 -> 3 hits/s; 0 -> silence);
+ * - body pitch: 90 Hz at 0, 330 Hz at 1;
+ * - ring time: 0.16 s at 0, 0.28 s at 1.
+ * The rate is the audible "frequency of lightning"; the pitch makes intensity
+ * audible within a single hit.
+ */
+export function lightningToPercussion(value: number): LightningPercussion {
+  const amount = clampUnit(value);
+  return {
+    rateHz: LIGHTNING_MAX_HITS_PER_SECOND * amount,
+    pitchHz: LIGHTNING_MIN_PITCH_HZ + (LIGHTNING_MAX_PITCH_HZ - LIGHTNING_MIN_PITCH_HZ) * amount,
+    decaySeconds: 0.16 + 0.12 * amount,
+  };
+}
