@@ -14,6 +14,7 @@ import { useTimeline } from "../timeline/TimelineProvider";
 import { sampleLayerAt } from "../lib/interpolate";
 import type { SoundEngine } from "./engine";
 import { OVERVIEW_INSTRUMENTS, buildOverviewColumns, type VisibleField } from "./overview";
+import { TEMPO_BEATS_PER_FRAME, tempoIndex, tempoStep } from "./tempo";
 
 /** How often the visible field is turned into sounding columns. */
 const OVERVIEW_UPDATE_MS = 100;
@@ -40,6 +41,7 @@ export function DataAudio({
   const { position } = useTimeline();
   const positionRef = useRef(position);
   positionRef.current = position;
+  const tempoRef = useRef<{ layerId: string; index: number; position: number } | null>(null);
 
   // Point mode belongs to the region map. On the planet the overview field is
   // the only data voice; during a return flight the overview keeps the last
@@ -61,6 +63,46 @@ export function DataAudio({
     }
     engine.setPan(point.screenX);
   }, [engine, data, activeLayer, point, position, mode, fade]);
+
+  // A data-time mark for each layer unit. It follows the shared timeline, so it
+  // pauses with Auto-rotate and accelerates with the timeline speed. A seek
+  // that jumps several units is ignored instead of firing a burst.
+  useEffect(() => {
+    const beats = activeLayer ? TEMPO_BEATS_PER_FRAME[activeLayer.manifest.id] : undefined;
+    const step =
+      activeLayer && mode === "globe"
+        ? tempoStep(activeLayer.region.frames, beats)
+        : null;
+    if (!activeLayer || step === null) {
+      tempoRef.current = null;
+      return;
+    }
+    const index = tempoIndex(position, step);
+    const previous = tempoRef.current;
+    if (
+      previous &&
+      previous.layerId === activeLayer.manifest.id &&
+      position >= previous.position &&
+      index > previous.index
+    ) {
+      const crossed = index - previous.index;
+      if (crossed <= 2) engine.playTempoBeat(activeLayer.manifest.id);
+    }
+    tempoRef.current = {
+      layerId: activeLayer.manifest.id,
+      index,
+      position,
+    };
+  }, [engine, activeLayer, position, mode]);
+
+  // Forest gets a sparse bird ambience over the overview field. It belongs to
+  // the planet view; the region map keeps the focused point voice.
+  useEffect(() => {
+    const forestOverview =
+      (mode === "globe" || mode === "to-globe") && activeLayer?.manifest.id === "forest";
+    engine.setForestBirds(forestOverview);
+    return () => engine.setForestBirds(false);
+  }, [engine, mode, activeLayer]);
 
   useEffect(() => {
     const overviewActive = mode === "globe" || mode === "to-globe";

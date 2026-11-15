@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAJOR_PENTATONIC_SEMITONES, MINOR_PENTATONIC_SEMITONES } from "./mapping";
+import {
+  MAJOR_PENTATONIC_SEMITONES,
+  MINOR_PENTATONIC_SEMITONES,
+  SUSPENDED_PENTATONIC_SEMITONES,
+} from "./mapping";
 import {
   OVERVIEW_BASE_HZ,
   OVERVIEW_COLUMNS,
@@ -33,13 +37,13 @@ describe("overview mapping", () => {
   });
 
   it("uses the visible average as the trigger threshold", () => {
-    expect(visibleAverage([0.2, 0.8, null])).toBeCloseTo(0.5, 6);
+    expect(visibleAverage([0.05, 0.8, null])).toBeCloseTo(0.425, 6);
     expect(visibleAverage([null, null])).toBe(0);
     const field: VisibleField = [
       { screenX: 0, cells: [{ lon: -10, lat: 0, screenX: 0, screenY: 0.5 }] },
       { screenX: 1, cells: [{ lon: 10, lat: 0, screenX: 1, screenY: 0.5 }] },
     ];
-    const columns = buildOverviewColumns(field, (lon) => (lon < 0 ? 0.2 : 0.8));
+    const columns = buildOverviewColumns(field, (lon) => (lon < 0 ? 0.05 : 0.8));
     expect(columns[0]!.cells[0]!.gain).toBe(0);
     expect(columns[1]!.cells[0]!.gain).toBeGreaterThan(0);
 
@@ -79,6 +83,7 @@ describe("overview mapping", () => {
 
   it("uses the minor pentatonic scale for CO2 and keeps the others major", () => {
     expect(OVERVIEW_INSTRUMENTS.co2.scale).toBe(MINOR_PENTATONIC_SEMITONES);
+    expect(OVERVIEW_INSTRUMENTS.smoke.scale).toBe(SUSPENDED_PENTATONIC_SEMITONES);
     expect(OVERVIEW_INSTRUMENTS.forest.scale).toBe(MAJOR_PENTATONIC_SEMITONES);
     expect(overviewPitchHz(0, MINOR_PENTATONIC_SEMITONES)).toBeCloseTo(OVERVIEW_BASE_HZ, 6);
     expect(overviewPitchHz(90, MINOR_PENTATONIC_SEMITONES)).toBeGreaterThan(

@@ -7,6 +7,7 @@
 /** Semitone offsets of the major pentatonic scale: five notes that always sound consonant together. */
 export const MAJOR_PENTATONIC_SEMITONES = [0, 2, 4, 7, 9] as const;
 export const MINOR_PENTATONIC_SEMITONES = [0, 3, 5, 7, 10] as const;
+export const SUSPENDED_PENTATONIC_SEMITONES = [0, 2, 5, 7, 10] as const;
 
 /** Lowest forest note: C3. */
 export const FOREST_BASE_HZ = 130.81;

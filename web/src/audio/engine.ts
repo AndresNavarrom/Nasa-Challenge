@@ -11,6 +11,7 @@
 import { LAYER_IDS, type LayerId } from "../data/types";
 import { clampUnit, co2ToBreath, forestToVoice, intensityToGain, lightningToPercussion, positionToPan, smokeToTimbre } from "./mapping";
 import { OVERVIEW_BASE_HZ, OVERVIEW_COLUMNS, OVERVIEW_INSTRUMENTS, OVERVIEW_ROWS, type OverviewColumn } from "./overview";
+import { TEMPO_STYLES } from "./tempo";
 import { DEFAULT_SMOOTHING_SECONDS, OnePoleSmoother } from "./smoothing";
 
 export type SoundEngineState = "idle" | "running" | "suspended";
@@ -27,8 +28,12 @@ export interface SoundEngine {
   setPan(horizontal: number): void;
   /** Replaces the overview field; the scan reads it while enabled. */
   setOverview(layer: LayerId | null, columns: readonly OverviewColumn[] | null): void;
-  /** Starts or stops the visible-area scan (it keeps its own clock). */
+  /** Starts or stops the visible-area field. */
   setOverviewEnabled(enabled: boolean): void;
+  /** Adds or removes the randomly spaced forest bird samples. */
+  setForestBirds(enabled: boolean): void;
+  /** Plays one data-time mark for a timed layer. */
+  playTempoBeat(layer: LayerId): void;
   setMasterVolume(value: number): void;
   /** Current output level in 0..1, for a meter. */
   getOutputLevel(): number;
@@ -58,6 +63,12 @@ export interface SoundEngineOptions {
   lightningSampleUrl?: string | null;
   /** Injected sample buffer (tests); skips the network. */
   lightningSample?: AudioBuffer | null;
+  /** Forest bird sample; `null` disables the ambience. */
+  birdSampleUrl?: string | null;
+  /** Injected bird sample (tests); skips the network. */
+  birdSample?: AudioBuffer | null;
+  /** Random source for bird spacing and excerpt offsets (tests). */
+  random?: () => number;
   /** Loader injection for tests; defaults to `fetch`. */
   fetchSample?: (url: string) => Promise<ArrayBuffer>;
 }
@@ -92,6 +103,18 @@ const SCENE_FADE_IN_SECONDS = 0.5;
 const SCENE_FADE_OUT_SECONDS = 0.3;
 const OVERVIEW_BUS_GAIN = 0.75;
 const OVERVIEW_COLUMN_HEADROOM = 0.9;
+/** Existing forest recording used as a sparse bird ambience. */
+export const FOREST_BIRD_SAMPLE_URL = "./audio/samples/oajaros-suaves.ogg";
+const BIRD_BUS_GAIN = 0.55;
+const BIRD_FIRST_DELAY_MIN_SECONDS = 1;
+const BIRD_FIRST_DELAY_MAX_SECONDS = 4;
+const BIRD_GAP_MIN_SECONDS = 6;
+const BIRD_GAP_MAX_SECONDS = 14;
+const BIRD_EXCERPT_MIN_SECONDS = 2;
+const BIRD_EXCERPT_MAX_SECONDS = 5;
+const BIRD_GAIN = 0.7;
+const BIRD_ATTACK_SECONDS = 0.04;
+const BIRD_FADE_SECONDS = 0.25;
 
 /**
  * Per-layer output trim. The smoke voice is mostly filtered noise and a low
@@ -234,6 +257,16 @@ export class WebAudioSoundEngine implements SoundEngine {
   private lightningSample: AudioBuffer | null;
   private lightningSampleLoad: Promise<void> | null = null;
   private overviewGraph: OverviewGraph | undefined;
+  private readonly birdSampleUrl: string | null;
+  private readonly random: () => number;
+  private birdSample: AudioBuffer | null;
+  private birdSampleLoad: Promise<AudioBuffer | null> | null = null;
+  private forestBirdsEnabled = false;
+  private birdStarted = false;
+  private birdTimer: ReturnType<typeof setTimeout> | undefined;
+  private birdBus: GainNode | undefined;
+  private readonly birdHits = new Set<LightningHit>();
+  private readonly tempoHits = new Set<LightningHit>();
   private readonly overview: OverviewState = {
     layer: null,
     columns: [],
@@ -248,10 +281,13 @@ export class WebAudioSoundEngine implements SoundEngine {
     if (state === "running") {
       if (this.currentState !== "idle") this.currentState = "running";
       this.startOverview();
+      this.startForestBirds();
     } else if (this.currentState === "running") {
       this.currentState = "suspended";
       this.clearLightning();
       this.fadeOverview(0);
+      this.stopForestBirds();
+      this.clearTempoHits();
       this.stopSceneAudio();
     }
   };
@@ -263,6 +299,9 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.lightningSampleUrl =
       options.lightningSampleUrl === undefined ? DEFAULT_LIGHTNING_SAMPLE_URL : options.lightningSampleUrl;
     this.lightningSample = options.lightningSample ?? null;
+    this.birdSampleUrl = options.birdSampleUrl === undefined ? FOREST_BIRD_SAMPLE_URL : options.birdSampleUrl;
+    this.birdSample = options.birdSample ?? null;
+    this.random = options.random ?? Math.random;
     this.fetchSample =
       options.fetchSample ??
       (async (url: string) => {
@@ -318,6 +357,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     }
     this.applyPan(now);
     this.startOverview();
+    this.startForestBirds();
   }
 
   stop(): void {
@@ -332,6 +372,8 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.clearSettleTimers();
     this.clearLightning();
     this.fadeOverview(0);
+    this.stopForestBirds();
+    this.clearTempoHits();
     this.stopSceneAudio();
     this.setDataVoiceDuck(1, 0.1);
 
@@ -394,6 +436,71 @@ export class WebAudioSoundEngine implements SoundEngine {
       return;
     }
     this.startOverview();
+  }
+
+  setForestBirds(enabled: boolean): void {
+    this.forestBirdsEnabled = enabled;
+    if (!enabled) {
+      this.stopForestBirds();
+      return;
+    }
+    if (this.currentState === "running") this.startForestBirds();
+  }
+
+  playTempoBeat(layer: LayerId): void {
+    const context = this.context;
+    const graph = this.graph;
+    const style = TEMPO_STYLES[layer];
+    if (!context || !graph || !style || this.currentState !== "running") return;
+
+    const now = context.currentTime;
+    const oscillator = context.createOscillator();
+    oscillator.type = style.kind === "mark" ? "square" : "sine";
+    oscillator.frequency.setValueAtTime(style.frequencyHz, now);
+
+    const gain = context.createGain();
+    oscillator.connect(gain);
+    gain.connect(graph.bus);
+    const end = now + Math.max(0.02, style.durationSeconds);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(style.gain, now + Math.max(0.002, style.attackSeconds));
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    oscillator.start(now);
+    oscillator.stop(end + 0.02);
+
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        oscillator.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        gain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      this.tempoHits.delete(hit);
+    };
+    const hit: LightningHit = {
+      stop: () => {
+        try {
+          oscillator.stop();
+        } catch {
+          // Already stopped.
+        }
+        cleanup();
+      },
+    };
+    oscillator.onended = cleanup;
+    this.tempoHits.add(hit);
+  }
+
+  private clearTempoHits(): void {
+    for (const hit of [...this.tempoHits]) hit.stop();
+    this.tempoHits.clear();
   }
 
   setMasterVolume(value: number): void {
@@ -507,6 +614,12 @@ export class WebAudioSoundEngine implements SoundEngine {
       }
       overview.bus.disconnect();
     }
+    if (this.birdBus) {
+      this.birdBus.disconnect();
+      this.birdBus = undefined;
+    }
+    this.birdSample = null;
+    this.birdSampleLoad = null;
     this.overviewGraph = undefined;
     this.graph = undefined;
     this.levelBuffer = undefined;
@@ -630,6 +743,140 @@ export class WebAudioSoundEngine implements SoundEngine {
     const context = this.context;
     if (!graph || !context) return;
     rampParameter(graph.bus.gain, target, context.currentTime, this.rampSeconds);
+  }
+
+  private ensureBirdBus(): GainNode | undefined {
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph) return undefined;
+    if (this.birdBus) return this.birdBus;
+    const bus = context.createGain();
+    bus.gain.value = 0;
+    bus.connect(graph.bus);
+    this.birdBus = bus;
+    return bus;
+  }
+
+  private startForestBirds(): void {
+    if (!this.forestBirdsEnabled || this.currentState !== "running") return;
+    const bus = this.ensureBirdBus();
+    if (!bus) return;
+    rampParameter(bus.gain, BIRD_BUS_GAIN, this.context!.currentTime, this.rampSeconds);
+    if (this.birdStarted) return;
+    this.birdStarted = true;
+    void this.loadBirdSample().then((sample) => {
+      this.birdStarted = false;
+      if (!sample || !this.forestBirdsEnabled || this.currentState !== "running") return;
+      this.birdSample = sample;
+      this.scheduleForestBird(this.randomBetween(BIRD_FIRST_DELAY_MIN_SECONDS, BIRD_FIRST_DELAY_MAX_SECONDS));
+    });
+  }
+
+  private stopForestBirds(): void {
+    this.birdStarted = false;
+    if (this.birdTimer !== undefined) {
+      clearTimeout(this.birdTimer);
+      this.birdTimer = undefined;
+    }
+    for (const hit of [...this.birdHits]) hit.stop();
+    this.birdHits.clear();
+    const context = this.context;
+    if (this.birdBus && context) {
+      rampParameter(this.birdBus.gain, 0, context.currentTime, this.rampSeconds);
+    }
+  }
+
+  private async loadBirdSample(): Promise<AudioBuffer | null> {
+    if (this.birdSample) return this.birdSample;
+    if (!this.birdSampleUrl) return null;
+    if (!this.birdSampleLoad) {
+      const context = this.context;
+      if (!context) return null;
+      this.birdSampleLoad = this.loadSceneBuffer(this.birdSampleUrl)
+        .catch((cause: unknown) => {
+          console.warn("Earth Jukebox: the forest bird sample could not be loaded; keeping only the synth.", cause);
+          return null;
+        });
+    }
+    return this.birdSampleLoad;
+  }
+
+  private randomBetween(min: number, max: number): number {
+    return min + this.random() * (max - min);
+  }
+
+  private scheduleForestBird(delaySeconds: number): void {
+    if (!this.forestBirdsEnabled || this.currentState !== "running" || !this.birdSample) return;
+    this.birdTimer = setTimeout(() => {
+      this.birdTimer = undefined;
+      if (!this.forestBirdsEnabled || this.currentState !== "running") return;
+      this.playForestBird();
+      this.scheduleForestBird(this.randomBetween(BIRD_GAP_MIN_SECONDS, BIRD_GAP_MAX_SECONDS));
+    }, Math.max(100, delaySeconds * 1000));
+  }
+
+  private playForestBird(): void {
+    const context = this.context;
+    const sample = this.birdSample;
+    const bus = this.birdBus;
+    if (!context || !sample || !bus || this.currentState !== "running") return;
+    const now = context.currentTime;
+    const duration = Math.max(0.1, Math.min(BIRD_EXCERPT_MAX_SECONDS, sample.duration));
+    const excerpt = Math.min(
+      duration,
+      this.randomBetween(BIRD_EXCERPT_MIN_SECONDS, BIRD_EXCERPT_MAX_SECONDS),
+    );
+    const offset = this.random() * Math.max(0, duration - excerpt - 0.05);
+    const source = context.createBufferSource();
+    source.buffer = sample;
+    const gain = context.createGain();
+    const panner = context.createStereoPanner();
+    source.connect(gain);
+    gain.connect(panner);
+    panner.connect(bus);
+    rampParameter(panner.pan, (this.random() * 2 - 1) * 0.65, now, this.rampSeconds);
+    const level = BIRD_GAIN * (0.65 + this.random() * 0.35);
+    const fadeStart = Math.max(BIRD_ATTACK_SECONDS, excerpt - BIRD_FADE_SECONDS);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(level, now + BIRD_ATTACK_SECONDS);
+    gain.gain.setValueAtTime(level, now + fadeStart);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + excerpt);
+    source.start(now, offset, excerpt);
+    source.stop(now + excerpt + 0.02);
+
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        source.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        gain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        panner.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      this.birdHits.delete(hit);
+    };
+    const hit: LightningHit = {
+      stop: () => {
+        try {
+          source.stop();
+        } catch {
+          // Already stopped.
+        }
+        cleanup();
+      },
+    };
+    source.onended = cleanup;
+    this.birdHits.add(hit);
   }
 
   private applyLayer(layer: LayerId, snap: boolean): void {

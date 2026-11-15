@@ -47,11 +47,39 @@ Current editable instruments:
 | Layer | Wave | Role |
 |---|---|---|
 | Forest | triangle | soft continuous bed |
-| Smoke | sawtooth | brighter, rougher |
+| Smoke | sawtooth | brighter, rougher; suspended pentatonic |
 | CO2 | sawtooth | lower register; minor pentatonic |
 | Lightning | square | percussive edge |
 
-Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and scale. CO2 uses the minor pentatonic scale; the other layers use the major pentatonic scale.
+Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and scale. CO2 uses the minor pentatonic scale, smoke uses the suspended pentatonic, and the other layers use the major pentatonic.
+
+## Data-time tempo marks
+
+Timed layers get a mark tied to their own unit, following the shared timeline:
+
+| Layer | Mark | Character |
+|---|---|---|
+| Smoke | every hour (3 per prepared 3-hour frame) | soft breathing pulse |
+| CO2 | every day (1 per frame) | lower, slower breathing pulse |
+| Lightning | every month (1 per frame) | short, marked square tick |
+
+The mark pauses when the planet stops and accelerates with the 4x/8x timeline
+speed. A seek that jumps several units is ignored instead of firing a burst.
+The settings live in `web/src/audio/tempo.ts`.
+
+## Forest bird ambience
+
+When the forest is the active overview layer, the engine also plays sparse
+excerpts of the existing `audio/samples/oajaros-suaves.ogg` recording over the
+synthesized field:
+
+- first excerpt after 1–4 s, then a new one every 6–14 s
+- each excerpt lasts 2–5 s, with a random start offset
+- random pan and slight random level; the field stays foregrounded
+- birds stop when the forest layer or the globe overview is left
+
+The bird bus goes through the normal data bus, so scene ducking and the limiter
+still apply.
 
 ## Integration
 
@@ -71,5 +99,5 @@ Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and 
   waveform, disable/fade.
 - Existing web tests and the production build cover the rest.
 - Manual: left/right spread, poles low / equator high, value dynamics,
-  Auto-rotate off still sounding the field, globe/map transition, no clipping or
-  clicks.
+  Auto-rotate off still sounding the field, forest bird spacing, data-time
+  marks, globe/map transition, no clipping or clicks.

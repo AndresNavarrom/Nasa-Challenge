@@ -12,6 +12,7 @@ import type { LayerId } from "../data/types";
 import {
   MAJOR_PENTATONIC_SEMITONES,
   MINOR_PENTATONIC_SEMITONES,
+  SUSPENDED_PENTATONIC_SEMITONES,
   clampUnit,
   positionToPan,
 } from "./mapping";
@@ -70,8 +71,8 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     releaseSeconds: 0.3,
     gain: 0.65,
     detuneCents: -5,
-    octave: 0,
-    scale: MAJOR_PENTATONIC_SEMITONES,
+    octave: 2,
+    scale: SUSPENDED_PENTATONIC_SEMITONES,
   },
   co2: {
     wave: "sawtooth",
@@ -79,7 +80,7 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     filterQ: 1.2,
     attackSeconds: 0.1,
     releaseSeconds: 0.4,
-    gain: 0.65,
+    gain: 0.4,
     detuneCents: 5,
     octave: 1,
     scale: MINOR_PENTATONIC_SEMITONES,
