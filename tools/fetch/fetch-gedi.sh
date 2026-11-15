@@ -2,6 +2,9 @@
 # Downloads GEDI L3 Gridded Land Surface Metrics V3 mean canopy height (rh100_mean,
 # ORNL DAAC, doi:10.3334/ORNLDAAC/2525) into data/raw/gedi/ and turns it into the
 # 3600 x 1800 RGBA image that jukebox-prep reads (tools/fetch/gedi_l3_to_png.py).
+# Once `prep` has written web/public/data/, it also draws the sharp greyscale
+# forest images of the planet view there (forest-height-8k.png, -4k.png and
+# -amazon.png, tools/fetch/gedi_visual.py).
 #
 # The file sits behind a NASA Earthdata login, so this is a separate service from
 # `fetch` and only the person preparing GEDI needs an account:
@@ -22,6 +25,7 @@ RAW="$ROOT/data/raw/gedi"
 NAME="GEDI03_rh100_mean_2019108_2025190_003_01.tif"
 URL="https://data.ornldaac.earthdata.nasa.gov/protected/gedi/GEDI_L3_LandSurface_Metrics_V3/data/$NAME"
 PNG="$RAW/gedi_l3_rh100_mean_0p1deg.png"
+WEB_DATA="$ROOT/web/public/data"
 NETRC="/root/.netrc"
 UA="earth-jukebox-fetch/1.0 (NASA Space Apps 2026)"
 FORCE="${FORCE:-0}"
@@ -116,5 +120,18 @@ echo "  png    gedi/$(basename "$PNG")"
 if ! python3 "$ROOT/tools/fetch/gedi_l3_to_png.py" "$DEST" "$PNG"; then
   rm -f "$PNG"
   fail "could not convert gedi/$NAME"
+fi
+
+# The sharp forest images of the planet view (tools/fetch/gedi_visual.py) fill the
+# gaps of GEDI with the final forest grid of `prep`, so they can only be made once
+# prep has run.
+if [[ -f "$WEB_DATA/forest_global.bin" && -f "$WEB_DATA/manifest.json" ]]; then
+  echo "  png    web/public/data/forest-height-{8k,4k,amazon}.png"
+  if ! python3 "$ROOT/tools/fetch/gedi_visual.py" --tif "$DEST" --fill "$PNG" --data-dir "$WEB_DATA"; then
+    fail "could not make the forest images in web/public/data/ from gedi/$NAME"
+  fi
+else
+  echo "fetch-gedi: web/public/data/forest_global.bin is not there yet, so the sharp forest images were not made." >&2
+  echo "fetch-gedi: run docker compose run --rm prep, then docker compose run --rm fetch-gedi again (no new download)." >&2
 fi
 echo "fetch-gedi: done"

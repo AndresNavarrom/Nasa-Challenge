@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
+import { layerChoices, layerForChoice } from "./layerChoice";
 
 export interface PlanetHudProps {
   layers: LoadedLayer[];
@@ -51,16 +52,34 @@ function modeLabel(mode: ViewMode): string {
   }
 }
 
-const panel = "pointer-events-auto rounded-lg bg-slate-950/75 p-3 text-sm shadow-lg backdrop-blur";
+const panel =
+  "pointer-events-auto rounded-lg bg-slate-950/75 p-3 text-sm shadow-lg backdrop-blur";
 const button =
   "rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400";
 
 export function PlanetHud(props: PlanetHudProps) {
-  const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError, audio, timeline } = props;
-  const activeLayer = layers.find((layer) => layer.manifest.id === activeLayerId);
+  const {
+    layers,
+    activeLayerId,
+    onSelectLayer,
+    mode,
+    onAmazon,
+    onBackToEarth,
+    probe,
+    fps,
+    lite,
+    sceneError,
+    audio,
+    timeline,
+  } = props;
+  // null on the plain Earth view.
+  const activeLayer = layerForChoice(layers, activeLayerId);
 
   return (
-    <div data-testid="planet-hud" className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
+    <div
+      data-testid="planet-hud"
+      className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4"
+    >
       <div className="flex items-start justify-between gap-4">
         <div className={panel}>
           <h1 className="text-xl font-semibold">Earth Jukebox</h1>
@@ -72,17 +91,17 @@ export function PlanetHud(props: PlanetHudProps) {
               value={activeLayerId}
               onChange={(event) => onSelectLayer(event.target.value)}
             >
-              {layers.map(({ manifest, global }) => (
-                <option key={manifest.id} value={manifest.id}>
-                  {manifest.title}
-                  {global ? "" : " (Amazon only)"}
-                  {manifest.sample ? " (sample data)" : ""}
+              {layerChoices(layers).map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.label}
                 </option>
               ))}
             </select>
           </label>
           {activeLayer && activeLayer.manifest.dates.length > 1 && (
-            <p className="mt-1 text-xs text-slate-400">Showing the first instant: {activeLayer.manifest.dates[0]}</p>
+            <p className="mt-1 text-xs text-slate-400">
+              Showing the first instant: {activeLayer.manifest.dates[0]}
+            </p>
           )}
         </div>
 
@@ -97,38 +116,66 @@ export function PlanetHud(props: PlanetHudProps) {
       </div>
 
       {sceneError && (
-        <p role="alert" data-testid="planet-hud-error" className={`${panel} self-center border border-amber-400 text-amber-100`}>
+        <p
+          role="alert"
+          data-testid="planet-hud-error"
+          className={`${panel} self-center border border-amber-400 text-amber-100`}
+        >
           {sceneError}
         </p>
       )}
 
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div data-testid="planet-hud-probe" className={`${panel} min-w-56 font-mono`} aria-live="off">
+        <div
+          data-testid="planet-hud-probe"
+          className={`${panel} min-w-56 font-mono`}
+          aria-live="off"
+        >
           {probe ? (
             <>
               <p>
-                <span data-testid="planet-hud-probe-lon">{formatLongitude(probe.lon)}</span>
+                <span data-testid="planet-hud-probe-lon">
+                  {formatLongitude(probe.lon)}
+                </span>
                 {", "}
-                <span data-testid="planet-hud-probe-lat">{formatLatitude(probe.lat)}</span>
+                <span data-testid="planet-hud-probe-lat">
+                  {formatLatitude(probe.lat)}
+                </span>
               </p>
-              <p data-testid="planet-hud-probe-value">
-                {activeLayer?.manifest.title ?? "Layer"}:{" "}
-                {probe.value === null ? "no data here" : `${Math.round(probe.value * 100)} %`}
-              </p>
+              {activeLayer && (
+                <p data-testid="planet-hud-probe-value">
+                  {activeLayer.manifest.title}:{" "}
+                  {probe.value === null
+                    ? "no data here"
+                    : `${Math.round(probe.value * 100)} %`}
+                </p>
+              )}
             </>
           ) : (
-            <p className="text-slate-400">Move the cursor over the planet or the map.</p>
+            <p className="text-slate-400">
+              Move the cursor over the planet or the map.
+            </p>
           )}
         </div>
 
         <div className={`${panel} flex flex-col items-end gap-2`}>
           {timeline && <div className="w-full">{timeline}</div>}
           {audio && <div className="w-full">{audio}</div>}
-          <p role="status" data-testid="planet-hud-status" className="text-slate-300">
+          <p
+            role="status"
+            data-testid="planet-hud-status"
+            className="text-slate-300"
+          >
             {modeLabel(mode)}
           </p>
           <div className="flex gap-2">
-            <button type="button" data-testid="planet-hud-amazon-button" className={button} disabled={mode !== "globe"} onClick={onAmazon}>
+            <button
+              type="button"
+              data-testid="planet-hud-amazon-button"
+              className={button}
+              disabled={mode !== "globe"}
+              onClick={onAmazon}
+            >
               Amazon
             </button>
             <button
