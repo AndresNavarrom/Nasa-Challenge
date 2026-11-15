@@ -120,6 +120,16 @@ smoke** and **Lightning** (no more Global CO2). Lines above that name
 - [ ] **Offline (NFR2).** With the Wi-Fi off, all three layers and both
       images load from `127.0.0.1:5173`.
 
+## Forest from GEDI L3 (intent 261115-gedi-forest-layer)
+
+After `docker compose run --rm fetch-gedi` and `docker compose run --rm prep`.
+
+- [ ] **GEDI forest on the Amazon, no stripes (FR2, FR3).** With **Forest
+      height** on the planet and on the map, the tall forest sits on the
+      Amazon basin and lines up with the rivers and coasts of the base image;
+      there are no stripes or seams, neither along GEDI's orbit tracks nor at
+      about 52° N and S where the SVS 4950 fill takes over.
+
 ## Result
 
 - Decision at 11:00 p.m.: keep the flattening planet / go to plan B (`?lite=1`).
