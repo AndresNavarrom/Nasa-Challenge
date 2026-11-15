@@ -3,6 +3,13 @@
 // it. "Open the jukebox" goes to #jukebox, where Root (main.tsx) loads the app;
 // the landing itself loads no Earth data, so it opens at once.
 //
+// Composition of the first screen: by thirds. The words and the button take the
+// left third; the planet takes the other two, at the eye of a golden spiral
+// drawn faintly behind it, which leads the eye from the words to the planet.
+// The title is kept light and moderate in size so it does not compete with the
+// button, the only solid block of the accent colour on the page (60-30-10: the
+// dark background, the light text and lines, the accent).
+//
 // Fonts are bundled (@fontsource-variable) so nothing comes from the internet.
 
 import "@fontsource-variable/inter";
@@ -17,6 +24,7 @@ import globeLightning from "../assets/landing/globe-lightning.jpg";
 import globeSmoke from "../assets/landing/globe-smoke.jpg";
 import { useEffect, useState, type ReactNode } from "react";
 import { JUKEBOX_HASH } from "./landingRoute";
+import { LANDING_VIDEO, goldenSpiralPath } from "./landingMedia";
 
 const NAV = [
   { href: "#layers", label: "LAYERS" },
@@ -55,7 +63,7 @@ const POINTS = [
   },
   {
     title: "A tour you can repeat",
-    text: "Six short steps explain the controls on first visit. Press ? at any time to repeat them.",
+    text: "A short tour explains the controls on first visit. Press ? at any time to repeat it.",
   },
 ] as const;
 
@@ -99,10 +107,10 @@ function GlobeShowcase() {
   }, []);
 
   return (
-    <div className="flex w-full flex-col items-center gap-6 pt-14">
+    <div className="flex w-full flex-col items-center gap-6">
       <div
         data-testid="landing-globe"
-        className="relative aspect-square w-full max-w-[620px] overflow-hidden rounded-full bg-[#0b111e]"
+        className="relative aspect-square w-full max-w-[560px] overflow-hidden rounded-full bg-[#0b111e]"
       >
         {LAYERS.map((layer, index) => (
           <img
@@ -120,7 +128,7 @@ function GlobeShowcase() {
           />
         ))}
       </div>
-      <p className="rounded-md border border-[#1e2a40] bg-[#0b111e] px-3.5 py-2 font-label text-[13px]">
+      <p className="rounded-full border border-landing-line bg-[#0b111e] px-4 py-2 font-label text-[13px] text-landing-mist">
         {LAYERS[shown]!.title}
       </p>
     </div>
@@ -132,12 +140,15 @@ function OpenJukebox() {
     <a
       href={JUKEBOX_HASH}
       data-testid="landing-open"
-      className="rounded-full bg-emerald-500 px-8 py-4 text-[17px] font-semibold text-[#04130d] transition-colors hover:bg-emerald-400 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300"
+      className="rounded-full bg-landing-accent px-9 py-4 text-[18px] font-semibold text-landing-deep shadow-[0_0_40px_rgba(94,233,181,0.28)] transition-colors hover:bg-landing-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-landing-accent"
     >
       Open the jukebox
     </a>
   );
 }
+
+/** The golden spiral behind the planet, drawn once. Its eye is the centre of its box. */
+const SPIRAL = goldenSpiralPath(1000);
 
 /** Section width of the design: 1120 px with 32 px sides, narrower on small screens. */
 const content = "mx-auto flex w-full max-w-[1120px] flex-col items-center px-4 text-center sm:px-8";
@@ -174,27 +185,46 @@ export function Landing() {
       </header>
 
       <main>
-        <section id="top" className="relative overflow-hidden pb-[120px] pt-12 sm:pt-24">
+        <section id="top" className="relative overflow-hidden pb-[120px] pt-10 sm:pt-16">
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[340px] overflow-hidden">
             <img alt="" src={forestBack} className="absolute inset-[38.82%_-5.76%_0_-2.78%] block size-full max-w-none" />
             <img alt="" src={forestMiddle} className="absolute inset-[51.4%_-5.56%_0_-2.78%] block size-full max-w-none" />
             <img alt="" src={forestFront} className="absolute inset-[64.13%_-4.51%_0_-2.78%] block size-full max-w-none" />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,#05070d_0%,rgba(5,7,13,0.6)_30%,rgba(5,7,13,0)_58%,rgba(5,7,13,0.55)_86%,#05070d_100%)]" />
           </div>
-          <div className={`${content} relative gap-9 pb-[210px]`}>
-            <Eyebrow>NASA SPACE APPS CHALLENGE</Eyebrow>
-            <h1 className="max-w-[900px] font-display text-[clamp(3.25rem,9vw,6.5rem)] font-extralight leading-[1.02] tracking-[-0.045em]">
-              Listen to the Amazon.
-            </h1>
-            <p className="max-w-[560px] text-[17px] leading-[1.6] text-landing-mist sm:text-[19px]">
-              NASA Earth data about the lungs of the world, turned into sound. Every layer has its own voice: move
-              over the planet and hear how it changes from place to place.
-            </p>
-            <div className="flex flex-col items-center gap-3.5">
-              <OpenJukebox />
-              <p className="font-label text-[11px] tracking-[0.16em] text-landing-label">HEADPHONES RECOMMENDED</p>
+          <div className="relative mx-auto grid w-full max-w-[1120px] items-center gap-12 px-4 pb-[210px] sm:px-8 lg:grid-cols-3 lg:gap-8">
+            {/* Left third: the words and the one thing to press. */}
+            <div className="flex flex-col items-center gap-7 text-center lg:items-start lg:text-left">
+              <Eyebrow>NASA SPACE APPS CHALLENGE</Eyebrow>
+              <h1 className="font-display text-[clamp(2.5rem,4vw,3.25rem)] font-extralight leading-[1.08] tracking-[-0.04em]">
+                Listen to <br className="max-lg:hidden" />
+                the Amazon.
+              </h1>
+              <p className="max-w-[420px] text-[17px] leading-[1.6] text-landing-mist">
+                NASA Earth data about the lungs of the world, turned into sound. Every layer has its own voice: move
+                over the planet and hear how it changes from place to place.
+              </p>
+              <div className="flex flex-col items-center gap-3.5 pt-2 lg:items-start">
+                <OpenJukebox />
+                <p className="font-label text-[11px] tracking-[0.16em] text-landing-label">HEADPHONES RECOMMENDED</p>
+              </div>
             </div>
-            <GlobeShowcase />
+            {/* The other two thirds: the planet, at the eye of the golden spiral. */}
+            <div className="flex justify-center lg:col-span-2 lg:justify-end">
+              <div className="relative w-full max-w-[560px]">
+                {/* Its eye is the planet's centre: the box is 3.4 planets wide, moved up by 1.2. */}
+                <svg
+                  aria-hidden="true"
+                  viewBox="-1000 -1000 2000 2000"
+                  className="pointer-events-none absolute left-1/2 top-0 mt-[-120%] aspect-square w-[340%] max-w-none -translate-x-1/2 text-landing-ink"
+                >
+                  <path d={SPIRAL} fill="none" stroke="currentColor" strokeOpacity="0.1" strokeWidth="2" />
+                </svg>
+                <div className="relative">
+                  <GlobeShowcase />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -263,6 +293,35 @@ export function Landing() {
             </ol>
           </div>
         </section>
+
+        {LANDING_VIDEO && (
+          <section id="video" className="scroll-mt-4 border-t border-landing-line py-24">
+            <div className={`${content} gap-10`}>
+              <div className="flex flex-col items-center gap-5">
+                <Eyebrow>THE VIDEO</Eyebrow>
+                <h2 className="max-w-[760px] font-display text-[clamp(2.25rem,5vw,3.25rem)] font-extralight leading-[1.08] tracking-[-0.04em]">
+                  {LANDING_VIDEO.title}
+                </h2>
+              </div>
+              <video
+                data-testid="landing-video"
+                controls
+                preload="metadata"
+                playsInline
+                poster={LANDING_VIDEO.poster}
+                aria-label={LANDING_VIDEO.title}
+                className="aspect-video w-full max-w-[960px] rounded-2xl border border-landing-line bg-[#0b111e]"
+              >
+                <source src={LANDING_VIDEO.src} type={LANDING_VIDEO.type} />
+              </video>
+              <div className="flex flex-col items-center gap-3">
+                <p className="max-w-[620px] text-[17px] leading-[1.6] text-landing-mist">{LANDING_VIDEO.thanks}</p>
+                <p className="font-label text-[11px] tracking-[0.22em] text-landing-accent">MADE BY</p>
+                <p className="max-w-[620px] text-[16px] leading-[1.6] text-landing-mist">{TEAM.join(" · ")}</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         <section id="about" className="scroll-mt-4 border-t border-landing-line py-24">
           <div className={`${content} gap-10`}>
