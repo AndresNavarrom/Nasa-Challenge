@@ -165,8 +165,8 @@ function PlanetView({
       {sceneHover && !focusedScene && (
         <div
           data-testid="scene-marker-title"
-          className="pointer-events-none fixed z-20 -translate-y-full rounded bg-slate-950/90 px-2 py-1 text-xs text-white shadow"
-          style={{ left: sceneHover.x + 12, top: sceneHover.y - 12 }}
+          className="pointer-events-none fixed z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-slate-950/90 px-2 py-1 text-center text-xs text-white shadow"
+          style={{ left: sceneHover.x, top: sceneHover.y - 10 }}
         >
           {sceneHover.scene.title}
         </div>

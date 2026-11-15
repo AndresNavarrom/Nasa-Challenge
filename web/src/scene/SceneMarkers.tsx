@@ -4,7 +4,7 @@
 
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
-import { MeshBasicMaterial, type Mesh } from "three";
+import { MeshBasicMaterial, Vector3, type Mesh } from "three";
 import type { BoundingBox } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
 import { sceneMapPosition } from "../scenes/geometry";
@@ -12,8 +12,8 @@ import { GLOBE_RADIUS } from "./geo";
 
 const MARKER_RADIUS = 0.006;
 const HIT_RADIUS = 0.04;
-const RING_INNER = 0.008;
-const RING_OUTER = 0.011;
+const RING_INNER = 0.009;
+const RING_OUTER = 0.0105;
 const PULSE_SECONDS = 1.6;
 const FADE_IN_SECONDS = 0.5;
 
@@ -37,6 +37,7 @@ interface SceneMarkerProps {
 
 function SceneMarker({ scene, x, y, index, dotMaterial, fadeRef, onSelect, onHover }: SceneMarkerProps) {
   const gl = useThree((state) => state.gl);
+  const camera = useThree((state) => state.camera);
   const ringRef = useRef<Mesh>(null);
   const ringMaterial = useMemo(
     () =>
@@ -56,14 +57,22 @@ function SceneMarker({ scene, x, y, index, dotMaterial, fadeRef, onSelect, onHov
   useFrame((_, delta) => {
     phase.current = (phase.current + Math.min(0.1, delta)) % PULSE_SECONDS;
     const progress = phase.current / PULSE_SECONDS;
-    ringRef.current?.scale.setScalar(1 + progress * 2.4);
-    ringMaterial.opacity = 0.55 * (1 - progress) * fadeRef.current;
+    ringRef.current?.scale.setScalar(1 + progress * 1.1);
+    ringMaterial.opacity = 0.6 * (1 - progress) * fadeRef.current;
   });
 
   const handleOver = (event: ThreeEvent<PointerEvent>): void => {
     event.stopPropagation();
     gl.domElement.style.cursor = "pointer";
-    onHover(scene, event.nativeEvent.clientX, event.nativeEvent.clientY);
+    // Project the marker centre, not the pointer edge, so the tooltip can sit
+    // centred above the dot.
+    const projected = new Vector3(x, y, GLOBE_RADIUS + 0.012).project(camera);
+    const rect = gl.domElement.getBoundingClientRect();
+    onHover(
+      scene,
+      rect.left + (projected.x * 0.5 + 0.5) * rect.width,
+      rect.top + (-projected.y * 0.5 + 0.5) * rect.height,
+    );
   };
 
   const handleOut = (): void => {

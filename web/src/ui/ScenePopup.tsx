@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDefinition } from "../scenes/types";
 
+const ENTER_DELAY_MS = 550;
 const EXIT_ANIMATION_MS = 300;
 
 export interface ScenePopupProps {
@@ -22,8 +23,9 @@ export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProp
   const [closing, setClosing] = useState(false);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(frame);
+    // Let the map finish its zoom-in before the image starts fading in.
+    const timer = setTimeout(() => setEntered(true), ENTER_DELAY_MS);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export function ScenePopup({ scene, onClose, audioError = null }: ScenePopupProp
       data-testid="scene-popup"
       onClick={requestClose}
       className={`fixed inset-3 z-30 overflow-hidden rounded-xl bg-slate-950/80 shadow-2xl transition-opacity duration-300 sm:inset-4 ${
-        shown ? "opacity-100" : "opacity-0"
+        shown ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
       <img
