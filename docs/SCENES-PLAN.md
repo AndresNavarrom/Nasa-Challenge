@@ -264,9 +264,14 @@ Total: roughly **10–12 h**; the audio and marker pieces can be developed in pa
 - Coordinates are filled: birds `(-68.546, -3.398)`, river `(-73.246, -0.868)`.
 - `tools/scenes/prepare.py` validates them against the Amazon box and publishes
   `web/public/scenes/` (`scenes-prep` Docker service).
-- Markers are R3F rings on the flattened map; the popup is a centred DOM dialog.
-- `ARPA` and the loop start together; the loop fades 0 → `loopGain` over 0.5 s
-  while ARPA keeps playing. Data voices duck to 30 %.
+- Markers are small R3F dots with no ring, fading in over 0.5 s when the map
+  appears; the popup fills the window with a small margin and puts the title and
+  description in a card at the top right.
+- The map camera zooms towards the scene point while the popup fades/scales in,
+  and zooms back out after the popup fades out on close.
+- `ARPA` and the loop start together; the loop fades 0 → `loopGain × 2` over
+  0.5 s while ARPA keeps playing. ARPA fades down over its last 0.4 s to hide the
+  source cut. Data voices fade to 12 % over 0.6 s and fade back on close.
 - `audio-samples` is merged, so `web/public/audio/samples/arpa.ogg` is present.
 
 ## Open decisions

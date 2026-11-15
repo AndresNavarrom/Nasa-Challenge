@@ -36,6 +36,10 @@ type LoadState =
   | { status: "ready"; data: JukeboxData }
   | { status: "error"; message: string };
 
+/** Data voices fade to this level while a scene popup is open, over 0.6 s. */
+const SCENE_DATA_DUCK = 0.12;
+const SCENE_DATA_FADE_SECONDS = 0.6;
+
 /** Plan B switch: `?lite=1` in the address (half-resolution planet image, instant view changes). */
 function readLiteMode(search: string): boolean {
   return new URLSearchParams(search).get("lite") === "1";
@@ -52,6 +56,7 @@ interface PlanetViewProps {
   scenes?: ScenesManifest | null;
   onSceneSelect?: (scene: SceneDefinition) => void;
   onCloseScene?: () => void;
+  focusedScene?: SceneDefinition | null;
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
@@ -66,6 +71,7 @@ function PlanetView({
   scenes,
   onSceneSelect,
   onCloseScene,
+  focusedScene,
 }: PlanetViewProps) {
   const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
@@ -112,6 +118,7 @@ function PlanetView({
           onSceneError={setSceneError}
           scenes={scenes?.scenes}
           onSceneSelect={onSceneSelect}
+          focusedScene={focusedScene}
         />
       </div>
       <PlanetHud
@@ -255,7 +262,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   useEffect(() => {
     if (!openScene) {
       engine.stopSceneAudio();
-      engine.setDataVoiceDuck(1);
+      engine.setDataVoiceDuck(1, SCENE_DATA_FADE_SECONDS);
       return;
     }
     let cancelled = false;
@@ -264,7 +271,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
       try {
         if (engine.state === "idle") await engine.start();
         if (cancelled) return;
-        engine.setDataVoiceDuck(0.3);
+        engine.setDataVoiceDuck(SCENE_DATA_DUCK, SCENE_DATA_FADE_SECONDS);
         const transition = `./${scenes?.transition.file ?? "audio/samples/arpa.ogg"}`;
         await Promise.all([
           engine.playSceneTransition(transition),
@@ -276,7 +283,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
       } catch (cause) {
         if (cancelled) return;
         engine.stopSceneAudio();
-        engine.setDataVoiceDuck(1);
+        engine.setDataVoiceDuck(1, SCENE_DATA_FADE_SECONDS);
         setSceneAudioError(
           `The scene sound could not start: ${cause instanceof Error ? cause.message : String(cause)}`,
         );
@@ -286,7 +293,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
     return () => {
       cancelled = true;
       engine.stopSceneAudio();
-      engine.setDataVoiceDuck(1);
+      engine.setDataVoiceDuck(1, SCENE_DATA_FADE_SECONDS);
     };
   }, [engine, openScene, scenes]);
 
@@ -310,6 +317,7 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         scenes={scenes}
         onSceneSelect={setOpenScene}
         onCloseScene={closeScene}
+        focusedScene={openScene}
       />
       <AudioListener data={data} engine={engine} />
       {openScene && (

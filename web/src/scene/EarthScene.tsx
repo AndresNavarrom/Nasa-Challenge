@@ -10,6 +10,7 @@
 // card); the sound and the probe keep reading the grids.
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { gsap } from "gsap";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ClampToEdgeWrapping,
@@ -25,6 +26,7 @@ import {
 } from "three";
 import type { JukeboxData, LoadedLayer } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
+import { sceneMapPosition } from "../scenes/geometry";
 import { sampleLayerAt } from "../lib/interpolate";
 import { FOREST_HEIGHT_IMAGES, REGION_BASE_IMAGE, REGION_FOREST_HEIGHT_IMAGE, pickBaseImage, pickImage } from "./baseImage";
 import { dotImageFor } from "./dotImage";
@@ -39,7 +41,7 @@ import {
   type ViewMode,
   type ViewState,
 } from "./FocusTransition";
-import { isInsideBbox, screenX01 } from "./geo";
+import { GLOBE_RADIUS, isInsideBbox, screenX01 } from "./geo";
 import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type LayerTextures } from "./layerTexture";
 import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 
@@ -67,6 +69,8 @@ export interface EarthSceneProps {
   /** Clickable scene points on the Amazon map. */
   scenes?: SceneDefinition[];
   onSceneSelect?: (scene: SceneDefinition) => void;
+  /** Scene whose popup is open; the map zooms towards its point. */
+  focusedScene?: SceneDefinition | null;
 }
 
 const CAMERA_FOV = 45;
@@ -206,6 +210,7 @@ function SceneContents(props: SceneContentsProps) {
     onSceneError,
     scenes,
     onSceneSelect,
+    focusedScene,
     setListeningPoint,
   } = props;
   const camera = useThree((state) => state.camera);
@@ -218,6 +223,7 @@ function SceneContents(props: SceneContentsProps) {
   const targetRef = useRef<TargetView>(targetView);
   targetRef.current = targetView;
   const cancelRef = useRef<CancelTransition | null>(null);
+  const focusRef = useRef({ x: 0, y: 0, zoom: 0 });
   const lastHitRef = useRef<GlobeHit | null>(null);
   const lastProbeRef = useRef<Probe | null>(null);
   const [baseError, setBaseError] = useState<string | null>(null);
@@ -376,14 +382,37 @@ function SceneContents(props: SceneContentsProps) {
   }, [targetView]);
   useEffect(() => () => cancelRef.current?.(), []);
 
+  // Zoom the map towards the open scene; zoom back out when it closes.
+  useEffect(() => {
+    const focused = focusedScene && modeRef.current === "map";
+    const target = focused ? sceneMapPosition(focusedScene, data.bbox) : { x: 0, y: 0 };
+    const base = Math.max(0.01, mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height) - GLOBE_RADIUS);
+    const zoom = focused ? base * 0.45 : 0;
+    gsap.killTweensOf(focusRef.current);
+    gsap.to(focusRef.current, {
+      x: target.x,
+      y: target.y,
+      zoom,
+      duration: 0.55,
+      ease: "power2.inOut",
+    });
+    return () => {
+      gsap.killTweensOf(focusRef.current);
+    };
+  }, [focusedScene, data.bbox, size.width, size.height, lite]);
+
   useFrame(() => {
     const state = view.current;
+    const focus = focusRef.current;
     if (modeRef.current === "map") {
       // Keep the Amazon framed if the window is resized while on the map.
       state.cameraZ = mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height);
+      camera.position.set(focus.x, focus.y, state.cameraZ - focus.zoom);
+      camera.lookAt(focus.x, focus.y, GLOBE_RADIUS);
+    } else {
+      camera.position.set(0, 0, state.cameraZ);
+      camera.lookAt(0, 0, 0);
     }
-    camera.position.set(0, 0, state.cameraZ);
-    camera.lookAt(0, 0, 0);
   });
 
   const probeFor = useCallback(

@@ -423,7 +423,7 @@ describe("sound engine", () => {
     expect(loop.loop).toBe(true);
     const loopGain = context.gains.at(-1)!;
     const ramps = loopGain.gain.events.filter((event) => event.method === "linearRampToValueAtTime");
-    expect(ramps.at(-1)?.target).toBeCloseTo(0.8, 6);
+    expect(ramps.at(-1)?.target).toBeCloseTo(1.6, 6);
     expect(
       context.gains.some((gain) =>
         gain.gain.events.some(
@@ -432,6 +432,35 @@ describe("sound engine", () => {
       ),
     ).toBe(true);
 
+    engine.dispose();
+  });
+
+  it("fades the ARPA transition over its last 0.4 s", async () => {
+    const context = new FakeAudioContext();
+    context.decodedDuration = 1.58;
+    const fetchSample = vi.fn(async () => new ArrayBuffer(8));
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: null,
+      fetchSample,
+    });
+    await engine.start();
+    await engine.playSceneTransition("arpa.ogg");
+
+    const transitionGain = context.gains.find((gain) =>
+      gain.gain.events.some((event) => event.method === "setValueAtTime" && Math.abs(event.target - 0.9) < 1e-6),
+    );
+    expect(transitionGain).toBeDefined();
+    expect(
+      transitionGain!.gain.events.some(
+        (event) => event.method === "setValueAtTime" && Math.abs(event.target - 0.9) < 1e-6 && Math.abs(event.time - 1.18) < 1e-6,
+      ),
+    ).toBe(true);
+    expect(
+      transitionGain!.gain.events.some(
+        (event) => event.method === "linearRampToValueAtTime" && event.target === 0 && Math.abs(event.time - 1.58) < 1e-6,
+      ),
+    ).toBe(true);
     engine.dispose();
   });
 

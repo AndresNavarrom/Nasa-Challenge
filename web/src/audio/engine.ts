@@ -80,6 +80,9 @@ const SMOKE_TONE_HZ = 180;
 const CO2_NOISE_MIX = 0.5;
 const NOISE_SECONDS = 2;
 const SCENE_TRANSITION_GAIN = 0.9;
+const SCENE_TRANSITION_FADE_OUT_SECONDS = 0.4;
+const SCENE_LOOP_GAIN_MULTIPLIER = 2;
+const SCENE_LOOP_MAX_GAIN = 2;
 const SCENE_FADE_IN_SECONDS = 0.5;
 const SCENE_FADE_OUT_SECONDS = 0.3;
 
@@ -979,7 +982,14 @@ export class WebAudioSoundEngine implements SoundEngine {
     gain.connect(graph.sceneBus);
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(SCENE_TRANSITION_GAIN, now + 0.01);
+    // The source is cut at its natural end; fade the last 0.4 s so it does not
+    // end with a click or an abrupt stop.
+    const duration = Number.isFinite(buffer.duration) && buffer.duration > 0 ? buffer.duration : 1.6;
+    const fadeStart = Math.max(0.01, duration - SCENE_TRANSITION_FADE_OUT_SECONDS);
+    gain.gain.setValueAtTime(SCENE_TRANSITION_GAIN, now + fadeStart);
+    gain.gain.linearRampToValueAtTime(0, now + duration);
     source.start(now);
+    source.stop(now + duration + 0.02);
     this.transitionSource = source;
     this.transitionGain = gain;
     source.onended = () => {
@@ -1017,7 +1027,12 @@ export class WebAudioSoundEngine implements SoundEngine {
     const gain = context.createGain();
     source.connect(gain);
     gain.connect(graph.sceneBus);
-    const target = clampUnit(options.gain ?? 1);
+    // Scenes are the foreground: give them more level than the data voices,
+    // which are ducked by the app while the popup is open.
+    const target = Math.min(
+      SCENE_LOOP_MAX_GAIN,
+      Math.max(0, (options.gain ?? 1) * SCENE_LOOP_GAIN_MULTIPLIER),
+    );
     const fade = Math.max(0.01, options.fadeInSeconds ?? SCENE_FADE_IN_SECONDS);
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(target, now + fade);
