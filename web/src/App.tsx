@@ -1,14 +1,32 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Driver } from "driver.js";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { AudioStart } from "./audio/AudioStart";
 import type { SoundEngine } from "./audio/engine";
 import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
+import { framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
-import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
+import {
+  ListeningPointProvider,
+  useListeningPoint,
+} from "./scene/listeningPoint";
+import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
+import { allHeard, isHeard, withHeard, type HeardLayers } from "./ui/heardLayers";
 import { PlanetHud } from "./ui/PlanetHud";
+import { TimelineBar } from "./ui/TimelineBar";
+import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
+import { startTour } from "./ui/tour";
+import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
 type LoadState =
   | { status: "loading" }
@@ -20,31 +38,48 @@ function readLiteMode(search: string): boolean {
   return new URLSearchParams(search).get("lite") === "1";
 }
 
-/** Layer shown first: the first one with a whole-planet grid (forest today), else the first listed. */
-function defaultLayerId(data: JukeboxData): string {
-  const withGlobal = data.layers.find((layer) => layer.global !== null) ?? data.layers[0];
-  return withGlobal?.manifest.id ?? "";
+interface PlanetViewProps {
+  data: JukeboxData;
+  lite: boolean;
+  audio?: ReactNode;
+  timeline?: ReactNode;
+  heard?: HeardLayers;
+  onToggleHeard?: (layerId: string, on: boolean) => void;
+  onShowTour?: () => void;
 }
 
-/** The planet, the Amazon map and their controls, once the data is loaded. */
-function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; audio?: ReactNode }) {
-  const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
+/** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
+function PlanetView({
+  data,
+  lite,
+  audio,
+  timeline,
+  heard,
+  onToggleHeard,
+  onShowTour,
+}: PlanetViewProps) {
+  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
 
+  // null: the plain Earth view, no layer drawn.
   const activeLayer = useMemo(
-    () => data.layers.find((layer) => layer.manifest.id === activeLayerId) ?? data.layers[0],
+    () => layerForChoice(data.layers, activeLayerId),
     [data, activeLayerId],
   );
   const showAmazon = useCallback(() => setTargetView("map"), []);
   const showEarth = useCallback(() => setTargetView("globe"), []);
 
-  if (!activeLayer) {
+  if (data.layers.length === 0) {
     return (
-      <p role="alert" data-testid="data-error" className="m-8 rounded border border-red-400 p-4 text-red-200">
+      <p
+        role="alert"
+        data-testid="data-error"
+        className="m-8 rounded border border-red-400 p-4 text-red-200"
+      >
         The data file lists no layers.
       </p>
     );
@@ -67,7 +102,7 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
       </div>
       <PlanetHud
         layers={data.layers}
-        activeLayerId={activeLayer.manifest.id}
+        activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
         onSelectLayer={setActiveLayerId}
         mode={mode}
         onAmazon={showAmazon}
@@ -77,19 +112,30 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
         lite={lite}
         sceneError={sceneError}
         audio={audio}
+        timeline={timeline}
+        heard={heard}
+        onToggleHeard={onToggleHeard}
+        onShowTour={onShowTour}
       />
     </>
   );
 }
 
 /**
- * Feeds the sound engine from the point under the cursor (plan Step 10, FR3 and
- * FR6). Lives inside ListeningPointProvider, so the scene publishes the point
- * without knowing about audio. The first instant is used until the timeline of
- * Step 13 exists.
+ * Feeds the sound engine from the point under the cursor and the shared
+ * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
+ * ListeningPointProvider, so the scene publishes the point without knowing
+ * about audio. The timeline starts paused at 0; the timeline bar plays it.
  */
-function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngine }) {
+function AudioListener({
+  data,
+  engine,
+}: {
+  data: JukeboxData;
+  engine: SoundEngine;
+}) {
   const point = useListeningPoint();
+  const { position } = useTimeline();
 
   useEffect(() => {
     if (!point) {
@@ -99,19 +145,97 @@ function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngin
       return;
     }
     for (const layer of data.layers) {
-      engine.setLayerIntensity(layer.manifest.id, sampleLayerAt(layer, data.bbox, point.lon, point.lat, 0));
+      // Shared normalized position -> this layer's own fractional instant.
+      // Static layers have one frame, so framePosition returns 0 and
+      // sampleLayerAt ignores time for them.
+      const frame = framePosition(position, layer.region.frames);
+      engine.setLayerIntensity(
+        layer.manifest.id,
+        sampleLayerAt(layer, data.bbox, point.lon, point.lat, frame),
+      );
     }
     engine.setPan(point.screenX);
-  }, [engine, data, point]);
+  }, [engine, data, point, position]);
 
   return null;
 }
 
+/**
+ * The timeline bar bound to the shared clock. Only this component reads the
+ * clock, so while the sequence plays (about 30 updates a second) it re-renders
+ * alone, not the planet view around it.
+ */
+function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
+  const timeline = useTimeline();
+  return (
+    <TimelineBar
+      className="w-56"
+      position={timeline.position}
+      playing={timeline.playing}
+      speed={timeline.speed}
+      durationSeconds={timeline.durationSeconds}
+      layers={layers}
+      onSeek={timeline.seek}
+      onToggle={timeline.toggle}
+      onSpeed={timeline.setSpeed}
+    />
+  );
+}
+
+/** Delay before the first-visit tour, so the HUD is laid out when it measures it. */
+const TOUR_START_DELAY_MS = 400;
+
+/**
+ * The welcome window and guided tour: shown by itself on the first visit of
+ * this browser, and again whenever `show` is called (the "?" button).
+ */
+function useGuidedTour(): () => void {
+  const tourRef = useRef<Driver | null>(null);
+
+  const show = useCallback(() => {
+    tourRef.current?.destroy();
+    tourRef.current = startTour(() => {
+      markTourSeen(browserFlagStore());
+      tourRef.current = null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hasSeenTour(browserFlagStore())) return undefined;
+    const timer = window.setTimeout(show, TOUR_START_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [show]);
+
+  // Close a tour that is still open when the view goes away.
+  useEffect(() => () => tourRef.current?.destroy(), []);
+
+  return show;
+}
+
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
+  const [heard, setHeard] = useState<HeardLayers>(() => allHeard(data.layers.map((layer) => layer.manifest.id)));
+  const toggleHeard = useCallback((layerId: string, on: boolean) => setHeard((current) => withHeard(current, layerId, on)), []);
+  const showTour = useGuidedTour();
+
+  // A layer that is not heard keeps its data and drawing; only its voice goes quiet.
+  useEffect(() => {
+    for (const layer of data.layers) {
+      engine.setLayerEnabled(layer.manifest.id, isHeard(heard, layer.manifest.id));
+    }
+  }, [engine, data, heard]);
+
   return (
     <>
-      <PlanetView data={data} lite={lite} audio={<AudioStart engine={engine} className="w-56" />} />
+      <PlanetView
+        data={data}
+        lite={lite}
+        audio={<AudioStart engine={engine} className="w-56" />}
+        timeline={<TimelineControls layers={data.layers} />}
+        heard={heard}
+        onToggleHeard={toggleHeard}
+        onShowTour={showTour}
+      />
       <AudioListener data={data} engine={engine} />
     </>
   );
@@ -142,28 +266,36 @@ export default function App() {
   }, []);
 
   return (
-    <ListeningPointProvider>
-      <main className="relative h-full w-full overflow-hidden">
-        {state.status === "loading" && (
-          <div className="flex h-full flex-col items-center justify-center gap-2">
-            <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-            <p role="status" data-testid="data-loading">
-              Loading data…
-            </p>
-          </div>
-        )}
+    <TimelineProvider>
+      <ListeningPointProvider>
+        <main className="relative h-full w-full overflow-hidden">
+          {state.status === "loading" && (
+            <div className="flex h-full flex-col items-center justify-center gap-2">
+              <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+              <p role="status" data-testid="data-loading">
+                Loading data…
+              </p>
+            </div>
+          )}
 
-        {state.status === "error" && (
-          <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-8">
-            <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-            <p role="alert" data-testid="data-error" className="rounded border border-red-400 p-4 text-red-200">
-              {state.message}
-            </p>
-          </div>
-        )}
+          {state.status === "error" && (
+            <div className="mx-auto flex h-full max-w-3xl flex-col justify-center gap-4 p-8">
+              <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
+              <p
+                role="alert"
+                data-testid="data-error"
+                className="rounded border border-red-400 p-4 text-red-200"
+              >
+                {state.message}
+              </p>
+            </div>
+          )}
 
-        {state.status === "ready" && <JukeboxView data={state.data} lite={lite} />}
-      </main>
-    </ListeningPointProvider>
+          {state.status === "ready" && (
+            <JukeboxView data={state.data} lite={lite} />
+          )}
+        </main>
+      </ListeningPointProvider>
+    </TimelineProvider>
   );
 }

@@ -3,10 +3,14 @@ import { DataTexture } from "three";
 import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
 import {
   FIRST_INSTANT,
+  GEDI_COLORBAR,
   LAYER_RAMPS,
   NEUTRAL_RAMP,
+  disposeLayerTextures,
   gridToRgba,
   layerTextureFor,
+  rampAlpha,
+  rampColor,
   rampFor,
   type ColorRamp,
 } from "./layerTexture";
@@ -31,6 +35,78 @@ describe("gridToRgba (FR1.2)", () => {
     expect(rampFor("forest")).toBe(LAYER_RAMPS.forest);
     expect(rampFor("aerosol")).toBe(rampFor("smoke"));
     expect(rampFor("a-layer-added-later")).toBe(NEUTRAL_RAMP);
+  });
+});
+
+describe("forest drawn like NASA SVS 4950", () => {
+  const forest = LAYER_RAMPS.forest!;
+
+  it("follows the GEDI colour bar from brown at 0 m to white at 50 m", () => {
+    expect(rampColor(forest, 0)).toEqual(GEDI_COLORBAR[0]);
+    expect(rampColor(forest, 255)).toEqual(GEDI_COLORBAR[10]);
+    // 25 m is the middle stop of the eleven (index 5).
+    expect(rampColor(forest, 127.5)).toEqual(GEDI_COLORBAR[5]);
+    // Halfway between the first two stops.
+    const half = rampColor(forest, 12.75);
+    expect(half).toEqual([77, 70, 41]);
+  });
+
+  it("is opaque wherever there is forest and transparent where there is none", () => {
+    expect(rampAlpha(forest, 0)).toBe(0);
+    expect(rampAlpha(forest, 2)).toBe(0);
+    expect(rampAlpha(forest, 4)).toBe(128);
+    expect(rampAlpha(forest, 6)).toBe(255);
+    expect(rampAlpha(forest, 200)).toBe(255);
+    // Layers without `presence` keep alpha growing with the value.
+    expect(rampAlpha(TEST_RAMP, 51)).toBe(51);
+  });
+
+  it("gives the forest height textures for the relief and the other layers none", () => {
+    const manifest = (id: LayerManifest["id"]): LayerManifest => ({
+      id,
+      title: id,
+      description: "Test layer",
+      source: { title: "Test", url: "https://example.com" },
+      static: true,
+      sample: true,
+      dates: ["2020-01-01"],
+      global: { width: 4, height: 2, frames: 1, file: "global.bin", texture: "global.png" },
+      region: { width: 2, height: 2, frames: 1, file: "region.bin", texture: "region.png" },
+    });
+    const global: Grid = { width: 4, height: 2, frames: 1, data: Uint8Array.from([0, 50, 100, 150, 200, 250, 10, 20]) };
+    const region: Grid = { width: 2, height: 2, frames: 1, data: Uint8Array.from([9, 8, 7, 6]) };
+
+    const withRelief = layerTextureFor({ manifest: manifest("forest"), global, region });
+    expect(withRelief.heightGlobal?.image.data).toEqual(global.data);
+    expect(withRelief.heightRegion?.image.data).toEqual(region.data);
+    expect(withRelief.opacity).toBe(0.95);
+    disposeLayerTextures(withRelief);
+
+    const flat = layerTextureFor({ manifest: manifest("smoke"), global, region });
+    expect(flat.heightGlobal).toBeNull();
+    expect(flat.heightRegion).toBeNull();
+    expect(flat.opacity).toBe(0.8);
+    disposeLayerTextures(flat);
+  });
+});
+
+describe("lightning drawn like NASA SVS 5011", () => {
+  const lightning = LAYER_RAMPS.lightning!;
+
+  it("goes from orange to almost white and dims the planet under it", () => {
+    expect(rampColor(lightning, 0)).toEqual([255, 120, 0]);
+    expect(rampColor(lightning, 255)).toEqual([255, 252, 225]);
+    expect(rampColor(lightning, 127.5)).toEqual([255, 215, 60]);
+    expect(lightning.baseDim).toBeGreaterThan(0);
+  });
+
+  it("keeps rare lightning transparent so only the active regions show", () => {
+    // Half of the cells with any lightning are below 14 of 255.
+    expect(rampAlpha(lightning, 14)).toBe(0);
+    expect(rampAlpha(lightning, 18)).toBe(0);
+    expect(rampAlpha(lightning, 39)).toBe(128);
+    expect(rampAlpha(lightning, 60)).toBe(255);
+    expect(rampAlpha(lightning, 200)).toBe(255);
   });
 });
 
