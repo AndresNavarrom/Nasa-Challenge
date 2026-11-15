@@ -1,6 +1,7 @@
 // Minimal controls over the 3D view until the side panel of plan Step 13:
 // "Amazon" and "Back to Earth" (FR2.1, FR2.2), a temporary active-layer picker
-// (FR1.4), the "Listen to" checkboxes that choose which layers sound, the "?"
+// (FR1.4) whose layer is also the only one that sounds, the "Auto-rotate"
+// switch that starts and stops the planet's own turn, the "?"
 // button that repeats the guided tour, the longitude/latitude/value indicator
 // (FR4.4) and a frames-per-second counter (NFR1).
 
@@ -8,8 +9,6 @@ import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
-import { rampFor, type Rgb } from "../scene/layerTexture";
-import { isHeard, type HeardLayers } from "./heardLayers";
 import { layerChoices, layerForChoice } from "./layerChoice";
 import { TOUR_BUTTON_TEST_ID } from "./tourSteps";
 
@@ -17,6 +16,9 @@ export interface PlanetHudProps {
   layers: LoadedLayer[];
   activeLayerId: string;
   onSelectLayer: (layerId: string) => void;
+  /** Whether the planet turns by itself on the planet view (the "Auto-rotate" switch). */
+  autoRotate: boolean;
+  onToggleAutoRotate: (on: boolean) => void;
   mode: ViewMode;
   onAmazon: () => void;
   onBackToEarth: () => void;
@@ -28,18 +30,8 @@ export interface PlanetHudProps {
   audio?: ReactNode;
   /** Timeline bar (play, position, speed, dates), docked above the sound controls. */
   timeline?: ReactNode;
-  /** Layers whose voice is on (the "Listen to" checkboxes). Shown only with onToggleHeard. */
-  heard?: HeardLayers;
-  onToggleHeard?: (layerId: string, on: boolean) => void;
   /** Shows the welcome window and guided tour again (the "?" button). */
   onShowTour?: () => void;
-}
-
-/** The layer's colours on the planet, from its lowest to its highest value. */
-function rampGradient(layerId: string): string {
-  const css = (color: Rgb) => `rgb(${color[0]} ${color[1]} ${color[2]})`;
-  const ramp = rampFor(layerId);
-  return `linear-gradient(to right, ${css(ramp.low)}, ${css(ramp.high)})`;
 }
 
 /** Below this the NFR1 target (30 frames per second) is missed. */
@@ -78,6 +70,8 @@ export function PlanetHud(props: PlanetHudProps) {
     layers,
     activeLayerId,
     onSelectLayer,
+    autoRotate,
+    onToggleAutoRotate,
     mode,
     onAmazon,
     onBackToEarth,
@@ -87,8 +81,6 @@ export function PlanetHud(props: PlanetHudProps) {
     sceneError,
     audio,
     timeline,
-    heard,
-    onToggleHeard,
     onShowTour,
   } = props;
   // null on the plain Earth view.
@@ -131,50 +123,22 @@ export function PlanetHud(props: PlanetHudProps) {
               ))}
             </select>
           </label>
+          <label className="mt-2 flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="planet-hud-auto-rotate"
+              className="h-4 w-4 cursor-pointer accent-emerald-600 [color-scheme:dark]"
+              checked={autoRotate}
+              onChange={(event) => onToggleAutoRotate(event.target.checked)}
+            />
+            <span className={autoRotate ? "text-slate-300" : "text-slate-400"}>
+              Auto-rotate
+            </span>
+          </label>
           {activeLayer && activeLayer.manifest.dates.length > 1 && (
             <p className="mt-1 text-xs text-slate-400">
               Showing the first instant: {activeLayer.manifest.dates[0]}
             </p>
-          )}
-          {heard && onToggleHeard && (
-            <div
-              data-testid="planet-hud-heard-layers"
-              role="group"
-              aria-labelledby="planet-hud-heard-title"
-              className="mt-3"
-            >
-              <p id="planet-hud-heard-title" className="text-slate-300">
-                Listen to
-              </p>
-              <ul className="mt-1 flex flex-col gap-1">
-                {layers.map(({ manifest }) => {
-                  const on = isHeard(heard, manifest.id);
-                  return (
-                    <li key={manifest.id}>
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          data-testid={`planet-hud-heard-${manifest.id}`}
-                          className="h-4 w-4 cursor-pointer accent-emerald-600 [color-scheme:dark]"
-                          checked={on}
-                          onChange={(event) =>
-                            onToggleHeard(manifest.id, event.target.checked)
-                          }
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="h-2.5 w-5 rounded-sm"
-                          style={{ background: rampGradient(manifest.id) }}
-                        />
-                        <span className={on ? "" : "text-slate-400"}>
-                          {manifest.title}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
           )}
         </div>
 

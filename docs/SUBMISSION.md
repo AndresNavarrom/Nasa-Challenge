@@ -41,12 +41,12 @@ TODO: confirm against the final app.
 
 - A 3D planet with four NASA layers: forest height (GEDI), wildfire smoke
   (GEOS-CF), carbon dioxide (DYAMOND) and lightning (LIS on the ISS).
-- Each layer sounds in real time where the cursor is; the layers can be heard
-  together, and the "Listen to" checkboxes turn each voice on and off.
+- Each layer sounds in real time where the cursor is. The layers never mix:
+  only the layer picked in the layer picker is heard.
 - A short welcome tour explains the controls the first time the app opens.
 - Focusing on the Amazon turns the planet and flattens it into a regional map.
-- A shared timeline plays the data like a song; a story mode walks through the
-  three ideas in under a minute.
+- A static timeline: the person picks the moment with the Time slider; a
+  story mode walks through the three ideas in under a minute.
 - Keyboard-only use and screen-reader descriptions (layer, place, low / medium
   / high value).
 
