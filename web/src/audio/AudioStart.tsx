@@ -5,6 +5,7 @@
 // engine unless one is injected, and it disposes only what it owns.
 
 import { useEffect, useRef, useState } from "react";
+import { SpeakerIcon } from "../ui/icons";
 import { createSoundEngine, type SoundEngine } from "./engine";
 
 const FULL_VOLUME = 0.8;
@@ -14,9 +15,15 @@ const LEVEL_INTERVAL_MS = 100;
 export interface AudioStartProps {
   engine?: SoundEngine;
   className?: string;
+  /**
+   * "round": the HUD's side control. "Start sound" is a labelled accent pill (the
+   * one thing to press first); once the sound runs it becomes a round speaker
+   * button like its neighbours, with the level bar under it.
+   */
+  variant?: "panel" | "round";
 }
 
-export function AudioStart({ engine: injectedEngine, className = "" }: AudioStartProps) {
+export function AudioStart({ engine: injectedEngine, className = "", variant = "panel" }: AudioStartProps) {
   // Always create the fallback, but use the injected engine when there is one.
   // Keeping the engine in state (not in a ref that cleanup can clear) matters:
   // React StrictMode runs cleanup once on mount, and clearing the ref would make
@@ -24,7 +31,9 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
   const [fallbackEngine] = useState<SoundEngine>(() => createSoundEngine());
   const engine = injectedEngine ?? fallbackEngine;
   const ownsEngine = injectedEngine === undefined;
-  const [running, setRunning] = useState(false);
+  // An engine that already runs (the HUD swaps its layout when the window is
+  // resized, which mounts this control again) shows "Mute", not "Start sound".
+  const [running, setRunning] = useState(() => engine.state === "running");
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
@@ -80,8 +89,13 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
     setMuted(nextMuted);
   };
 
+  const round = variant === "round";
+
   return (
-    <div className={`flex flex-col gap-2 ${className}`} data-testid="audio-controls">
+    <div
+      className={`flex flex-col gap-2 ${round ? "items-start" : ""} ${className}`}
+      data-testid="audio-controls"
+    >
       {!running ? (
         <button
           type="button"
@@ -89,8 +103,13 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
           onClick={() => {
             void handleStart();
           }}
-          className="rounded bg-emerald-500 px-4 py-2 font-medium text-black hover:bg-emerald-400"
+          className={
+            round
+              ? "flex h-11 items-center gap-2 rounded-full bg-landing-accent pl-3 pr-4 font-medium text-landing-deep shadow-lg hover:bg-landing-ink"
+              : "rounded-full bg-landing-accent px-4 py-2 font-medium text-landing-deep hover:bg-landing-ink"
+          }
         >
+          {round && <SpeakerIcon />}
           Start sound
         </button>
       ) : (
@@ -98,10 +117,20 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
           type="button"
           data-testid="audio-mute"
           aria-pressed={muted}
+          aria-label={round ? (muted ? "Unmute" : "Mute") : undefined}
+          title={round ? (muted ? "Unmute" : "Mute") : undefined}
           onClick={handleMute}
-          className="rounded border border-slate-500 px-4 py-2 font-medium text-slate-100 hover:border-slate-300"
+          className={
+            round
+              ? `flex h-11 w-11 items-center justify-center rounded-full border bg-landing-deep/85 shadow-lg backdrop-blur ${
+                  muted
+                    ? "border-landing-line text-landing-label hover:border-landing-label"
+                    : "border-landing-accent text-landing-accent hover:border-landing-ink hover:text-landing-ink"
+                }`
+              : "rounded-full border border-landing-label px-4 py-2 font-medium text-landing-ink hover:border-landing-ink"
+          }
         >
-          {muted ? "Unmute" : "Mute"}
+          {round ? <SpeakerIcon muted={muted} /> : muted ? "Unmute" : "Mute"}
         </button>
       )}
 
@@ -112,13 +141,13 @@ export function AudioStart({ engine: injectedEngine, className = "" }: AudioStar
         aria-valuemax={1}
         aria-valuenow={Number(level.toFixed(2))}
         data-testid="audio-meter"
-        className="h-2 w-full overflow-hidden rounded bg-slate-700"
+        className={`h-1.5 overflow-hidden rounded-full bg-landing-line ${round ? "w-11" : "w-full"}`}
       >
-        <div className="h-full origin-left bg-emerald-400" style={{ transform: `scaleX(${Math.min(1, Math.max(0, level))})` }} />
+        <div className="h-full origin-left bg-landing-accent" style={{ transform: `scaleX(${Math.min(1, Math.max(0, level))})` }} />
       </div>
 
       {error && (
-        <p role="alert" data-testid="audio-error" className="text-sm text-red-300">
+        <p role="alert" data-testid="audio-error" className={`text-sm text-red-300 ${round ? "max-w-40" : ""}`}>
           The sound could not start: {error}
         </p>
       )}

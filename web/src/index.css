@@ -8,8 +8,12 @@
   --color-forest: #6fcf6b;
   --color-smoke: #f08a3c;
   --color-co2: #7fb4ff;
+  --color-lightning: #ffd166;
 
-  /* Landing page (ui/Landing.tsx). Its fonts are bundled, not downloaded. */
+  /* Shared by the landing page (ui/Landing.tsx) and the jukebox, in a 60-30-10
+     split: `deep` and `line` for the background (60), `ink`, `mist` and `label`
+     for text, arcs and rules (30), `accent` for the one thing to press (10).
+     The landing fonts are bundled, not downloaded. */
   --font-display: "Sora Variable", var(--font-sans);
   --font-text: "Inter Variable", var(--font-sans);
   --font-label: "JetBrains Mono Variable", ui-monospace, monospace;
@@ -19,6 +23,11 @@
   --color-landing-label: #8fa0b8;
   --color-landing-accent: #5ee9b5;
   --color-landing-line: #16202f;
+  /* Titles: a step dimmer than the ink, so they never outshine the button. */
+  --color-landing-title: #c9d3e2;
+  /* The button: dark-green ink on mint, brighter mint on hover (never pure black or white). */
+  --color-landing-cta-ink: #04231a;
+  --color-landing-accent-strong: #84f2c9;
 }
 
 html,
@@ -76,7 +85,7 @@ body {
  * is affected.
  */
 .driver-popover.jukebox-tour {
-  @apply rounded-lg bg-slate-950/75 p-3 font-sans text-sm shadow-lg backdrop-blur;
+  @apply rounded-lg border border-landing-line bg-landing-deep/85 p-3 font-sans text-sm shadow-lg backdrop-blur;
   /* The panels inherit the page's text colour (body); driver.css sets its own. */
   color: #e8edf5;
   /* Never wider than a phone screen, with a margin on each side. */
@@ -89,12 +98,12 @@ body {
 }
 
 .jukebox-tour .driver-popover-description {
-  @apply text-slate-300;
+  @apply text-landing-mist;
   font-family: inherit;
 }
 
 .jukebox-tour .driver-popover-progress-text {
-  @apply text-xs text-slate-400;
+  @apply text-xs text-landing-label;
 }
 
 .jukebox-tour .driver-popover-footer {
@@ -109,35 +118,35 @@ body {
   margin-left: 0;
 }
 
-/* "Next" and "Done": the green HUD button (Amazon, Back to Earth). */
+/* "Next" and "Done": the accent HUD button (Start sound). */
 .jukebox-tour .driver-popover-footer-btn {
-  @apply rounded-md bg-emerald-600 px-4 py-2 font-medium text-white;
+  @apply rounded-full bg-landing-accent px-4 py-2 font-medium text-landing-deep;
   border: 0;
   text-shadow: none;
 }
 
 .jukebox-tour .driver-popover-footer-btn:hover,
 .jukebox-tour .driver-popover-footer-btn:focus {
-  @apply bg-emerald-500;
+  @apply bg-landing-ink;
 }
 
 /* "Back": the outlined button (Mute). */
-.jukebox-tour .driver-popover-prev-btn {
-  @apply border border-solid border-slate-500 bg-transparent text-slate-100;
+.jukebox-tour .driver-popover-footer-btn.driver-popover-prev-btn {
+  @apply border border-solid border-landing-label bg-transparent text-landing-ink;
 }
 
-.jukebox-tour .driver-popover-prev-btn:hover,
-.jukebox-tour .driver-popover-prev-btn:focus {
-  @apply border-slate-300 bg-transparent;
+.jukebox-tour .driver-popover-footer-btn.driver-popover-prev-btn:hover,
+.jukebox-tour .driver-popover-footer-btn.driver-popover-prev-btn:focus {
+  @apply border-landing-ink bg-transparent;
 }
 
 .jukebox-tour .driver-popover-close-btn {
-  @apply text-slate-400;
+  @apply text-landing-label;
 }
 
 .jukebox-tour .driver-popover-close-btn:hover,
 .jukebox-tour .driver-popover-close-btn:focus-visible {
-  @apply text-slate-100;
+  @apply text-landing-ink;
 }
 
 /* Same keyboard focus ring as the rest of the app (FR9); driver.css removes it. */

@@ -13,7 +13,7 @@ const OVERLAY_COLOR = "#05070d";
 const WELCOME_BUTTONS: AllowedButtons[] = ["next", "close"];
 /** The control the timeline step needs before driver.js can resolve it. */
 const TIMELINE_SELECTOR = '[data-testid="timeline-track"]';
-const TIMELINE_WAIT_MS = 1500;
+const TIMELINE_WAIT_MS = 10000;
 const MOVE_COOLDOWN_MS = 250;
 
 /** Resolves once the timeline is mounted, or after a bounded wait. */

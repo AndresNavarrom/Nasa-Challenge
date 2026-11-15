@@ -27,11 +27,11 @@ import {
   type WebGLRenderer,
 } from "three";
 import type { VisibleField } from "../audio/overview";
-import type { JukeboxData, LoadedLayer } from "../data/types";
+import type { Grid, JukeboxData, LoadedLayer } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
 import { sceneMapPosition } from "../scenes/geometry";
 import { sampleLayerAt } from "../lib/interpolate";
-import { FOREST_HEIGHT_IMAGES, REGION_BASE_IMAGE, REGION_FOREST_HEIGHT_IMAGE, pickBaseImage, pickImage } from "./baseImage";
+import { FOREST_HEIGHT_IMAGES, REGION_BASE_IMAGE, REGION_FOREST_HEIGHT_IMAGE, baseImageSteps, pickImage } from "./baseImage";
 import { dotImageFor } from "./dotImage";
 import { EarthMesh, type DotImage, type GlobeHit, type ReliefImages } from "./EarthMesh";
 import {
@@ -45,7 +45,7 @@ import {
   type ViewMode,
   type ViewState,
 } from "./FocusTransition";
-import { GLOBE_RADIUS, screenX01 } from "./geo";
+import { GLOBE_RADIUS, screenX01, type ViewOrientation } from "./geo";
 import { disposeLayerTextures, layerTextureFor, rampFor, showLayerBlend, type LayerTextures } from "./layerTexture";
 import { useListeningPoint, useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 import {
@@ -108,6 +108,10 @@ export interface EarthSceneProps {
   onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
   /** Visible screen field for the overview scan; null while the globe is not visible. */
   onOverviewField?: (field: VisibleField | null) => void;
+  /** Written on every frame with how the planet is turned (the HUD's compass reads it). */
+  orientation?: RefObject<ViewOrientation | null>;
+  /** Colour of the listening point (the picked layer's contrast colour). */
+  markerColor?: string;
 }
 
 const CAMERA_FOV = 45;
@@ -157,9 +161,8 @@ interface RegionMask {
   texture: DataTexture;
 }
 
-function buildRegionMask(data: JukeboxData, regions: readonly Region[], lite: boolean): RegionMask {
+function buildRegionMask(forest: Grid | null, regions: readonly Region[], lite: boolean): RegionMask {
   const { width, height } = lite ? LITE_REGION_MASK_SIZE : REGION_MASK_SIZE;
-  const forest = data.layers.find((layer) => layer.manifest.id === REGION_SHAPE_LAYER)?.global ?? null;
   const map = buildRegionMap(width, height, forest, regions);
   const texture = new DataTexture(map.cells, width, height, RedFormat, UnsignedByteType);
   texture.unpackAlignment = 1;
@@ -303,6 +306,8 @@ function SceneContents(props: SceneContentsProps) {
     onSceneHover,
     focusedScene,
     onOverviewField,
+    orientation,
+    markerColor,
     setListeningPoint,
   } = props;
   const selectedPoint = useListeningPoint();
@@ -317,13 +322,16 @@ function SceneContents(props: SceneContentsProps) {
   // the cursor, and the rectangle of the one being visited.
   // Built once the regions are known, after the frame is drawn (never during a
   // render), and again only if the data, the regions or lite mode change.
+  // Layers load one by one as they are chosen; only the forest grid shapes the
+  // regions, so a newly loaded layer does not rebuild them.
+  const regionShape = data.layers.find((layer) => layer.manifest.id === REGION_SHAPE_LAYER)?.global ?? null;
   const [mask, setMask] = useState<RegionMask | null>(null);
   useEffect(() => {
     if (regions === null) return undefined;
     let built: RegionMask | null = null;
     const timer = window.setTimeout(() => {
       try {
-        built = buildRegionMask(data, regions, lite);
+        built = buildRegionMask(regionShape, regions, lite);
         setMask(built);
       } catch (cause) {
         console.error("Earth Jukebox could not build the region outlines:", cause);
@@ -334,7 +342,7 @@ function SceneContents(props: SceneContentsProps) {
       built?.texture.dispose();
       setMask(null);
     };
-  }, [data, regions, lite]);
+  }, [regionShape, regions, lite]);
   const knownRegions = regions ?? DEFAULT_REGIONS;
   const regionAt = useCallback(
     (lon: number, lat: number) => (mask ? regionMapIndexAt(mask.map, lon, lat) : null),
@@ -378,12 +386,34 @@ function SceneContents(props: SceneContentsProps) {
   const [sharpRegionError, setSharpRegionError] = useState<string | null>(null);
 
   const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
-  const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
-  const baseTexture = useImageTexture(
-    baseUrl,
-    `The planet image (${baseUrl}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
-    setBaseError,
+  // The 4096 image first, so the planet shows quickly; the 8192 one (when the card
+  // takes it) is requested once the small one has arrived or failed, and replaces it.
+  const baseSteps = useMemo(() => baseImageSteps(maxTextureSize, lite), [maxTextureSize, lite]);
+  const [smallBaseError, setSmallBaseError] = useState<string | null>(null);
+  const [largeBaseError, setLargeBaseError] = useState<string | null>(null);
+  const [largeBaseWanted, setLargeBaseWanted] = useState(false);
+  const smallBaseUrl = `${data.baseUrl}${baseSteps.first}`;
+  const largeBaseUrl = baseSteps.then && largeBaseWanted ? `${data.baseUrl}${baseSteps.then}` : null;
+  const largeBaseTexture = useImageTexture(
+    largeBaseUrl,
+    `The sharp planet image (${largeBaseUrl}) could not be loaded, so the planet is drawn from the smaller one.`,
+    setLargeBaseError,
   );
+  // Once the large image is drawn the small one is let go (frees its GPU memory).
+  const smallBaseTexture = useImageTexture(
+    largeBaseTexture ? null : smallBaseUrl,
+    `The planet image (${smallBaseUrl}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
+    setSmallBaseError,
+  );
+  useEffect(() => {
+    if (smallBaseTexture || smallBaseError) setLargeBaseWanted(true);
+  }, [smallBaseTexture, smallBaseError]);
+  const baseTexture = largeBaseTexture ?? smallBaseTexture;
+  // A banner only when no planet image could be drawn at all.
+  useEffect(() => {
+    const largeFailed = baseSteps.then === null || largeBaseError !== null;
+    setBaseError(smallBaseError && largeFailed ? smallBaseError : null);
+  }, [smallBaseError, largeBaseError, baseSteps.then]);
   const regionUrl = `${data.baseUrl}${REGION_BASE_IMAGE}`;
   const regionBaseTexture = useImageTexture(
     regionUrl,
@@ -610,6 +640,11 @@ function SceneContents(props: SceneContentsProps) {
   useFrame(() => {
     const state = view.current;
     const focus = focusRef.current;
+    if (orientation) {
+      const shown = (orientation.current ??= { yaw: 0, pitch: 0 });
+      shown.yaw = state.yaw;
+      shown.pitch = state.pitch;
+    }
     if (modeRef.current === "map") {
       // Keep the region visited framed if the window is resized while on the map.
       state.cameraZ = mapCameraZ(focusBbox, CAMERA_FOV, size.width / size.height);
@@ -784,6 +819,7 @@ function SceneContents(props: SceneContentsProps) {
         onGlobeTap={handleGlobeTap}
         onMapTap={handleMapTap}
         onOverviewField={onOverviewField}
+        markerColor={markerColor}
       />
       <FpsProbe onFps={onFps} />
     </>

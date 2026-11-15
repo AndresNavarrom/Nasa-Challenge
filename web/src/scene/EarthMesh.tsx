@@ -55,6 +55,7 @@ import {
 import type { BoundingBox } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
 import { OVERVIEW_COLUMNS, OVERVIEW_ROWS, type VisibleCell, type VisibleColumn, type VisibleField } from "../audio/overview";
+import { IDENTITY_LEVELS, imageLevels } from "./levels";
 import { LocationMarkers } from "./LocationMarkers";
 import { SceneMarkers } from "./SceneMarkers";
 import type { ViewMode, ViewState } from "./FocusTransition";
@@ -161,6 +162,8 @@ export interface EarthMeshProps {
   selectedPoint?: ListeningPoint | null;
   /** Point under the cursor; drawn as a crosshair. */
   hoverPoint?: { lon: number; lat: number } | null;
+  /** Colour of the listening point (its guide lines stay light). */
+  markerColor?: string;
   onHover: (hit: GlobeHit | null) => void;
   /** Double-click on the planet (not after a drag): the point whose sound is selected. */
   onGlobeSelectPoint: (lon: number, lat: number, clientX: number) => void;
@@ -251,6 +254,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform bool uHasBase;
   uniform sampler2D uRegionBase;
   uniform bool uHasRegionBase;
+  uniform vec2 uBaseLevels; // auto levels of the planet image: the brightness that becomes black, and white
   uniform sampler2D uLayerGlobal;
   uniform bool uHasGlobal;
   uniform sampler2D uLayerRegion;
@@ -334,6 +338,10 @@ const FRAGMENT_SHADER = /* glsl */ `
     return vec4(rgb, alpha);
   }
 
+  // Latitudes (degrees) between which the layer fades out towards each pole.
+  const float POLE_FADE_FROM = 78.0;
+  const float POLE_FADE_TO = 84.0;
+
   void main() {
     float lon = -180.0 + 360.0 * vUv.x;
     float lat = -90.0 + 180.0 * vUv.y;
@@ -360,6 +368,10 @@ const FRAGMENT_SHADER = /* glsl */ `
       vec2 cropUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (lat - uBbox.y) / (uBbox.w - uBbox.y));
       color = texture2D(uRegionBase, cropUv).rgb;
     }
+    // Auto levels (levels.ts): the tones the planet image really uses, stretched
+    // to the full range. One stretch for the planet and the Amazon crop, so the
+    // crop's edge does not show.
+    color = clamp((color - uBaseLevels.x) / max(uBaseLevels.y - uBaseLevels.x, 0.05), 0.0, 1.0);
     // Some layers (lightning, like NASA SVS 5011) dim the planet to dark grey so they stand out.
     float grey = dot(color, vec3(0.299, 0.587, 0.114));
     color = mix(color, vec3(grey * 0.5), uBaseDim);
@@ -379,12 +391,15 @@ const FRAGMENT_SHADER = /* glsl */ `
       vec2 globalUv = vec2(vUv.x, 1.0 - vUv.y);
       overlay = blendFrames(texture2D(uLayerGlobal, globalUv), texture2D(uLayerGlobalNext, globalUv), uFrameMix);
     }
-    float layerAmount = overlay.a * uLayerOpacity;
+    // No layer over the poles: the top and bottom rows of the data are stretched
+    // into a smear around them, so the layer fades out and the plain Earth shows.
+    float polar = 1.0 - smoothstep(POLE_FADE_FROM, POLE_FADE_TO, abs(lat));
+    float layerAmount = overlay.a * uLayerOpacity * polar;
     color = mix(color, overlay.rgb, layerAmount);
     // The relief shading applies where the layer is drawn, not to the base image around it.
     color *= mix(1.0, reliefShade(inRegion, lodGlobal, lodRegion, regionScale), layerAmount);
     // Soft glow where the dots are dense (0 without a dots image).
-    color += uGlowColor * (dotGlow * uGlow);
+    color += uGlowColor * (dotGlow * uGlow * polar);
     color *= vShade;
     if (uShowRegions > 0.5) {
       // Every region gets a soft border; the one under the cursor a light tint and
@@ -460,6 +475,7 @@ interface Uniforms {
   uHasBase: IUniform<boolean>;
   uRegionBase: IUniform<Texture | null>;
   uHasRegionBase: IUniform<boolean>;
+  uBaseLevels: IUniform<Vector2>;
   uLayerGlobal: IUniform<Texture | null>;
   uHasGlobal: IUniform<boolean>;
   uLayerRegion: IUniform<Texture | null>;
@@ -534,6 +550,7 @@ export function EarthMesh({
   onGlobeTap,
   onMapTap,
   onOverviewField,
+  markerColor,
 }: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
@@ -562,6 +579,7 @@ export function EarthMesh({
       uHasBase: { value: false },
       uRegionBase: { value: null },
       uHasRegionBase: { value: false },
+      uBaseLevels: { value: new Vector2(IDENTITY_LEVELS.low, IDENTITY_LEVELS.high) },
       uLayerGlobal: { value: null },
       uHasGlobal: { value: false },
       uLayerRegion: { value: null },
@@ -611,6 +629,13 @@ export function EarthMesh({
     [segments.width, segments.height],
   );
   useEffect(() => () => geometry.dispose(), [geometry]);
+
+  // Auto levels, measured once per planet image (the small one, then the sharp one).
+  useEffect(() => {
+    const image = baseTexture?.image as CanvasImageSource | undefined;
+    const levels = image ? imageLevels(image) : IDENTITY_LEVELS;
+    uniforms.uBaseLevels.value.set(levels.low, levels.high);
+  }, [uniforms, baseTexture]);
 
   useEffect(() => {
     uniforms.uBase.value = baseTexture;
@@ -970,7 +995,7 @@ export function EarthMesh({
             <sphereGeometry args={[GLOBE_RADIUS * 1.002, 64, 32]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="globe" selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="globe" selectedPoint={selectedPoint} hoverPoint={hoverPoint} color={markerColor} />
         </group>
       )}
 
@@ -988,7 +1013,7 @@ export function EarthMesh({
             <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="map" bbox={focusBbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="map" bbox={focusBbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} color={markerColor} />
           {scenes && scenes.length > 0 && onSceneSelect && (
             <SceneMarkers
               scenes={scenes}

@@ -109,3 +109,18 @@ export function nearestEquivalentAngle(from: number, to: number): number {
   const difference = ((((to - from) % turn) + turn + Math.PI) % turn) - Math.PI;
   return from + difference;
 }
+
+/** How the planet is turned: the yaw and pitch of the view (radians), as in facingRotation. */
+export interface ViewOrientation {
+  yaw: number;
+  pitch: number;
+}
+
+/** The place at the centre of the view for a yaw and pitch: the inverse of facingRotation. */
+export function viewCentre(yaw: number, pitch: number): { lon: number; lat: number } {
+  const lon = -yaw / DEG - 90;
+  return {
+    lon: ((((lon + 180) % 360) + 360) % 360) - 180,
+    lat: Math.min(90, Math.max(-90, pitch / DEG)),
+  };
+}
