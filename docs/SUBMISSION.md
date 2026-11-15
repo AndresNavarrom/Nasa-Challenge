@@ -45,8 +45,8 @@ TODO: confirm against the final app.
   only the layer picked in the layer picker is heard.
 - A short welcome tour explains the controls the first time the app opens.
 - Focusing on the Amazon turns the planet and flattens it into a regional map.
-- A shared timeline plays the data like a song; a story mode walks through the
-  three ideas in under a minute.
+- A static timeline: the person picks the moment with the Time slider; a
+  story mode walks through the three ideas in under a minute.
 - Keyboard-only use and screen-reader descriptions (layer, place, low / medium
   / high value).
 

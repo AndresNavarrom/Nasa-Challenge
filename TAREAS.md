@@ -12,7 +12,7 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 - **Vista Earth**, bosque con relieve de GEDI y rayos como puntos de SVS 5011 (PR #6, #7 y #9).
 - **Bienvenida, selector de capa y casillas “Listen to”** (PR #8): recorrido con driver.js y control de qué capas suenan.
 - **Motor de sonido** (paso 10, PR #4): bosque, humo, CO2 y rayos; limitador y medidor.
-- **Línea de tiempo** (PR #5 y #10): reloj compartido, audio que sigue la posición, barra con play/pausa, scrub, 0.1×–8× y fechas por capa.
+- **Línea de tiempo** (PR #5 y #10): reloj compartido, audio que sigue la posición, barra con play/pausa, scrub, 0.1×–8× y fechas por capa. Desde la reunión del 2026-11-15 la línea de tiempo es estática: solo queda el deslizador Time y las fechas.
 - **Servidor local y contenedor final** (paso 11, PR #3): `docker compose up` sirve la app en http://127.0.0.1:8080.
 - **Datos en alta resolución**, cuatro capas (bosque, humo, CO2 y rayos) e imagen base Natural Earth de 8192 o 4096 píxeles.
 

@@ -123,7 +123,8 @@ function PlanetView({
  * Feeds the sound engine from the point under the cursor and the shared
  * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
  * ListeningPointProvider, so the scene publishes the point without knowing
- * about audio. The timeline starts paused at 0; the timeline bar plays it.
+ * about audio. The timeline is static: it starts at 0 and only the Time
+ * slider of the timeline bar moves it.
  */
 function AudioListener({
   data,
@@ -160,8 +161,8 @@ function AudioListener({
 
 /**
  * The timeline bar bound to the shared clock. Only this component reads the
- * clock, so while the sequence plays (about 30 updates a second) it re-renders
- * alone, not the planet view around it.
+ * clock, so moving the Time slider re-renders it alone, not the planet view
+ * around it.
  */
 function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
   const timeline = useTimeline();
@@ -169,13 +170,8 @@ function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
     <TimelineBar
       className="w-56"
       position={timeline.position}
-      playing={timeline.playing}
-      speed={timeline.speed}
-      durationSeconds={timeline.durationSeconds}
       layers={layers}
       onSeek={timeline.seek}
-      onToggle={timeline.toggle}
-      onSpeed={timeline.setSpeed}
     />
   );
 }

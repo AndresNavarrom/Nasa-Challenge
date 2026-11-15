@@ -14,10 +14,11 @@ of the app or the production bundle.
 
 Please build the visible half against the contract below. Work in this order:
 
-1. **`web/src/ui/TimelineBar.tsx`** — play/pause, range `0..1` (scrub),
-   range `0.1..8` (speed), position/percentage and `dateLabelAt` for every
-   non-static layer. `data-testid`: `timeline-bar`, `timeline-scrub`,
-   `timeline-play`, `timeline-speed`, `timeline-date-<id>`.
+1. **`web/src/ui/TimelineBar.tsx`** — range `0..1` (scrub), percentage and
+   `dateLabelAt` for every non-static layer. `data-testid`: `timeline-bar`,
+   `timeline-scrub`, `timeline-date-<id>`. Team decision of 2026-11-15: the
+   timeline is static and set by the person, so the bar has no play/pause and
+   no speed control (the provider's playback stays, unused by the app).
 2. **Dock it in `PlanetHud`** — add a `timeline?: ReactNode` slot next to
    `audio`, same bottom-right panel.
 3. **Per-frame textures** — `layerTexture.ts` from a single texture to arrays,
@@ -134,11 +135,11 @@ interface TimelineBarProps {
 }
 ```
 
-- Range `0..1` (step 0.001) for scrubbing; `0.1..8` (step 0.1) for speed.
+- Range `0..1` (step 0.001) for scrubbing. No speed slider and no play/pause
+  since 2026-11-15 (static timeline).
 - Show `dateLabelAt(layer.manifest, position)` for **each non-static layer**;
   the labels are independent periods, not one date.
-- `data-testid`: `timeline-bar`, `timeline-scrub`, `timeline-play`,
-  `timeline-speed`, `timeline-date-<id>`.
+- `data-testid`: `timeline-bar`, `timeline-scrub`, `timeline-date-<id>`.
 - Dock it in `PlanetHud` like the audio control (add a `timeline?: ReactNode`
   slot next to `audio`).
 
