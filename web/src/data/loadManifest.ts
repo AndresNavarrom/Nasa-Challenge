@@ -259,14 +259,18 @@ async function loadGrid(fetcher: FetchLike, baseUrl: string, info: GridInfo): Pr
   return { width: info.width, height: info.height, frames: info.frames, data };
 }
 
-/**
- * Reads manifest.json and every grid file it names.
- * Fails with a DataLoadError naming the file when one is missing or its size is wrong.
- */
-export async function loadJukeboxData(
+/** The checked manifest and the data folder it was read from, before any grid is loaded. */
+export interface JukeboxCatalog {
+  manifest: Manifest;
+  /** Base URL of the data folder, ending with a slash. */
+  baseUrl: string;
+}
+
+/** Reads and checks manifest.json only (a few KB), without its grid files. */
+export async function loadJukeboxCatalog(
   baseUrl = "./data/",
   fetcher: FetchLike = (input) => fetch(input),
-): Promise<JukeboxData> {
+): Promise<JukeboxCatalog> {
   const manifestUrl = `${baseUrl}manifest.json`;
   const response = await fetchChecked(fetcher, manifestUrl);
   let json: unknown;
@@ -276,13 +280,41 @@ export async function loadJukeboxData(
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new DataLoadError(`${manifestUrl} is not valid JSON (${detail}). ${PREP_HINT}`);
   }
-  const manifest = parseManifest(json);
-  const layers: LoadedLayer[] = await Promise.all(
-    manifest.layers.map(async (layer) => ({
-      manifest: layer,
-      global: layer.global ? await loadGrid(fetcher, baseUrl, layer.global) : null,
-      region: await loadGrid(fetcher, baseUrl, layer.region),
-    })),
+  return { manifest: parseManifest(json), baseUrl };
+}
+
+/**
+ * Loads the grid files of one layer (global and region, in parallel). The large
+ * global grids (smoke 15 MB, CO2 9 MB) are fetched only when their layer is chosen.
+ */
+export async function loadLayerGrids(
+  layer: LayerManifest,
+  baseUrl = "./data/",
+  fetcher: FetchLike = (input) => fetch(input),
+): Promise<LoadedLayer> {
+  const [global, region] = await Promise.all([
+    layer.global ? loadGrid(fetcher, baseUrl, layer.global) : Promise.resolve(null),
+    loadGrid(fetcher, baseUrl, layer.region),
+  ]);
+  return { manifest: layer, global, region };
+}
+
+/** The data with only the given layers loaded (the start-up set), from a catalog. */
+export function jukeboxDataOf(catalog: JukeboxCatalog, layers: LoadedLayer[]): JukeboxData {
+  return { layers, bbox: catalog.manifest.region.bbox, baseUrl: catalog.baseUrl };
+}
+
+/**
+ * Reads manifest.json and every grid file it names.
+ * Fails with a DataLoadError naming the file when one is missing or its size is wrong.
+ */
+export async function loadJukeboxData(
+  baseUrl = "./data/",
+  fetcher: FetchLike = (input) => fetch(input),
+): Promise<JukeboxData> {
+  const catalog = await loadJukeboxCatalog(baseUrl, fetcher);
+  const layers = await Promise.all(
+    catalog.manifest.layers.map((layer) => loadLayerGrids(layer, baseUrl, fetcher)),
   );
-  return { layers, bbox: manifest.region.bbox, baseUrl };
+  return jukeboxDataOf(catalog, layers);
 }

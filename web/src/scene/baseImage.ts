@@ -46,3 +46,13 @@ export function pickImage(maxTextureSize: number | null, lite: boolean, images: 
 export function pickBaseImage(maxTextureSize: number | null, lite: boolean): string {
   return pickImage(maxTextureSize, lite, BASE_IMAGES);
 }
+
+/**
+ * The base images to load, in order: the small one first, so the planet shows
+ * after 1.3 MB instead of 5.2 MB, then the large one when the card takes it
+ * (it replaces the small one once it has arrived).
+ */
+export function baseImageSteps(maxTextureSize: number | null, lite: boolean): { first: string; then: string | null } {
+  const final = pickBaseImage(maxTextureSize, lite);
+  return { first: BASE_IMAGES.small, then: final === BASE_IMAGES.small ? null : final };
+}

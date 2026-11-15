@@ -4,6 +4,7 @@ import {
   BASE_IMAGE_8K,
   FOREST_HEIGHT_IMAGES,
   REGION_FOREST_HEIGHT_IMAGE,
+  baseImageSteps,
   pickBaseImage,
   pickImage,
 } from "./baseImage";
@@ -44,5 +45,18 @@ describe("pickBaseImage (FR1.2)", () => {
   it("falls back to the 4096 image when the largest texture size cannot be read", () => {
     expect(pickBaseImage(null, false)).toBe("earth-4k.jpg");
     expect(pickBaseImage(Number.NaN, false)).toBe("earth-4k.jpg");
+  });
+});
+
+describe("baseImageSteps (fast first view)", () => {
+  it("loads the 4096 image first and then the 8192 one when the card takes it", () => {
+    expect(baseImageSteps(8192, false)).toEqual({ first: "earth-4k.jpg", then: "earth-8k.jpg" });
+    expect(baseImageSteps(16384, false)).toEqual({ first: "earth-4k.jpg", then: "earth-8k.jpg" });
+  });
+
+  it("stops at the 4096 image on smaller cards, in lite mode and when the size is unknown", () => {
+    expect(baseImageSteps(4096, false)).toEqual({ first: "earth-4k.jpg", then: null });
+    expect(baseImageSteps(16384, true)).toEqual({ first: "earth-4k.jpg", then: null });
+    expect(baseImageSteps(null, false)).toEqual({ first: "earth-4k.jpg", then: null });
   });
 });
