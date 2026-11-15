@@ -219,10 +219,10 @@ function SceneContents(props: SceneContentsProps) {
     setRegionError,
   );
 
-  // Sharp forest images: requested the first time the forest is shown (it is the
-  // first layer, so in practice at start-up) and then kept, so switching back to
-  // it is instant. Other layers never wait for them.
-  const forestActive = activeLayer.manifest.id === SHARP_RELIEF_LAYER;
+  // Sharp forest images: requested the first time the forest is chosen and then
+  // kept, so switching back to it is instant. The Earth view and other layers
+  // never wait for them.
+  const forestActive = activeLayer?.manifest.id === SHARP_RELIEF_LAYER;
   const [forestWanted, setForestWanted] = useState(forestActive);
   useEffect(() => {
     if (forestActive) setForestWanted(true);
