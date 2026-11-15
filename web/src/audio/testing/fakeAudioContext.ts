@@ -30,6 +30,11 @@ export class FakeParam {
     this.events.push({ method: "linearRampToValueAtTime", target, time });
   }
 
+  exponentialRampToValueAtTime(target: number, time: number): void {
+    this.scheduledTarget = target;
+    this.events.push({ method: "exponentialRampToValueAtTime", target, time });
+  }
+
   setTargetAtTime(target: number, time: number, _timeConstant: number): void {
     this.scheduledTarget = target;
     this.events.push({ method: "setTargetAtTime", target, time });

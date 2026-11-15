@@ -9,7 +9,7 @@
 // implemented here. Block B3 is manual tuning and measurement.
 
 import { LAYER_IDS, type LayerId } from "../data/types";
-import { clampUnit, co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
+import { clampUnit, co2ToBreath, forestToVoice, intensityToGain, lightningToPercussion, positionToPan, smokeToTimbre } from "./mapping";
 import { DEFAULT_SMOOTHING_SECONDS, OnePoleSmoother } from "./smoothing";
 
 export type SoundEngineState = "idle" | "running" | "suspended";
@@ -46,6 +46,8 @@ const DEFAULT_VOLUME = 0.8;
 const START_FADE_SECONDS = 0.2;
 const STOP_FADE_SECONDS = 0.2;
 const SETTLE_MS = 250;
+/** When the rate rises by more than this, the pending hit is moved earlier. */
+const LIGHTNING_RATE_RESCHEDULE = 0.05;
 const FOREST_HARMONY_MIX = 0.35;
 const FOREST_LOWPASS_HZ = 4000;
 const SMOKE_TONE_HZ = 180;
@@ -58,7 +60,7 @@ const NOISE_SECONDS = 2;
  * keeps it audible in the three-layer mix (B3 listening feedback).
  */
 export const SMOKE_LAYER_TRIM = 1.6;
-const LAYER_TRIM: Record<LayerId, number> = { forest: 1, smoke: SMOKE_LAYER_TRIM, co2: 1, lightning: 0 };
+const LAYER_TRIM: Record<LayerId, number> = { forest: 1, smoke: SMOKE_LAYER_TRIM, co2: 1, lightning: 1 };
 
 interface ForestVoice {
   main: OscillatorNode;
@@ -93,6 +95,15 @@ interface Co2Voice {
   panner: StereoPannerNode;
 }
 
+/**
+ * The lightning layer is percussion, not a continuous voice: it owns only a
+ * level and a panner, and each hit builds short-lived nodes on demand.
+ */
+interface LightningVoice {
+  gain: GainNode;
+  panner: StereoPannerNode;
+}
+
 interface EngineGraph {
   noise: AudioBufferSourceNode;
   bus: GainNode;
@@ -102,6 +113,11 @@ interface EngineGraph {
   forest: ForestVoice;
   smoke: SmokeVoice;
   co2: Co2Voice;
+  lightning: LightningVoice;
+}
+
+interface LightningHit {
+  stop(): void;
 }
 
 interface LayerRuntime {
@@ -139,6 +155,12 @@ export class WebAudioSoundEngine implements SoundEngine {
   };
   private levelBuffer: Float32Array | undefined;
   private suspendTimer: ReturnType<typeof setTimeout> | undefined;
+  private lightningTimer: ReturnType<typeof setTimeout> | undefined;
+  private lightningRateHz = 0;
+  private lightningNextHitAt = 0;
+  private lightningPitchHz = 90;
+  private lightningDecaySeconds = 0.16;
+  private readonly lightningHits = new Set<LightningHit>();
 
   /** Keeps `state` honest when the browser or the OS suspends the context. */
   private readonly handleContextStateChange = (): void => {
@@ -149,6 +171,7 @@ export class WebAudioSoundEngine implements SoundEngine {
       if (this.currentState !== "idle") this.currentState = "running";
     } else if (this.currentState === "running") {
       this.currentState = "suspended";
+      this.clearLightning();
     }
   };
 
@@ -175,6 +198,7 @@ export class WebAudioSoundEngine implements SoundEngine {
 
     this.clearSuspendTimer();
     this.clearSettleTimers();
+    this.clearLightning();
     try {
       await context.resume();
     } catch (cause) {
@@ -209,6 +233,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     master.linearRampToValueAtTime(0, now + STOP_FADE_SECONDS);
     this.currentState = "suspended";
     this.clearSettleTimers();
+    this.clearLightning();
 
     this.clearSuspendTimer();
     this.suspendTimer = setTimeout(() => {
@@ -272,6 +297,7 @@ export class WebAudioSoundEngine implements SoundEngine {
   dispose(): void {
     this.clearSuspendTimer();
     this.clearSettleTimers();
+    this.clearLightning();
     this.currentState = "idle";
 
     const graph = this.graph;
@@ -318,6 +344,8 @@ export class WebAudioSoundEngine implements SoundEngine {
         graph.co2.breathDepth,
         graph.co2.gain,
         graph.co2.panner,
+        graph.lightning.gain,
+        graph.lightning.panner,
         graph.bus,
         graph.limiter,
         graph.master,
@@ -420,9 +448,28 @@ export class WebAudioSoundEngine implements SoundEngine {
       return;
     }
 
-    // The lightning layer is voiced in a separate change; until then it is
-    // silent and must never fall through to the CO2 branch.
-    if (layer === "lightning") return;
+    // Lightning is percussion: the relative frequency sets the hit rate and the
+    // body pitch (mapping.ts), so it never falls through to the CO2 branch.
+    if (layer === "lightning") {
+      const percussion = lightningToPercussion(smoothed);
+      const active = runtime.value !== null && runtime.enabled && percussion.rateHz > 0;
+      this.lightningRateHz = active ? percussion.rateHz : 0;
+      this.lightningPitchHz = percussion.pitchHz;
+      this.lightningDecaySeconds = percussion.decaySeconds;
+      // If the rate rose, bring the pending hit forward instead of waiting for
+      // the old (possibly long) interval. Slowing down keeps the current beat.
+      if (active && this.lightningTimer !== undefined && context) {
+        const remaining = this.lightningNextHitAt - context.currentTime;
+        const interval = 1 / percussion.rateHz;
+        if (interval < remaining - LIGHTNING_RATE_RESCHEDULE) {
+          this.clearLightningTimer();
+          this.scheduleLightningHit(interval * 1000);
+        }
+      }
+      rampParameter(graph.lightning.gain.gain, active ? 1 : 0, now, this.rampSeconds);
+      this.updateLightningScheduler();
+      return;
+    }
     if (layer !== "co2") return;
 
     const breath = co2ToBreath(smoothed);
@@ -444,6 +491,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     rampParameter(graph.forest.panner.pan, pan, now, this.rampSeconds);
     rampParameter(graph.smoke.panner.pan, pan, now, this.rampSeconds);
     rampParameter(graph.co2.panner.pan, pan, now, this.rampSeconds);
+    rampParameter(graph.lightning.panner.pan, pan, now, this.rampSeconds);
   }
 
   private buildGraph(): void {
@@ -476,8 +524,9 @@ export class WebAudioSoundEngine implements SoundEngine {
     const forest = this.buildForestVoice(context, bus);
     const smoke = this.buildSmokeVoice(context, bus, noise);
     const co2 = this.buildCo2Voice(context, bus, noise);
+    const lightning = this.buildLightningVoice(context, bus);
 
-    this.graph = { noise, bus, limiter, master, analyser, forest, smoke, co2 };
+    this.graph = { noise, bus, limiter, master, analyser, forest, smoke, co2, lightning };
   }
 
   /** One looping white-noise buffer shared by the smoke and CO2 voices. */
@@ -629,6 +678,136 @@ export class WebAudioSoundEngine implements SoundEngine {
     lfo.start();
 
     return { noiseGain, tone, toneGain, filter, breath, breathDepth, lfo, gain, panner };
+  }
+
+  private buildLightningVoice(context: AudioContext, bus: GainNode): LightningVoice {
+    const gain = context.createGain();
+    gain.gain.value = 0;
+    const panner = context.createStereoPanner();
+    panner.pan.value = positionToPan(0.5);
+    gain.connect(panner);
+    panner.connect(bus);
+    return { gain, panner };
+  }
+
+  /** Keeps one timer alive while the layer has a rate; the next hit is scheduled when it fires. */
+  private updateLightningScheduler(): void {
+    if (this.currentState !== "running" || this.lightningRateHz <= 0) {
+      this.clearLightningTimer();
+      return;
+    }
+    if (this.lightningTimer === undefined) {
+      this.scheduleLightningHit(0);
+    }
+  }
+
+  private scheduleLightningHit(delayMs: number): void {
+    this.lightningNextHitAt = (this.context?.currentTime ?? 0) + Math.max(0, delayMs) / 1000;
+    this.lightningTimer = setTimeout(() => {
+      this.lightningTimer = undefined;
+      if (this.currentState !== "running" || this.lightningRateHz <= 0) return;
+      this.playLightningHit();
+      this.scheduleLightningHit(1000 / Math.max(0.01, this.lightningRateHz));
+    }, Math.max(0, delayMs));
+  }
+
+  private clearLightningTimer(): void {
+    if (this.lightningTimer !== undefined) {
+      clearTimeout(this.lightningTimer);
+      this.lightningTimer = undefined;
+      this.lightningNextHitAt = 0;
+    }
+  }
+
+  /** Stops the rhythm and any hit that is still ringing. */
+  private clearLightning(): void {
+    this.clearLightningTimer();
+    for (const hit of [...this.lightningHits]) hit.stop();
+    this.lightningHits.clear();
+  }
+
+  /**
+   * One percussion hit: a short filtered-noise crack plus a pitched body, both
+   * with a fast attack and an exponential decay. Nodes are per hit and released
+   * on `onended`; nothing is created per animation frame.
+   */
+  private playLightningHit(): void {
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph || this.currentState !== "running") return;
+    const now = context.currentTime;
+    const pitch = this.lightningPitchHz;
+    const decay = this.lightningDecaySeconds;
+
+    const noiseFilter = context.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.value = Math.min(9000, pitch * 8);
+    noiseFilter.Q.value = 0.7;
+
+    const noiseGain = context.createGain();
+    graph.noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(graph.lightning.gain);
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.linearRampToValueAtTime(0.5, now + 0.004);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+
+    const body = context.createOscillator();
+    body.type = "triangle";
+    body.frequency.setValueAtTime(pitch, now);
+
+    const bodyGain = context.createGain();
+    body.connect(bodyGain);
+    bodyGain.connect(graph.lightning.gain);
+    bodyGain.gain.setValueAtTime(0, now);
+    bodyGain.gain.linearRampToValueAtTime(0.6, now + 0.006);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + decay * 1.2);
+    body.start(now);
+    body.stop(now + decay * 1.2 + 0.02);
+
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        body.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        bodyGain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        noiseGain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        graph.noise.disconnect(noiseFilter);
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        noiseFilter.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      this.lightningHits.delete(hit);
+    };
+    const hit: LightningHit = {
+      stop: () => {
+        try {
+          body.stop();
+        } catch {
+          // Already stopped.
+        }
+        cleanup();
+      },
+    };
+    body.onended = cleanup;
+    this.lightningHits.add(hit);
   }
 
   private clearSuspendTimer(): void {
