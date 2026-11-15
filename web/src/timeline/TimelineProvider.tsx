@@ -4,8 +4,9 @@
 // Decisions recorded here (full rationale in docs/TIMELINE-HANDOFF.md):
 // - Shared normalized position, loop forever.
 // - In the app the timeline moves with the planet: the turning planet calls
-//   `step` (about 30 times a second), and the person can `seek` on the line.
-//   The play/pause clock below (speed 0.1x-8x) stays for the dev harness.
+//   `step` (about 30 times a second), scaled by `speed` (1x-8x on the line),
+//   and the person can `seek` on the line. The play/pause clock below stays for
+//   the dev harness.
 // - The provider owns no UI. Controls (TimelineTrack) call the actions.
 
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
@@ -20,7 +21,7 @@ export interface TimelineActions {
   pause(): void;
   toggle(): void;
   seek(position: number): void;
-  /** Moves the position by `delta` (0..1 scale), starting again after the end; the turning planet calls it. */
+  /** Moves the position by `delta` (0..1 scale) times the speed, starting again after the end; the turning planet calls it. */
   step(delta: number): void;
   setSpeed(speed: number): void;
   setLoop(loop: boolean): void;

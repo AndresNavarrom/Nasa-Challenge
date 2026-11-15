@@ -373,7 +373,16 @@ function AudioListener({
  */
 function TimelineControls({ layer, playing }: { layer: LoadedLayer; playing: boolean }) {
   const timeline = useTimeline();
-  return <TimelineTrack position={timeline.position} layer={layer} playing={playing} onSeek={timeline.seek} />;
+  return (
+    <TimelineTrack
+      position={timeline.position}
+      layer={layer}
+      playing={playing}
+      onSeek={timeline.seek}
+      speed={timeline.speed}
+      onSpeed={timeline.setSpeed}
+    />
+  );
 }
 
 /** Delay before the first-visit tour, so the HUD is laid out when it measures it. */

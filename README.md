@@ -170,7 +170,9 @@ docker compose up web     # then open http://127.0.0.1:5173/
   layer, at its real time (an hour of smoke or CO2, a month of lightning). It
   plays while the planet turns by itself: one turn is one day of smoke or CO2
   and one year of lightning, and the picture and the sound fade from one
-  instant to the next. A drag, Auto-rotate off or the map view pause it; click
+  instant to the next. The 1× to 8× buttons make each turn cover more time
+  (the line shows `1 turn = …`); the planet keeps its pace. A drag,
+  Auto-rotate off or the map view pause it; click
   or drag along the line (or use the arrow keys, Page Up/Down for a whole
   turn) to pick a moment. The forest shows a dimmed line with its one period.
 - **Amazon only layers** (`global: null`; none today): drawn inside

@@ -3,6 +3,7 @@ import type { Cadence, LayerManifest } from "../data/types";
 import {
   SpinAccumulator,
   cadenceText,
+  turnText,
   fractionAtPosition,
   framesPerTurn,
   instantFractions,
@@ -119,6 +120,15 @@ describe("marks on the line", () => {
   it("labels only the ends when the layer has no times", () => {
     const ticks = timelineTicks({ dates: ["Sample 1 of 3", "Sample 2 of 3", "Sample 3 of 3"] });
     expect(ticks.map((tick) => tick.label)).toEqual(["Sample 1 of 3", "", "Sample 3 of 3"]);
+  });
+
+  it("says how much real time one turn covers at the picked speed", () => {
+    expect(turnText(hourly, 1)).toBe("1 day");
+    expect(turnText(hourly, 4)).toBe("4 days");
+    expect(turnText({ unit: "day", count: 1 }, 2)).toBe("2 weeks");
+    expect(turnText(monthly, 1)).toBe("1 year");
+    expect(turnText(monthly, 8)).toBe("8 years");
+    expect(turnText(undefined, 2)).toBe("");
   });
 
   it("says how often the data comes", () => {

@@ -8,6 +8,9 @@
 // keeps turning and the timeline goes on from there. Arrow keys move one instant,
 // Page Up / Page Down one turn (a day or a year), Home / End to the ends.
 //
+// Speed buttons (1x to 8x) make each turn cover more real time; the planet keeps
+// its pace, and the header says how much one turn covers ("1 turn = 4 days").
+//
 // A static layer (forest) shows the same line dimmed, with its one period.
 // It only shows and changes the shared clock of TimelineProvider; it owns no clock.
 
@@ -21,6 +24,8 @@ import {
   positionAtFraction,
   positionOfFrame,
   timelineTicks,
+  turnText,
+  TIMELINE_SPEEDS,
 } from "../lib/timelineTrack";
 import { isTimed, trackValueText } from "./timelineFormat";
 
@@ -31,13 +36,16 @@ export interface TimelineTrackProps {
   /** True while the planet turns by itself, so the timeline is playing. */
   playing: boolean;
   onSeek: (position: number) => void;
+  /** Timeline speed: how many times the normal real time one turn covers. */
+  speed: number;
+  onSpeed: (speed: number) => void;
   className?: string;
 }
 
 const panel = "pointer-events-auto rounded bg-slate-950/70 px-4 py-2 text-sm text-slate-100 backdrop-blur-sm";
 
 export function TimelineTrack(props: TimelineTrackProps) {
-  const { layer, position, playing, onSeek, className = "" } = props;
+  const { layer, position, playing, onSeek, speed, onSpeed, className = "" } = props;
   const { manifest } = layer;
   const timed = isTimed(layer);
   const frames = manifest.dates.length;
@@ -97,6 +105,32 @@ export function TimelineTrack(props: TimelineTrackProps) {
           {!timed ? "fixed layer" : playing ? "▶ turning with the planet" : "❚❚ paused"}
         </span>
       </div>
+
+      {timed && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div role="group" aria-label="Timeline speed" className="flex gap-1">
+            {TIMELINE_SPEEDS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                data-testid={`timeline-speed-${value}`}
+                aria-pressed={speed === value}
+                className={`rounded px-2 py-0.5 font-mono ${
+                  speed === value ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                }`}
+                onClick={() => onSpeed(value)}
+              >
+                {value}×
+              </button>
+            ))}
+          </div>
+          {manifest.cadence && (
+            <span data-testid="timeline-turn" className="text-slate-400">
+              1 turn = {turnText(manifest.cadence, speed)}
+            </span>
+          )}
+        </div>
+      )}
 
       <div
         ref={lineRef}

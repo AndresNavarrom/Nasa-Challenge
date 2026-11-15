@@ -37,7 +37,7 @@ export type PlaybackAction =
   | { type: "pause" }
   | { type: "toggle" }
   | { type: "seek"; position: number }
-  /** Moves the position by `delta` (the planet turned), starting again after the end. */
+  /** Moves the position by `delta` times the speed (the planet turned), starting again after the end. */
   | { type: "step"; delta: number }
   | { type: "set-speed"; speed: number }
   | { type: "set-loop"; loop: boolean }
@@ -80,7 +80,7 @@ export function playbackReducer(state: PlaybackState, action: PlaybackAction): P
     case "seek":
       return { ...state, position: clampPosition(action.position) };
     case "step":
-      return { ...state, position: stepPosition(state.position, action.delta) };
+      return { ...state, position: stepPosition(state.position, action.delta * state.speed) };
     case "set-speed":
       return { ...state, speed: clampSpeed(action.speed) };
     case "set-loop":

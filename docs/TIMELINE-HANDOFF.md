@@ -15,12 +15,13 @@ the play/pause clock of `playback.ts`, which the app no longer uses.
 
 | Decision | Choice | Why |
 |---|---|---|
-| Where | **A line under the planet**, between the two bottom panels of the HUD (its own row on narrow screens) | The timeline belongs to the picture, not to the sound controls. |
+| Where | **A line centred under the planet**: the bottom row of the HUD is three columns (`minmax(0,1fr) auto minmax(0,1fr)`), so the middle one sits on the planet's centre line (wide screens, `lg` and up); its own row on narrow screens | The timeline belongs to the picture, not to the sound controls. |
 | What drives it | **The planet's own turn** (`EarthMesh` → `onSpin`) | The timeline moves exactly while, and as fast as, the planet turns: a drag, Auto-rotate off and the map view (where the planet does not turn) pause it. |
 | Pace | **One turn = one day** of hourly data (smoke, CO2), **one week** of daily data, **one year** of monthly data (lightning) | Smoke turns with the planet like the real Earth; lightning shows the seasons once per turn. At `SPIN_SPEED` (0.08 rad/s, about 78 s per turn) an hour of smoke lasts about 3.3 s and a month of lightning about 6.5 s. |
 | Marks | **One per instant, placed by its real time**; the marks that start a day (hourly) or a year (monthly) are labelled | A gap in the data would show as a gap on the line. Layers without times (sample data) are evenly spaced. |
 | Between instants | **Crossfade** of the picture (two textures and `uFrameMix` in the shader) and **the same blend in the sound** (`framePosition`) | Picture and sound stay together and the animation is smooth. `?lite=1` keeps the nearest instant alone. |
 | Date shown | The **nearest** instant's label | Matches what the picture is closest to. |
+| Speed | **1×, 2×, 4×, 8×** buttons on the line; the planet keeps its pace and each turn covers that many times the real time (at 4×, one turn = 4 days of smoke). The line says it: `1 turn = 4 days` | Faster animation without a dizzying planet, and the turn ↔ time relation stays true. Shared by all layers. |
 | Dragging the line | **The planet keeps turning**; playing goes on from the picked moment | Decision of 2026-11-15. |
 | Forest (static) | A **dimmed line** with its one period, `Apr 2019 – Jul 2025` | The layout does not jump when the layer changes. |
 | End of the data | **Starts again** from the beginning | Like the demo loop. |
@@ -57,7 +58,8 @@ browser can hold every instant.
   which does not re-render as the position moves.
 - `web/src/ui/TimelineTrack.tsx`: the line. `data-testid`: `timeline-track`,
   `timeline-scrub` (the `role="slider"` line), `timeline-date-<id>`,
-  `timeline-playing`. Keys: ←/→ one instant, Page Up/Down one turn, Home/End.
+  `timeline-playing`, `timeline-speed-<1|2|4|8>`, `timeline-turn`. Keys: ←/→
+  one instant, Page Up/Down one turn, Home/End.
 - `web/src/scene/layerTexture.ts`: `showLayerBlend(textures, layer, from, to)`
   keeps the earlier and later instants; moving on by one only computes the new
   later one.

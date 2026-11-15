@@ -49,15 +49,14 @@ describe("timeline line text", () => {
   });
 
   it("keeps its test ids", () => {
-    for (const id of ["timeline-track", "timeline-scrub", "timeline-playing"]) {
+    for (const id of ["timeline-track", "timeline-scrub", "timeline-playing", "timeline-turn"]) {
       expect(timelineTrackSource).toContain(`data-testid="${id}"`);
     }
     expect(timelineTrackSource).toContain("data-testid={`timeline-date-${manifest.id}`}");
+    expect(timelineTrackSource).toContain("data-testid={`timeline-speed-${value}`}");
   });
 
-  it("has no play, pause or speed button: the planet's turn plays it", () => {
-    for (const id of ["timeline-play", "timeline-speed"]) {
-      expect(timelineTrackSource).not.toContain(`data-testid="${id}"`);
-    }
+  it("has no play or pause button: the planet's turn plays it", () => {
+    expect(timelineTrackSource).not.toContain(`data-testid="timeline-play"`);
   });
 });

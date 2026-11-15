@@ -170,10 +170,12 @@ export function PlanetHud(props: PlanetHudProps) {
         </p>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      {/* Three columns on wide screens: the two side columns share the space
+          equally, so the timeline in the middle sits centred under the planet. */}
+      <div className="flex flex-wrap items-end justify-between gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div
           data-testid="planet-hud-probe"
-          className={`${panel} min-w-56 font-mono text-slate-400`}
+          className={`${panel} min-w-56 font-mono text-slate-400 lg:justify-self-start`}
           aria-live="off"
         >
           <p className="text-slate-400">Hover</p>
@@ -221,15 +223,17 @@ export function PlanetHud(props: PlanetHudProps) {
         </div>
 
         {timeline && (
-          <div className="order-last w-full md:order-none md:max-w-2xl md:flex-1">{timeline}</div>
+          <div data-testid="planet-hud-timeline" className="order-last w-full lg:order-none lg:w-[28rem] xl:w-[40rem]">
+            {timeline}
+          </div>
         )}
 
-        <div className={`${panel} flex flex-col items-end gap-2`}>
+        <div className={`${panel} flex flex-col items-end gap-2 lg:col-start-3 lg:max-w-sm lg:justify-self-end`}>
           {audio && <div className="w-full">{audio}</div>}
           <p
             role="status"
             data-testid="planet-hud-status"
-            className="text-slate-300"
+            className="text-right text-slate-300"
           >
             {modeLabel(mode, regionName, hoveredRegionName)}
           </p>

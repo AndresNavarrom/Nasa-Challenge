@@ -16,6 +16,8 @@ describe("playback", () => {
     expect(playbackReducer(paused, { type: "step", delta: 0.1 }).position).toBeCloseTo(0.6);
     expect(playbackReducer(at(0.95), { type: "step", delta: 0.1 }).position).toBeCloseTo(0.05);
     expect(playbackReducer(paused, { type: "step", delta: 0.1 }).playing).toBe(false);
+    // At 4x the same turn moves the timeline four times as far.
+    expect(playbackReducer(at(0.1, { speed: 4 }), { type: "step", delta: 0.1 }).position).toBeCloseTo(0.5);
   });
 
   it("starts paused at the beginning, at 1x, looping over the default duration", () => {

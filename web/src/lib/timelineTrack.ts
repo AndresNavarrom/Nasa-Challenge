@@ -152,6 +152,24 @@ export function cadenceText(cadence: Cadence | undefined): string {
   return cadence.count === 1 ? `every ${unit}` : `every ${cadence.count} ${unit}s`;
 }
 
+/** Speeds the person can pick for the timeline; the planet itself keeps turning at the same pace. */
+export const TIMELINE_SPEEDS = [1, 2, 4, 8] as const;
+
+/** How much real time one turn of the planet covers at `speed`: "1 day", "4 days", "2 years". */
+export function turnText(cadence: Cadence | undefined, speed: number): string {
+  if (!cadence) return "";
+  const plural = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"}`;
+  const times = Math.round(speed * 100) / 100;
+  switch (cadence.unit) {
+    case "hour":
+      return plural(times, "day");
+    case "day":
+      return plural(times, "week");
+    case "month":
+      return plural(times, "year");
+  }
+}
+
 /**
  * Collects the turn of the planet frame by frame and hands it on at most once
  * every `intervalMs`, so the timeline state (and what reads it) changes about 30
