@@ -23,6 +23,10 @@ export interface PlanetHudProps {
   mode: ViewMode;
   onAmazon: () => void;
   onBackToEarth: () => void;
+  /** Name of the region the map view visits (or is flying to). */
+  regionName?: string;
+  /** Name of the region under the cursor, or null. */
+  hoveredRegionName?: string | null;
   probe: Probe | null;
   fps: number | null;
   lite: boolean;
@@ -50,14 +54,16 @@ function formatLatitude(lat: number): string {
   return `${Math.abs(lat).toFixed(1)}° ${lat < 0 ? "S" : "N"}`;
 }
 
-function modeLabel(mode: ViewMode): string {
+export function modeLabel(mode: ViewMode, regionName = "Amazon", hoveredRegionName: string | null = null): string {
   switch (mode) {
     case "globe":
-      return "Planet view. Drag to turn it; click the Amazon or press Amazon.";
+      return hoveredRegionName
+        ? `${hoveredRegionName}: double-click (or tap again) to fly there.`
+        : "Planet view. Drag to turn it; double-click any region of the world or press Amazon.";
     case "to-map":
-      return "Flying to the Amazon…";
+      return `Flying to ${regionName}…`;
     case "map":
-      return "Amazon map.";
+      return `${regionName} map. Double-click (or double-tap) it or press Back to Earth to return.`;
     case "to-globe":
       return "Back to the planet…";
   }
@@ -78,6 +84,8 @@ export function PlanetHud(props: PlanetHudProps) {
     mode,
     onAmazon,
     onBackToEarth,
+    regionName,
+    hoveredRegionName,
     probe,
     fps,
     lite,
@@ -140,11 +148,6 @@ export function PlanetHud(props: PlanetHudProps) {
               Auto-rotate
             </span>
           </label>
-          {activeLayer && activeLayer.manifest.dates.length > 1 && (
-            <p className="mt-1 text-xs text-slate-400">
-              Showing the first instant: {activeLayer.manifest.dates[0]}
-            </p>
-          )}
         </div>
 
         <p
@@ -225,7 +228,7 @@ export function PlanetHud(props: PlanetHudProps) {
             data-testid="planet-hud-status"
             className="text-slate-300"
           >
-            {modeLabel(mode)}
+            {modeLabel(mode, regionName, hoveredRegionName)}
           </p>
           <div className="flex gap-2">
             <button

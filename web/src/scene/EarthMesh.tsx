@@ -26,6 +26,13 @@
 //
 // Picking (FR4.1, FR4.2): an invisible sphere while on the planet and an
 // invisible plane while on the map; nothing is picked during the transition.
+//
+// Regions (regions.ts): the region map (one byte per cell, region index + 1)
+// lets the shader outline every region on the planet, and the one under the
+// cursor more strongly with a light tint; double-clicking a region on the
+// planet asks the scene to fly there, and double-clicking its map returns.
+// The outlines are hidden during the transitions and on the map. The flat map is centred on the region
+// being visited (`focusBbox`) through a uniform, so no geometry is rebuilt.
 
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
@@ -55,7 +62,6 @@ import {
   PLANE_HEIGHT,
   PLANE_WIDTH,
   bboxCenter,
-  isInsideBbox,
   lonLatToPlanePoint,
   lonLatToSpherePoint,
   planeUvToLonLat,
@@ -101,6 +107,8 @@ export interface GlobeHit {
   lon: number;
   lat: number;
   clientX: number;
+  /** The point comes from a finger (touch screen), not a mouse or pen. */
+  touch: boolean;
 }
 
 export interface EarthMeshProps {
@@ -110,6 +118,14 @@ export interface EarthMeshProps {
   regionBaseTexture: Texture | null;
   layerTextures: LayerTextures;
   bbox: BoundingBox;
+  /** Rectangle of the region being visited: its centre sits in front of the camera once flat. */
+  focusBbox: BoundingBox;
+  /** Region map (regions.ts): one channel, region index + 1, 0 outside; null draws no outline. */
+  regionMask: Texture | null;
+  /** Region under a point (index in REGIONS), or null; sets the pointer cursor over regions. */
+  regionAt: (lon: number, lat: number) => number | null;
+  /** Region outlined (index in REGIONS), or null. */
+  hoverRegion: number | null;
   view: RefObject<ViewState>;
   mode: ViewMode;
   segments: { width: number; height: number };
@@ -137,7 +153,16 @@ export interface EarthMeshProps {
   /** Point under the cursor; drawn as a crosshair. */
   hoverPoint?: { lon: number; lat: number } | null;
   onHover: (hit: GlobeHit | null) => void;
+  /** Click/tap on the planet or the map: the point whose sound is selected. */
   onGlobeClick: (lon: number, lat: number, clientX: number) => void;
+  /** Double-click on the planet (not after a drag). */
+  onGlobeDoubleClick: (lon: number, lat: number) => void;
+  /** Double-click on the map of a region (not after a drag): back to the planet. */
+  onMapDoubleClick: () => void;
+  /** Touch screens: a tap on the planet (not after a drag); double taps are not reported as double-clicks. */
+  onGlobeTap: (lon: number, lat: number) => void;
+  /** Touch screens: a tap on the map of a region. */
+  onMapTap: () => void;
 }
 
 export interface ReliefImages {
@@ -182,6 +207,7 @@ const VERTEX_SHADER = /* glsl */ `
   uniform mat3 uRotation;
   uniform float uFlatten;
   uniform float uLift;
+  uniform vec2 uPlaneShift; // flat-map position of the centre of the region being visited
   // Mipmap levels about one vertex wide, so each vertex rises with the mean height around it.
   uniform float uLiftLodGlobal;
   uniform float uLiftLodRegion;
@@ -195,7 +221,7 @@ const VERTEX_SHADER = /* glsl */ `
     // Relief layers rise along the surface normal: outwards on the sphere, towards the camera on the map.
     float lift = uLift > 0.0 ? heightAt(uv, uLiftLodGlobal, uLiftLodRegion) * uLift : 0.0;
     vec3 raisedSphere = spherePosition + normalize(spherePosition) * lift;
-    vec3 raisedPlane = aPlane + vec3(0.0, 0.0, lift * 0.5);
+    vec3 raisedPlane = aPlane - vec3(uPlaneShift, 0.0) + vec3(0.0, 0.0, lift * 0.5);
     vec3 blended = mix(raisedSphere, raisedPlane, uFlatten);
     // Soft light from the upper left on the sphere; the flat map is lit evenly.
     float light = 0.55 + 0.45 * max(dot(normalize(spherePosition), normalize(vec3(-0.4, 0.5, 1.0))), 0.0);
@@ -234,9 +260,17 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uGlow; // strength of the glow around the dots
   uniform float uGlowBias; // mipmap levels above the drawn one where the glow is read
   uniform vec3 uGlowColor;
+  // Region map (one byte per cell: region index + 1) and the region outlined (index + 1, 0 = none).
+  uniform sampler2D uRegionMask;
+  uniform float uHoverRegion;
+  uniform float uShowRegions; // 1 on the planet, 0 on the map and during the transitions
   varying vec2 vUv;
   varying float vShade;
   ${HEIGHT_AT}
+
+  float regionAt(vec2 maskUv) {
+    return floor(texture2D(uRegionMask, maskUv).r * 255.0 + 0.5);
+  }
 
   // Mipmap level of a texture of size texels covering the given uv derivatives.
   float lodOf(vec2 dx, vec2 dy, vec2 size) {
@@ -322,18 +356,40 @@ const FRAGMENT_SHADER = /* glsl */ `
     color *= mix(1.0, reliefShade(inRegion, lodGlobal, lodRegion, regionScale), layerAmount);
     // Soft glow where the dots are dense (0 without a dots image).
     color += uGlowColor * (dotGlow * uGlow);
-    gl_FragColor = vec4(color * vShade, 1.0);
+    color *= vShade;
+    if (uShowRegions > 0.5) {
+      // Every region gets a soft border; the one under the cursor a light tint and
+      // a stronger, wider border. A pixel is on the border when a neighbour a few
+      // pixels away (on screen) belongs to another region or to none.
+      vec2 maskUv = vec2(vUv.x, 1.0 - vUv.y);
+      float here = regionAt(maskUv);
+      if (here > 0.5) {
+        bool hovered = abs(here - uHoverRegion) < 0.5;
+        // At most one degree: near the planet's edge the screen derivatives grow
+        // without bound and would paint whole bands of the region as border.
+        vec2 reach = min((abs(duvx) + abs(duvy)) * (hovered ? 2.2 : 1.5), vec2(1.0 / 360.0, 1.0 / 180.0));
+        float outside = 0.0;
+        outside += step(0.5, abs(regionAt(maskUv + vec2(reach.x, 0.0)) - here));
+        outside += step(0.5, abs(regionAt(maskUv - vec2(reach.x, 0.0)) - here));
+        outside += step(0.5, abs(regionAt(maskUv + vec2(0.0, reach.y)) - here));
+        outside += step(0.5, abs(regionAt(maskUv - vec2(0.0, reach.y)) - here));
+        if (hovered) {
+          color = outside > 0.0 ? vec3(0.65, 1.0, 0.85) : mix(color, vec3(0.2, 0.9, 0.6), 0.2);
+        } else if (outside > 0.0) {
+          color = mix(color, vec3(0.55, 0.95, 0.8), 0.8);
+        }
+      }
+    }
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
-/** Grid of vertices from the north-west corner: sphere in `position`, shifted flat map in `aPlane`. */
-function buildMorphGeometry(columns: number, rows: number, bbox: BoundingBox): BufferGeometry {
+/** Grid of vertices from the north-west corner: sphere in `position`, flat map (centred on 0°, 0°) in `aPlane`. */
+function buildMorphGeometry(columns: number, rows: number): BufferGeometry {
   const count = (columns + 1) * (rows + 1);
   const spherePositions = new Float32Array(count * 3);
   const planePositions = new Float32Array(count * 3);
   const uvs = new Float32Array(count * 2);
-  const center = bboxCenter(bbox);
-  const shift = lonLatToPlanePoint(center.lon, center.lat);
 
   for (let row = 0; row <= rows; row += 1) {
     const v = row / rows;
@@ -345,7 +401,7 @@ function buildMorphGeometry(columns: number, rows: number, bbox: BoundingBox): B
       const sphere = lonLatToSpherePoint(lon, lat);
       const plane = lonLatToPlanePoint(lon, lat);
       spherePositions.set([sphere.x, sphere.y, sphere.z], index * 3);
-      planePositions.set([plane.x - shift.x, plane.y - shift.y, GLOBE_RADIUS], index * 3);
+      planePositions.set([plane.x, plane.y, GLOBE_RADIUS], index * 3);
       uvs.set([u, 1 - v], index * 2);
     }
   }
@@ -403,6 +459,10 @@ interface Uniforms {
   uGlow: IUniform<number>;
   uGlowBias: IUniform<number>;
   uGlowColor: IUniform<Vector3>;
+  uPlaneShift: IUniform<Vector2>;
+  uRegionMask: IUniform<Texture | null>;
+  uHoverRegion: IUniform<number>;
+  uShowRegions: IUniform<number>;
 }
 
 /** Width and height in texels of a loaded texture (image or data), null when unknown. */
@@ -418,6 +478,10 @@ export function EarthMesh({
   regionBaseTexture,
   layerTextures,
   bbox,
+  focusBbox,
+  regionMask,
+  regionAt,
+  hoverRegion,
   view,
   mode,
   segments,
@@ -432,6 +496,10 @@ export function EarthMesh({
   hoverPoint,
   onHover,
   onGlobeClick,
+  onGlobeDoubleClick,
+  onMapDoubleClick,
+  onGlobeTap,
+  onMapTap,
 }: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
@@ -440,7 +508,10 @@ export function EarthMesh({
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   // Where the cursor rests over the canvas, so the point under it can be found
   // again while the planet turns or a transition ends beneath a still cursor.
-  const pointerRef = useRef<{ inside: boolean; clientX: number }>({ inside: false, clientX: 0 });
+  const pointerRef = useRef<{ inside: boolean; clientX: number; touch: boolean }>({ inside: false, clientX: 0, touch: false });
+  // Whether the last press on the planet or the map was a finger: taps then select and
+  // visit regions, and the browser's double-click (and double-tap zoom) are ignored.
+  const lastPressTouch = useRef(false);
   const sinceHoverRefresh = useRef(0);
   // True while the last report to the scene was a point (not "nothing under the cursor").
   const reportedPoint = useRef(false);
@@ -481,6 +552,10 @@ export function EarthMesh({
       uGlow: { value: 0 },
       uGlowBias: { value: 0 },
       uGlowColor: { value: new Vector3() },
+      uPlaneShift: { value: new Vector2() },
+      uRegionMask: { value: null },
+      uHoverRegion: { value: 0 },
+      uShowRegions: { value: 0 },
     }),
     [],
   );
@@ -491,8 +566,8 @@ export function EarthMesh({
   useEffect(() => () => material.dispose(), [material]);
 
   const geometry = useMemo(
-    () => buildMorphGeometry(segments.width, segments.height, bbox),
-    [segments.width, segments.height, bbox],
+    () => buildMorphGeometry(segments.width, segments.height),
+    [segments.width, segments.height],
   );
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -557,6 +632,19 @@ export function EarthMesh({
     uniforms.uLiftLodRegion.value = lodForSpacing(vertexSpacing, regionCell);
   }, [uniforms, baseTexture, regionBaseTexture, layerTextures, reliefImages, dotImage, bbox, raiseRelief, segments.width]);
 
+  const center = bboxCenter(focusBbox);
+  const shift = lonLatToPlanePoint(center.lon, center.lat);
+  useEffect(() => {
+    uniforms.uPlaneShift.value.set(shift.x, shift.y);
+  }, [uniforms, shift.x, shift.y]);
+  useEffect(() => {
+    uniforms.uRegionMask.value = regionMask;
+    // Outlines only on the planet: they go away while flying to a region and on its map.
+    const onPlanet = regionMask !== null && mode === "globe";
+    uniforms.uShowRegions.value = onPlanet ? 1 : 0;
+    uniforms.uHoverRegion.value = onPlanet && hoverRegion !== null ? hoverRegion + 1 : 0;
+  }, [uniforms, regionMask, hoverRegion, mode]);
+
   // Dragging follows the pointer anywhere on the page once it started on the planet.
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -584,6 +672,16 @@ export function EarthMesh({
     gl.domElement.style.cursor = "";
   }, [mode, gl]);
 
+  // Fingers on the planet turn it and tap regions: no page scroll or double-tap zoom.
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const before = canvas.style.touchAction;
+    canvas.style.touchAction = "none";
+    return () => {
+      canvas.style.touchAction = before;
+    };
+  }, [gl]);
+
   const euler = useMemo(() => new Euler(0, 0, 0, "XYZ"), []);
   const rotation = useMemo(() => new Matrix4(), []);
   useFrame((_, delta) => {
@@ -605,7 +703,7 @@ export function EarthMesh({
   useEffect(() => {
     const canvas = gl.domElement;
     const move = (event: PointerEvent) => {
-      pointerRef.current = { inside: true, clientX: event.clientX };
+      pointerRef.current = { inside: true, clientX: event.clientX, touch: event.pointerType === "touch" };
     };
     const leave = () => {
       pointerRef.current = { ...pointerRef.current, inside: false };
@@ -633,13 +731,13 @@ export function EarthMesh({
   const reportSphere = (world: Vector3, clientX: number) => {
     const point = sphereLonLat(world);
     if (!point) return;
-    gl.domElement.style.cursor = isInsideBbox(point.lon, point.lat, bbox) ? "pointer" : "grab";
-    emit({ ...point, clientX });
+    gl.domElement.style.cursor = regionAt(point.lon, point.lat) !== null ? "pointer" : "grab";
+    emit({ ...point, clientX, touch: pointerRef.current.touch });
   };
 
   const reportPlane = (uvX: number, uvY: number, clientX: number) => {
     // PlaneGeometry's texture v grows northwards; planeUvToLonLat counts from the north.
-    emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX });
+    emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX, touch: pointerRef.current.touch });
   };
 
   // Browsers only send pointer events when the mouse moves. While the planet
@@ -675,14 +773,36 @@ export function EarthMesh({
 
   const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
+    lastPressTouch.current = event.nativeEvent.pointerType === "touch";
     const state = view.current;
     dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
+  };
+
+  const handleSphereDoubleClick = (event: ThreeEvent<MouseEvent>) => {
+    if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
+    const point = sphereLonLat(event.point);
+    if (point) onGlobeDoubleClick(point.lon, point.lat);
   };
 
   const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
-    if (point) onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
+    if (!point) return;
+    onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
+    if (lastPressTouch.current) onGlobeTap(point.lon, point.lat);
+  };
+
+  const handlePlaneDown = (event: ThreeEvent<PointerEvent>) => {
+    lastPressTouch.current = event.nativeEvent.pointerType === "touch";
+  };
+
+  const handlePlaneClick = (event: ThreeEvent<MouseEvent>) => {
+    if (event.delta > CLICK_TOLERANCE_PX) return;
+    if (event.uv) {
+      const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
+      onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
+    }
+    if (lastPressTouch.current) onMapTap();
   };
 
   const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
@@ -690,19 +810,15 @@ export function EarthMesh({
     reportPlane(event.uv.x, event.uv.y, event.nativeEvent.clientX);
   };
 
-  const handlePlaneClick = (event: ThreeEvent<MouseEvent>) => {
-    if (!event.uv) return;
-    const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
-    onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
+  const handlePlaneDoubleClick = (event: ThreeEvent<MouseEvent>) => {
+    if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
+    onMapDoubleClick();
   };
 
   const handleOut = () => {
     gl.domElement.style.cursor = "";
     emit(null);
   };
-
-  const center = bboxCenter(bbox);
-  const shift = lonLatToPlanePoint(center.lon, center.lat);
 
   return (
     <>
@@ -715,6 +831,7 @@ export function EarthMesh({
             onPointerMove={handleSphereMove}
             onPointerDown={handleSphereDown}
             onClick={handleSphereClick}
+            onDoubleClick={handleSphereDoubleClick}
             onPointerOut={handleOut}
           >
             <sphereGeometry args={[GLOBE_RADIUS * 1.002, 64, 32]} />
@@ -730,8 +847,10 @@ export function EarthMesh({
             ref={planeMesh}
             position={[-shift.x, -shift.y, GLOBE_RADIUS]}
             onPointerMove={handlePlaneMove}
-            onPointerOut={handleOut}
+            onPointerDown={handlePlaneDown}
             onClick={handlePlaneClick}
+            onDoubleClick={handlePlaneDoubleClick}
+            onPointerOut={handleOut}
           >
             <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />

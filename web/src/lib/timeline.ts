@@ -15,6 +15,17 @@ export function framePosition(position: number, frames: number): number {
   return clampPosition(position) * (frames - 1);
 }
 
+/**
+ * The one instant shown for a timeline position: the nearest frame. The picture
+ * and the date label both use it, so the image on screen always matches the date
+ * read on the timeline bar. Frames replace each other; they are never accumulated.
+ */
+export function frameIndexAt(position: number, frames: number): number {
+  const count = Math.floor(frames);
+  if (!Number.isFinite(count) || count <= 1) return 0;
+  return Math.min(count - 1, Math.max(0, Math.round(framePosition(position, count))));
+}
+
 /** Two adjacent instants and how far the position is between them. */
 export interface FrameBlend {
   /** Earlier instant, 0..frames-1. */
@@ -45,8 +56,7 @@ type Dated = Pick<LayerManifest, "static" | "dates">;
 export function dateLabelAt(layer: Dated, position: number): string {
   if (layer.dates.length === 0) return "";
   if (layer.static) return layer.dates[0] ?? "";
-  const index = Math.round(framePosition(position, layer.dates.length));
-  return layer.dates[index] ?? "";
+  return layer.dates[frameIndexAt(position, layer.dates.length)] ?? "";
 }
 
 /**

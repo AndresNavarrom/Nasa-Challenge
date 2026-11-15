@@ -13,11 +13,12 @@ import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
-import { framePosition } from "./lib/timeline";
+import { frameIndexAt } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import { loadScenes } from "./scenes/loadScenes";
 import type { SceneDefinition, ScenesManifest } from "./scenes/types";
 import type { ViewMode } from "./scene/FocusTransition";
+import { AMAZON_REGION_ID, DEFAULT_REGIONS, loadWorldRegions, regionById, type Region } from "./scene/regions";
 import {
   ListeningPointProvider,
   useListeningPoint,
@@ -75,6 +76,9 @@ function PlanetView({
   onCloseScene,
   focusedScene,
 }: PlanetViewProps) {
+  // The instant on screen, tagged with its layer so a stale one is never used for another.
+  const [tracked, setTracked] = useState<{ layerId: string; frame: number } | null>(null);
+  const positionRef = useRef(0);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
@@ -89,19 +93,45 @@ function PlanetView({
     () => layerForChoice(data.layers, activeLayerId),
     [data, activeLayerId],
   );
+  // Right after a layer change the tracker has not reported yet: read the position
+  // it last mirrored, so the textures are built once, at the right instant.
+  const layerFrames = activeLayer?.region.frames ?? 1;
+  const frame =
+    activeLayer === null
+      ? 0
+      : tracked?.layerId === activeLayer.manifest.id
+        ? tracked.frame
+        : frameIndexAt(positionRef.current, layerFrames);
   const selectedPoint = useListeningPoint();
-  const { position } = useTimeline();
   const selectedValue =
     selectedPoint && activeLayer
-      ? sampleLayerAt(
-          activeLayer,
-          data.bbox,
-          selectedPoint.lon,
-          selectedPoint.lat,
-          framePosition(position, activeLayer.region.frames),
-        )
+      ? sampleLayerAt(activeLayer, data.bbox, selectedPoint.lon, selectedPoint.lat, frame)
       : null;
-  const showAmazon = useCallback(() => setTargetView("map"), []);
+  // The regions of the world (the Amazon alone until regions.json arrives, or if it
+  // cannot be read), the one the map view visits and the one under the cursor.
+  // null while regions.json loads, so the region map is built once, with all of them.
+  const [regions, setRegions] = useState<readonly Region[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadWorldRegions(data.baseUrl)
+      .then((loaded) => {
+        if (!cancelled) setRegions(loaded);
+      })
+      .catch((cause: unknown) => {
+        console.error("Earth Jukebox could not load the world regions; only the Amazon is outlined:", cause);
+        if (!cancelled) setRegions(DEFAULT_REGIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.baseUrl]);
+  const [focusRegionId, setFocusRegionId] = useState(AMAZON_REGION_ID);
+  const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+  const visitRegion = useCallback((regionId: string) => {
+    setFocusRegionId(regionId);
+    setTargetView("map");
+  }, []);
+  const showAmazon = useCallback(() => visitRegion(AMAZON_REGION_ID), [visitRegion]);
   const showEarth = useCallback(() => {
     setSceneHover(null);
     onCloseScene?.();
@@ -128,6 +158,15 @@ function PlanetView({
   useEffect(() => {
     if (targetView !== "map") setSceneHover(null);
   }, [targetView]);
+  // Every way back to the planet (the button, a double-click or double-tap on the
+  // map) closes the open scene too.
+  const requestView = useCallback(
+    (view: TargetView) => {
+      if (view === "globe") showEarth();
+      else setTargetView(view);
+    },
+    [showEarth],
+  );
 
   if (data.layers.length === 0) {
     return (
@@ -143,14 +182,25 @@ function PlanetView({
 
   return (
     <>
+      <FrameTracker
+        layerId={activeLayer?.manifest.id ?? ""}
+        frames={layerFrames}
+        positionRef={positionRef}
+        onFrame={setTracked}
+      />
       <div className="absolute inset-0">
         <EarthScene
           data={data}
           activeLayer={activeLayer}
+          frame={frame}
           targetView={targetView}
           lite={lite}
           autoRotate={autoRotate}
-          onRequestView={setTargetView}
+          onRequestView={requestView}
+          regions={regions}
+          focusRegionId={focusRegionId}
+          onFocusRegion={visitRegion}
+          onHoverRegion={setHoveredRegionId}
           onModeChange={setMode}
           onProbe={setProbe}
           onFps={setFps}
@@ -170,6 +220,8 @@ function PlanetView({
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
+        regionName={regionById(focusRegionId, regions ?? DEFAULT_REGIONS)?.name ?? "Amazon"}
+        hoveredRegionName={hoveredRegionId ? (regionById(hoveredRegionId, regions ?? DEFAULT_REGIONS)?.name ?? null) : null}
         probe={probe}
         fps={fps}
         lite={lite}
@@ -190,6 +242,32 @@ function PlanetView({
       )}
     </>
   );
+}
+
+/**
+ * Turns the shared timeline position into the instant of the active layer that
+ * is on screen (the same one the timeline bar's date names). It reads the clock
+ * about 30 times a second but reports only when the instant changes, so the
+ * planet view re-renders once per instant, not on every clock tick.
+ */
+function FrameTracker({
+  layerId,
+  frames,
+  positionRef,
+  onFrame,
+}: {
+  layerId: string;
+  frames: number;
+  positionRef: { current: number };
+  onFrame: (tracked: { layerId: string; frame: number }) => void;
+}) {
+  const { position } = useTimeline();
+  positionRef.current = position;
+  const frame = frameIndexAt(position, frames);
+  useEffect(() => {
+    onFrame({ layerId, frame });
+  }, [layerId, frame, onFrame]);
+  return null;
 }
 
 /**
@@ -217,10 +295,11 @@ function AudioListener({
       return;
     }
     for (const layer of data.layers) {
-      // Shared normalized position -> this layer's own fractional instant.
-      // Static layers have one frame, so framePosition returns 0 and
-      // sampleLayerAt ignores time for them.
-      const frame = framePosition(position, layer.region.frames);
+      // Shared normalized position -> the instant of this layer on screen (the
+      // nearest one, like the picture and the probe), so what is heard is what is
+      // seen. Static layers have one frame, so this is 0 and sampleLayerAt ignores
+      // time for them.
+      const frame = frameIndexAt(position, layer.region.frames);
       engine.setLayerIntensity(
         layer.manifest.id,
         sampleLayerAt(layer, data.bbox, point.lon, point.lat, frame),
