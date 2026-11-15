@@ -79,6 +79,8 @@ REGION_CELL_DEGREES = 0.01
 OUTPUT_8K = "forest-height-8k.png"
 OUTPUT_4K = "forest-height-4k.png"
 OUTPUT_REGION = "forest-height-amazon.png"
+# jukebox-prep writes the grid gzip-compressed and names it in manifest.json
+# (layers[forest].global.file); this name is used when the manifest gives none.
 GRID_FILE = "forest_global.bin"
 MANIFEST_FILE = "manifest.json"
 # A coarser fill is used only where at least this share of its bilinear weight has data.
@@ -387,8 +389,24 @@ def load_manifest(path: Path) -> tuple[dict[str, float], int, int]:
     return bbox, width, height
 
 
+def grid_file(manifest_path: Path) -> str:
+    """Name of the forest grid file in manifest.json (forest_global.bin.gz), or GRID_FILE."""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        forest = next(layer for layer in manifest["layers"] if layer["id"] == "forest")
+        name = forest["global"]["file"]
+    except (OSError, ValueError, KeyError, TypeError, StopIteration):
+        return GRID_FILE
+    return name if isinstance(name, str) and name and "/" not in name else GRID_FILE
+
+
 def load_grid(path: Path, width: int, height: int) -> np.ndarray:
-    data = np.fromfile(path, dtype=np.uint8)
+    raw = path.read_bytes()
+    if raw[:2] == b"\x1f\x8b":  # gzip, as jukebox-prep writes it
+        import gzip
+
+        raw = gzip.decompress(raw)
+    data = np.frombuffer(raw, dtype=np.uint8)
     if data.size < width * height:
         raise ConversionError(f"{path} holds {data.size} bytes, fewer than its {width} x {height} grid")
     return data[: width * height].reshape(height, width)
@@ -399,7 +417,7 @@ def check_inputs(paths: Iterable[tuple[str, Path]]) -> None:
     if missing:
         raise ConversionError(
             "missing input: " + "; ".join(missing) + ". The GeoTIFF and the 0.1 degree image come from "
-            "`docker compose run --rm fetch-gedi`, manifest.json and forest_global.bin from "
+            "`docker compose run --rm fetch-gedi`, manifest.json and the forest grid from "
             "`docker compose run --rm prep`."
         )
 
@@ -430,7 +448,7 @@ def run(
 ) -> dict[str, Path]:
     """Whole conversion; returns the written images by name."""
     manifest_path = data_dir / MANIFEST_FILE
-    grid_path = data_dir / GRID_FILE
+    grid_path = data_dir / grid_file(manifest_path)
     check_inputs(
         [
             ("GEDI L3 GeoTIFF", tif),

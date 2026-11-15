@@ -125,13 +125,13 @@ fi
 # The sharp forest images of the planet view (tools/fetch/gedi_visual.py) fill the
 # gaps of GEDI with the final forest grid of `prep`, so they can only be made once
 # prep has run.
-if [[ -f "$WEB_DATA/forest_global.bin" && -f "$WEB_DATA/manifest.json" ]]; then
+if [[ ( -f "$WEB_DATA/forest_global.bin.gz" || -f "$WEB_DATA/forest_global.bin" ) && -f "$WEB_DATA/manifest.json" ]]; then
   echo "  png    web/public/data/forest-height-{8k,4k,amazon}.png"
   if ! python3 "$ROOT/tools/fetch/gedi_visual.py" --tif "$DEST" --fill "$PNG" --data-dir "$WEB_DATA"; then
     fail "could not make the forest images in web/public/data/ from gedi/$NAME"
   fi
 else
-  echo "fetch-gedi: web/public/data/forest_global.bin is not there yet, so the sharp forest images were not made." >&2
+  echo "fetch-gedi: web/public/data/forest_global.bin.gz is not there yet, so the sharp forest images were not made." >&2
   echo "fetch-gedi: run docker compose run --rm prep, then docker compose run --rm fetch-gedi again (no new download)." >&2
 fi
 echo "fetch-gedi: done"

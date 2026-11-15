@@ -1,179 +1,87 @@
 # Timeline — decisions and handoff
 
-Status: the timeline is static and user-driven in the app (team decision
-2026-11-15). The playback library remains available, but the app never starts
-it: the provided datasets do not have enough temporal resolution for
-play/pause or speed changes to be sonically interesting. The timeline bar is
-built; the visual frames and keyboard support are still pending.
+Status (2026-11-15): the timeline is a line under the planet that plays while
+the planet turns by itself. This replaces the earlier decision of the same day
+(a static Time slider in the bottom-right panel): with more instants per layer
+there is enough temporal resolution to make the movement worth watching and
+hearing.
 
-Try it now: `docker compose up web`, then open
-<http://127.0.0.1:5173/timeline-check.html>. That development page uses the real
-playback reducer and sound engine at a fixed Amazon-centre point; it is not part
-of the app or the production bundle.
-
-## Ask for Andrés (UI/scene)
-
-Please build the visible half against the contract below. Work in this order:
-
-1. **`web/src/ui/TimelineBar.tsx`** — range `0..1` (scrub), percentage and
-   `dateLabelAt` of the picked layer only; the bar is hidden when the picked
-   layer is static (forest, lightning) or on the plain Earth view. `data-testid`: `timeline-bar`,
-   `timeline-scrub`, `timeline-date-<id>`. Team decision of 2026-11-15: the
-   timeline is static and set by the person, so the bar has no play/pause and
-   no speed control (the provider's playback stays, unused by the app).
-2. **Dock it in `PlanetHud`** — add a `timeline?: ReactNode` slot next to
-   `audio`, same bottom-right panel.
-3. **Per-frame textures** — `layerTexture.ts` from a single texture to arrays,
-   built from every frame of the grid.
-4. **Crossfade** — two samplers per view and `uFrameMix` in `EarthMesh`; set the
-   pair from `frameBlend(position, frames)`.
-5. **Scene position** — `EarthScene` takes `position`, uses
-   `framePosition(position, frames)` for the probe, and re-runs the probe when
-   the position changes.
-
-The `timeline` logic is already in place: `useTimeline()` gives
-`position/playing/speed/loop/durationSeconds` and the actions; the app only uses
-`position` and `seek` for the static bar. Do not duplicate the clock. The dev
-harness still exercises the unused playback library.
+Try it: `docker compose up web`, open <http://127.0.0.1:5173/>, pick
+**Wildfire smoke**, **Atmospheric CO2** or **Lightning** and let the planet
+turn. The dev page <http://127.0.0.1:5173/timeline-check.html> still exercises
+the play/pause clock of `playback.ts`, which the app no longer uses.
 
 ## Decisions
 
 | Decision | Choice | Why |
 |---|---|---|
-| Time model | **Shared narrative position 0..1** | The layers do not share a real calendar: forest is 2019–2020, CO2 is 23–25 Feb 2020, smoke is “Jul–Aug 2024, clip 0:00…1:05”. Each layer walks its own period and shows its own label. |
-| Between instants | **Interpolate** | Audio already blends linearly between frames (`sampleGrid`); the image should crossfade between the same two frames so picture and sound stay together. |
-| End of sequence | **Loop forever** | Matches `advancePosition` and the demo loop. |
-| Speed | **Not used by the app** since 2026-11-15 | `playback.ts` still supports 0.1×–8× for future data, but the provided datasets lack the temporal resolution to make speed changes sonically interesting. |
-| Duration at 1× | **24 s** | `DEFAULT_DURATION_SECONDS`; a full loop is ~2 s per CO2 frame. |
-| State update rate | **30 Hz** | Enough for audio and a smooth scrubber without re-rendering the app at 60 Hz. |
-| Background tabs | Step capped at **0.25 s** | A backgrounded tab must not jump the sequence when it returns. |
+| Where | **A line centred under the planet**: the bottom row of the HUD is three columns (`minmax(0,1fr) auto minmax(0,1fr)`), so the middle one sits on the planet's centre line (wide screens, `lg` and up); its own row on narrow screens | The timeline belongs to the picture, not to the sound controls. |
+| What drives it | **The planet's own turn** (`EarthMesh` → `onSpin`) | The timeline moves exactly while, and as fast as, the planet turns: a drag, Auto-rotate off and the map view (where the planet does not turn) pause it. |
+| Pace | **One turn = one day** of hourly data (smoke), **30 days** of daily data (CO2), **one year** of monthly data (lightning) | Smoke turns with the planet like the real Earth; lightning shows the seasons once per turn. At `SPIN_SPEED` (0.08 rad/s, about 78 s per turn) an hour of smoke lasts about 3.3 s and a month of lightning about 6.5 s. |
+| Marks | **One per instant, placed by its real time**; the marks that start a day (hourly) or a year (monthly) are labelled | A gap in the data would show as a gap on the line. Layers without times (sample data) are evenly spaced. |
+| Between instants | **Crossfade** of the picture (two textures and `uFrameMix` in the shader) and **the same blend in the sound** (`framePosition`) | Picture and sound stay together and the animation is smooth. `?lite=1` keeps the nearest instant alone. |
+| Date shown | The **nearest** instant's label | Matches what the picture is closest to. |
+| Speed | **4× and 8×** buttons on the line, starting at 4× (team decision, 2026-11-15: 1× and 2× were too slow); the planet keeps its pace and each turn covers that many times the real time (at 4×, one turn = 4 days of smoke). The line says it: `1 turn = 4 days` | Faster animation without a dizzying planet, and the turn ↔ time relation stays true. Shared by all layers. |
+| Dragging the line | **The planet keeps turning**; playing goes on from the picked moment | Decision of 2026-11-15. |
+| Forest (static) | A **dimmed line** with its one period, `Apr 2019 – Jul 2025` | The layout does not jump when the layer changes. |
+| End of the data | **Starts again** from the beginning | Like the demo loop. |
+| State update rate | **About 30 Hz** (`SpinAccumulator`) | Enough for audio and the playhead without re-rendering the app 60 times a second. The fade amount is read from a ref on every animation frame. |
 
-## What exists
+## Data per layer (see `data/SOURCES.md`)
 
-- `web/src/lib/timeline.ts`
-  - `framePosition(position, frames)`: fractional frame.
-  - `frameBlend(position, frames) → { from, to, mix }`: the pair of instants to
-    crossfade, with the same mix the audio uses.
-  - `dateLabelAt(layer, position)`: nearest instant’s label.
-  - `advancePosition(position, Δs, duration, loop)`.
-- `web/src/lib/playback.ts` (pure, tested; **library only, not used by the app**)
-  - `PlaybackState`: `position`, `playing`, `speed`, `loop`, `durationSeconds`.
-  - `createPlayback(overrides)`, `playbackReducer(state, action)`.
-  - Actions: `play`, `pause`, `toggle`, `seek`, `set-speed`, `set-loop`,
-    `set-duration`, `advance`.
-  - `MIN_SPEED`, `MAX_SPEED`, `DEFAULT_DURATION_SECONDS`.
-  - Kept for future data with more temporal resolution; the app only calls
-    `seek`.
-- `web/src/timeline/TimelineProvider.tsx`
-  - `<TimelineProvider>` wraps the app; `useTimeline()` returns the state plus
-    `play/pause/toggle/seek/setSpeed/setLoop/setDuration`.
-  - Runs the `requestAnimationFrame` clock while playing, but the app never
-    starts it; the static bar only dispatches `seek`.
-- `web/src/App.tsx`
-  - The app is wrapped in `TimelineProvider`.
-  - `AudioListener` samples every layer with
-    `framePosition(position, layer.region.frames)` and the listening point.
-    Static layers have one frame, so their frame is 0.
-- `web/timeline-check.html` + `web/src/timeline/check.ts`
-  - Dev harness for the unused playback library: start sound, play/pause,
-    scrub, 0.1×–8×, per-layer date and frame-blend readout, meter. The app itself
-    is static.
+| Layer | Instants | Cadence | Period |
+|---|---|---|---|
+| Wildfire smoke (MERRA-2 carbon optical depth) | 488 | `PT3H` | 1 Aug – 30 Sep 2026 |
+| Atmospheric CO2 (OCO-2 GEOS L3) | 366 | `P1D` | every day of 2020 |
+| Lightning (SVS 5011) | 79 | `P1M` | Jan 2017 – Jul 2023 |
+| Forest height (GEDI L3) | 1 | — | Apr 2019 – Jul 2025 |
 
-## Handoff to the scene / UI owner
+`manifest.json` gives every timed layer `times` (ISO 8601 UTC, one per
+instant) and `cadence` (ISO 8601 duration), written by `tools/prep` from
+`data/prep-config.json`. The instants of these three layers are generated by
+`tools/fetch/timeline_config.py`.
 
-### 1. Per-frame textures (`web/src/scene/layerTexture.ts`)
-Replace the single-frame `LayerTextures` with frame arrays:
+Grids are written as `.bin.gz` and inflated in the browser
+(`DecompressionStream`); a server that already sent them decompressed is
+handled too. The whole-planet grids of smoke (720 × 360) and CO2 (360 × 180) are kept small so the
+browser can hold every instant.
 
-```ts
-export interface LayerTextures {
-  global: DataTexture[] | null;
-  region: DataTexture[];
-}
-```
+## Where it lives
 
-Build one texture per frame (`gridToRgba(grid, frame, …)` and `DataTexture` for
-each); the grids are small (smoke 6 × 96×72, CO2 12 × 96×72, forest 1). Dispose
-**every** texture in `disposeLayerTextures` and in the error path added for the
-PR review. Keep `FIRST_INSTANT` only where a single frame is genuinely wanted.
-
-### 2. Crossfade in the shader (`web/src/scene/EarthMesh.tsx`)
-Add a second sampler per view and a mix uniform:
-
-```glsl
-uniform sampler2D uLayerRegionA;
-uniform sampler2D uLayerRegionB;
-uniform float uFrameMix; // frameBlend.mix
-...
-vec4 a = texture2D(uLayerRegionA, regionUv);
-vec4 b = texture2D(uLayerRegionB, regionUv);
-overlay = mix(a, b, uFrameMix);
-```
-
-Same for the global texture outside the Amazon. Set A = `textures[blend.from]`,
-B = `textures[blend.to]` whenever `frameBlend` changes. With one frame
-(forest), A = B and mix = 0.
-
-Fallback if fps suffers: nearest frame (`blend.mix < 0.5 ? from : to`) and a
-single sampler; keep `?lite=1` on the nearest path.
-
-### 3. Scene state (`web/src/scene/EarthScene.tsx`)
-- Accept `position: number` (from `useTimeline` in `App`).
-- Compute `frameBlend(position, activeLayer.region.frames)` for the active
-  layer and pass it to `EarthMesh`, together with the frame textures.
-- Use `framePosition(position, activeLayer.region.frames)` in `probeFor`
-  instead of `FIRST_INSTANT`, and re-run the probe refresh effect when
-  `position` changes (the pointer does not move while the timeline plays).
-
-### 4. Timeline bar (`web/src/ui/TimelineBar.tsx`, step 13)
-Props come from `useTimeline`:
-
-```ts
-interface TimelineBarProps {
-  position: number;
-  /** The picked layer; the bar is shown only for a layer that changes over time. */
-  layer: LoadedLayer;
-  onSeek(position: number): void;
-}
-```
-
-- Range `0..1` (step 0.001) for scrubbing. No speed slider and no play/pause
-  since 2026-11-15 (static timeline).
-- Show `dateLabelAt(layer.manifest, position)` for **the picked layer only**,
-  and only when it changes over time (team review, 2026-11-15).
-- `data-testid`: `timeline-bar`, `timeline-scrub`, `timeline-date-<id>`.
-- Dock it in `PlanetHud` like the audio control (add a `timeline?: ReactNode`
-  slot next to `audio`).
-
-### 5. Keyboard / screen reader (step 14)
-←/→ step the position; there is no play/pause since 2026-11-15. The existing
-a11y text should include the current date label and position.
-
-## Playback and speed status
-The playback library (`playback.ts`, `TimelineProvider`) still supports
-play/pause and 0.1×–8×, but the app does not start it. The team decided on
-2026-11-15 that the provided datasets do not have enough temporal resolution for
-speed changes to be sonically interesting; the timeline is static and moved by
-hand. Keep the library for future data with more resolution. The dev harness
-`/timeline-check.html` still exercises it.
+- `web/src/lib/timelineTrack.ts`: marks (`timelineTicks`), playhead ↔ line
+  (`fractionAtPosition`, `positionAtFraction`), pace (`positionPerTurn`),
+  wrap-around (`stepPosition`), `SpinAccumulator`.
+- `web/src/lib/timeline.ts`: `frameBlend`, `framePosition`, `frameIndexAt`,
+  `dateLabelAt`.
+- `web/src/timeline/TimelineProvider.tsx`: shared position; `useTimeline()`
+  for readers, `useTimelineActions()` (`seek`, `step`) for the turning planet,
+  which does not re-render as the position moves.
+- `web/src/ui/TimelineTrack.tsx`: the line. `data-testid`: `timeline-track`,
+  `timeline-scrub` (the `role="slider"` line), `timeline-date-<id>`,
+  `timeline-playing`, `timeline-speed-<4|8>`, `timeline-turn`. Keys: ←/→
+  one instant, Page Up/Down one turn, Home/End.
+- `web/src/scene/layerTexture.ts`: `showLayerBlend(textures, layer, from, to)`
+  keeps the earlier and later instants; moving on by one only computes the new
+  later one.
+- `web/src/App.tsx`: `PlanetView` turns `onSpin` into `step`; `FrameTracker`
+  reports the pair of instants and puts the fade amount in a ref;
+  `AudioListener` samples the same blend.
 
 ## Data truth and limitations
-- Values are relative intensities, not physical measurements (see `data/SOURCES.md`).
-- Smoke and CO2 only cover the Amazon; outside the region the sampled value is
-  `null` and the voice is silent.
-- Smoke clip timestamps are uneven (`0, 4, 53, 57, 61, 65 s`) but the current
-  mapping treats the six frames as equally spaced. Fixing that faithfully needs
-  numeric `times[]` in the manifest, produced by `tools/prep` (not in this slice).
-- CO2 frames are 6 hours apart (23–25 Feb 2020); “arbitrary moment” means linear
-  interpolation between the sampled instants, not measured data.
+
+- Lightning is a relative value read from a NASA visualization, not a
+  physical measurement; smoke, CO2 and forest are model and measured values on
+  fixed scales (see `data/SOURCES.md`).
+- CO2 (OCO-2 GEOS) covers the whole planet every day; it is a model with
+  satellite measurements assimilated, at 0.5 x 0.625 degree.
+- A crossfade between two instants is a visual blend, not measured data at that
+  moment.
 
 ## Tests
-- `web/src/lib/playback.test.ts`: defaults, speed clamp, advance with speed,
-  loop, stop/restart without loop, seek/pause/toggle, duration validation.
-- `web/src/lib/timeline.test.ts`: `frameBlend` at edges and between instants,
-  single-frame layers, out-of-range positions.
-- Existing suite (audio, scene, data) stays green.
 
-## Out of scope in this slice
-- `EarthMesh`, `EarthScene`, `layerTexture`, `PlanetHud`, `TimelineBar` changes.
-- Keyboard shortcuts and screen-reader timeline text.
-- Real calendar timestamps / numeric smoke times.
+- `web/src/lib/timelineTrack.test.ts`, `web/src/lib/playback.test.ts` (`step`),
+  `web/src/scene/layerTexture.test.ts` (fade textures),
+  `web/src/data/loadManifest.test.ts` (gzip, times, cadence),
+  `web/src/ui/timelineFormat.test.ts`.
+- `tools/prep` (`cargo test`): times and cadence validation, gzip grids.
+- `tools/fetch/tests/test_timeline_config.py`, `test_lightning_months.py`.

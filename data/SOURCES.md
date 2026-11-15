@@ -1,11 +1,13 @@
 # Data sources
 
 Everything shown and heard in Earth Jukebox comes from the public sources
-below. Only GEDI L3 (forest height) needs a free NASA Earthdata login: it is
-downloaded on its own with `docker compose run --rm fetch-gedi`, which reads
-the login from `~/.netrc`. Keep only the `urs.earthdata.nasa.gov` line in that
-file: the download container can read all of it. No other source needs a
-login. This file is
+below. GEDI L3 (forest height), OCO-2 GEOS (CO2) and MERRA-2 (smoke) need a
+free NASA Earthdata login: they are downloaded on their own with `docker
+compose run --rm fetch-gedi`, `fetch-oco2` and `fetch-merra2`, which read the
+login from `~/.netrc` (OCO-2 and MERRA-2 also need the "NASA GESDISC DATA
+ARCHIVE" application authorised in the Earthdata profile). Keep only the `urs.earthdata.nasa.gov`
+line in that file: the download containers can read all of it. No other source
+needs a login. This file is
 rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch`).
 
 ## Layers
@@ -13,32 +15,32 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
 | Layer | Source | Period | What the value is |
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file `GEDI03_rh100_mean_2019108_2025190_003_01.tif` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
-| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file `aqc_tavg_1hr_glo_L1440x721_slv`, variable `PM25_RH35` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
-| Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 17 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every 6 hours, where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
-| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per quarter (27 frames, the last one July 2023 only) | Relative frequency (0 to 1): how often lightning was drawn at each place during that quarter only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one quarter at a time, on the timeline. |
+| Wildfire smoke | [MERRA-2 tavg1_2d_aer_Nx (M2T1NXAER) V5.12.4](https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary) (NASA GMAO reanalysis, GES DISC), variables `OCEXTTAU` + `BCEXTTAU` (organic + black carbon aerosol optical depth at 550 nm) | 1 August to 30 September 2026, every third hour (488 hourly means, 00:30 to 21:30 UTC) | Smoke optical depth on a fixed square-root scale: **0 = 0 (byte 0), 2 or more = 1 (byte 255)**. Dust, sea salt and sulphate are left out, so only smoke from fires shows. |
+| Atmospheric CO2 | [OCO-2 GEOS Level 3 daily, 0.5x0.625 assimilated CO2, V10r](https://disc.gsfc.nasa.gov/datasets/OCO2_GEOS_L3CO2_DAY_10r/summary) (NASA GES DISC: the GEOS model with OCO-2 satellite measurements assimilated), variable `XCO2` | Every day of 2020 (366 daily means) | Column-averaged CO2 (XCO2) on a fixed scale: **404 ppm = 0 (byte 0), 420 ppm or more = 1 (byte 255)**, linear in between. The whole planet moves with the timeline. Fill values are 0. |
+| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per month (79 frames) | Relative frequency (0 to 1): how often lightning was drawn at each place during that month only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one month at a time, on the timeline. |
 
 ## How each source was turned into a map
 
-- **Smoke.** GEOS-CF stores 721 latitudes (with the poles on the end rows) by
-  1440 longitudes starting at 180 W. Each app cell (1440 x 720, 0.25 degrees,
-  north row first) is the mean of the 2 x 2 block of model points around its
-  centre (tools/fetch/geoscf_to_png.py). The layer is global, and its Amazon
-  grid keeps the model resolution (0.25 degrees).
-- **CO2.** SVS 5196 is only published as a rendered globe that turns under a
-  fixed camera (the point under the camera moves 0.2017 degrees west per frame, because the
-  Earth turns east; one model hour per frame), so no
-  frame shows the whole planet at one moment. The 12 instants are the frames
-  where South America faces the camera (00939 to 01005, every sixth); each is
-  used up to 60 degrees from the point under the camera. The rest of the planet
-  comes from five more frames (00001, 00232, 00463, 00694 and 01176: 14 and 24
-  January, 3 and 12 February and 3 March 2020), blended as fixed fallback views,
-  so outside the animated views each region shows the date of the view that
-  covers it (where two views overlap, near 23 degrees E for example, their dates
-  are blended, up to nine days apart). Where the globe
-  sits in each frame was fitted to the Natural Earth coastlines
-  (tools/fetch/co2_calibrate.py). The "warmth" also picks up bright beige
-  land: deserts (Sahara, Australia, Atacama) read about 0.1, a low value, more
-  than the Amazon itself in February 2020 (about 0.04).
+- **Smoke.** MERRA-2 stores 361 latitudes (with the poles on the end rows) by
+  576 longitudes starting at 180 W (0.5 x 0.625 degree), the same grid as
+  OCO-2 GEOS. tools/fetch/fetch-merra2.sh asks NASA's OPeNDAP service for only
+  the organic and black carbon optical depth at every third hour of each day
+  (about 8 MB a day instead of 470 MB); tools/fetch/merra2_smoke_to_png.py adds
+  the two and averages each image cell (576 x 360) from the 2 x 2 block of
+  model points around its centre. The square-root scale lets thin haze (about
+  0.05) and thick plumes (1 or more) both show. The app grids are 360 x 180 (1
+  degree) for the planet and 72 x 56 (0.5 degree, the model's own) for the
+  Amazon. In the app one turn of the planet is one day of smoke.
+- **CO2.** OCO-2 GEOS L3 stores 361 latitudes (with the poles on the end
+  rows) by 576 longitudes starting at 180 W (0.5 x 0.625 degree). Each image
+  cell (576 x 360) is the mean of the 2 x 2 block of model points around its
+  centre (tools/fetch/oco2_to_png.py), on the fixed 404 to 420 ppm scale, the
+  same every day, so both the yearly rise and the northern summer dip (plants
+  taking CO2 up) show. The app grids are 360 x 180 (1 degree) for the planet
+  and 72 x 56 (0.5 degree, the model's own) for the Amazon. In the app one turn
+  of the planet is 30 days. Downloaded with the Earthdata login by
+  tools/fetch/fetch-oco2.sh, which lists the daily files from NASA's public
+  catalogue (CMR).
 - **Lightning.** The video shows a 10-day roving window: each frame holds only
   the last ten days and its last frame is empty, so no single frame holds the
   accumulated period. One frame every 0.4 s of the video (about every 10 days
@@ -46,15 +48,16 @@ rewritten by `tools/fetch-frames.sh` (run it with `docker compose run --rm fetch
   of each pixel (lightning is drawn in yellow over a grey map), so places with
   lightning in more windows are brighter (tools/fetch/lightning_composite.py).
   LIS sees only between about 55 N and 55 S.
-  **Timeline frames.** The app's lightning layer has one frame per quarter,
-  January 2017 to July 2023 (27 frames), from the same 250 windows kept in
+  **Timeline frames.** The app's lightning layer has one frame per month,
+  January 2017 to July 2023 (79 frames), from the same 250 windows kept in
   `data/raw/5011/lightning_dots_2017_2023.npz`. The video runs linearly over the
   period (100 s, about 24 days per second), so window k ends about k x 0.4 / 100
-  of the way through it; each window goes to the quarter of its middle day, and
-  each quarter's image is the mean yellowness of its own 9 or 10 windows only
-  (2 for July 2023), so playing them shows where lightning was seen each
-  quarter, never an accumulation (tools/fetch/lightning_quarters.py, images in
-  `data/raw/5011/quarters/`). January - March 2017 is almost empty: the
+  of the way through it; each window goes to the month of its middle day, and
+  each month's image is the mean yellowness of its own 2 to 4 windows only, so
+  playing them shows where lightning was seen each month (the storm belt
+  moving north and south with the seasons), never an accumulation
+  (tools/fetch/lightning_months.py, images in `data/raw/5011/months/`). In
+  the app one turn of the planet is one year of lightning. January - March 2017 is almost empty: the
   video shows almost no lightning in its first weeks (LIS was new on the ISS). The accumulated mean and the
   sharp dots image below are kept but no longer drawn by the app.
   The planet view does not draw that mean, which is a soft blur and covers the
@@ -123,18 +126,25 @@ inside a hand-drawn area around the basin.
 
 - Natural Earth: public domain
   (<https://www.naturalearthdata.com/about/terms-of-use/>).
-- GEOS-CF: NASA Global Modeling and Assimilation Office (GMAO); NASA Earth
-  science data are open, with no restrictions on use. Credit: NASA GMAO GEOS-CF.
+- MERRA-2: NASA Global Modeling and Assimilation Office (GMAO), distributed by
+  the GES DISC; NASA Earth science data are open, with no restrictions on use.
+  Credit: NASA GMAO MERRA-2.
 - GEDI L3 V3: NASA GEDI mission, distributed by the ORNL DAAC
   (doi:10.3334/ORNLDAAC/2525); NASA Earth science data are open, with no
   restrictions on use. Download needs a free NASA Earthdata login.
+- OCO-2 GEOS L3: NASA OCO-2 project and GMAO, distributed by the GES DISC;
+  NASA Earth science data are open, with no restrictions on use. Download
+  needs a free NASA Earthdata login.
 - SVS 4950 and SVS 5011: NASA Scientific Visualization Studio. NASA imagery is
   generally not copyrighted; credit NASA's Scientific Visualization Studio.
 
 ## No longer used
 
-- The old smoke frames (SVS 5533), the 1080p GEDI video and the SVS 3615 base
-  image (`earth.jpg`) are no longer downloaded; files already in
+- The old smoke frames (SVS 5533), the 1080p GEDI video, the SVS 3615 base
+  image (`earth.jpg`), the SVS 5196 CO2 orbit frames (replaced by OCO-2
+  GEOS, which covers the whole planet every day) and the GEOS-CF PM2.5 files
+  (replaced by MERRA-2 carbon optical depth, which leaves desert dust out) are
+  no longer downloaded; files already in
   `data/raw/` and `web/public/data/earth.jpg` are kept.
 
 ## Files
@@ -143,70 +153,92 @@ inside a hand-drawn area around the basin.
 |---|---|---|
 | `data/raw/naturalearth/NE1_HR_LC_SR_W_DR.zip` | <https://naciscdn.org/naturalearth/10m/raster/NE1_HR_LC_SR_W_DR.zip> | downloaded as published |
 | `data/raw/naturalearth/NE1_HR_LC_SR_W_DR.tif` | <https://naciscdn.org/naturalearth/10m/raster/NE1_HR_LC_SR_W_DR.zip> | extracted from the zip (21600 x 10800 GeoTIFF) |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0030z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0030z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0030.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0030z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0130z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0130z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0130.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0130z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0230z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0230z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0230.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0230z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0330z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0330z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0330.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0330z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0430z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0430z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0430.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0430z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0530z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0530z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0530.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0530z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0630z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0630z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0630.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0630z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0730z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0730z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0730.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0730z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0830z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0830z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0830.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0830z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0930z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0930z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_0930.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_0930z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1030z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1030z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1030.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1030z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1130z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1130z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1130.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1130z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1230z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1230z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1230.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1230z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1330z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1330z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1330.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1330z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1430z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1430z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1430.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1430z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1530z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1530z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1530.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1530z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1630z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1630z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1630.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1630z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1730z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1730z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1730.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1730z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1830z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1830z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1830.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1830z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1930z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1930z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_1930.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_1930z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2030z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2030z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_2030.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2030z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2130z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2130z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_2130.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2130z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2230z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2230z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_2230.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2230z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
-| `data/raw/geoscf/nc/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2330z.R0.nc4` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2330z.R0.nc4> | downloaded as published |
-| `data/raw/geoscf/pm25_2330.png` | <https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01/GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_2330z.R0.nc4> | PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py |
+| `data/raw/merra2/nc/smoke_2026<mmdd>.nc4` | <https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary> | OCEXTTAU and BCEXTTAU every third hour of each day, 1 August to 30 September 2026, through NASA OPeNDAP with a NASA Earthdata login, by tools/fetch/fetch-merra2.sh (docker compose run --rm fetch-merra2), not by this script |
+| `data/raw/merra2/smoke_2026<mmdd>_<hh>30.png` | <https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary> | organic + black carbon optical depth on 576 x 360 cells, square root of 0 to 2 as grey 0 to 255, by tools/fetch/merra2_smoke_to_png.py |
 | `data/raw/5011/lightning_2017_2023.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning (yellow) of about 250 frames, one every 0.4 s, by tools/fetch/lightning_composite.py |
 | `data/raw/5011/lightning_dots_2017_2023.npz` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | lightning pixels (yellowness of at least 77 of 255) of the same 250 frames, by tools/fetch/lightning_dots.py collect |
 | `web/public/data/lightning-4k.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | distinct lightning dots for the planet view (4096 x 2048, one 8-bit channel), drawn from `data/raw/5011/lightning_dots_2017_2023.npz` by tools/fetch/lightning_dots.py render |
-| `data/raw/5196/dyamond_co2_globe_orbit_1080p30_h265.mp4` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | downloaded as published |
-| `data/raw/5196/co2_globe_31.3.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 31.3 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_31.5.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 31.5 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_31.7.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 31.7 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_31.9.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 31.9 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_32.1.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 32.1 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_32.3.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 32.3 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_32.5.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 32.5 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_32.7.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 32.7 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_32.9.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 32.9 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_33.1.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 33.1 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_33.3.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 33.3 s, extracted with ffmpeg |
-| `data/raw/5196/co2_globe_33.5.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4> | video frame at 33.5 s, extracted with ffmpeg |
+| `data/raw/5011/months/lightning_2017_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_08.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_09.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_10.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_11.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2017_12.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_08.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_09.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_10.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_11.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2018_12.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_08.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_09.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_10.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_11.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2019_12.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_08.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_09.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_10.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_11.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2020_12.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_08.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_09.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_10.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_11.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2021_12.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_08.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_09.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_10.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_11.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2022_12.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_01.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_02.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_03.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_04.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_05.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_06.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/5011/months/lightning_2023_07.png` | <https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4> | mean lightning of the ten-day windows of one month only, from `data/raw/5011/lightning_dots_2017_2023.npz`, by tools/fetch/lightning_months.py |
+| `data/raw/oco2/nc/oco2_GEOS_L3CO2_day_2020<mmdd>_*.nc4` | <https://data.gesdisc.earthdata.nasa.gov/data/OCO2_DATA/OCO2_GEOS_L3CO2_DAY.10r/2020/> | 366 daily files of 2020, downloaded with a NASA Earthdata login by tools/fetch/fetch-oco2.sh (docker compose run --rm fetch-oco2), not by this script |
+| `data/raw/oco2/xco2_2020<mmdd>.png` | <https://data.gesdisc.earthdata.nasa.gov/data/OCO2_DATA/OCO2_GEOS_L3CO2_DAY.10r/2020/> | XCO2 on 576 x 360 cells, 404 to 420 ppm as grey 0 to 255, by tools/fetch/oco2_to_png.py |
 | `data/raw/gedi/GEDI03_rh100_mean_2019108_2025190_003_01.tif` | <https://data.ornldaac.earthdata.nasa.gov/protected/gedi/GEDI_L3_LandSurface_Metrics_V3/data/GEDI03_rh100_mean_2019108_2025190_003_01.tif> | downloaded with a NASA Earthdata login by tools/fetch/fetch-gedi.sh (docker compose run --rm fetch-gedi), not by this script |
 | `data/raw/gedi/gedi_l3_rh100_mean_0p1deg.png` | <https://data.ornldaac.earthdata.nasa.gov/protected/gedi/GEDI_L3_LandSurface_Metrics_V3/data/GEDI03_rh100_mean_2019108_2025190_003_01.tif> | rh100_mean averaged into 3600 x 1800 cells of 0.1 degree, 0 to 50 m as grey 0 to 255, alpha 0 where GEDI has no data, by tools/fetch/gedi_l3_to_png.py |
 | `data/raw/4950/GEDI_colorbar_0to50_01_print.jpg` | <https://svs.gsfc.nasa.gov/vis/a000000/a004900/a004950/GEDI_colorbar_0to50_01_print.jpg> | downloaded as published |
