@@ -17,7 +17,7 @@ the play/pause clock of `playback.ts`, which the app no longer uses.
 |---|---|---|
 | Where | **A line centred under the planet**: the bottom row of the HUD is three columns (`minmax(0,1fr) auto minmax(0,1fr)`), so the middle one sits on the planet's centre line (wide screens, `lg` and up); its own row on narrow screens | The timeline belongs to the picture, not to the sound controls. |
 | What drives it | **The planet's own turn** (`EarthMesh` → `onSpin`) | The timeline moves exactly while, and as fast as, the planet turns: a drag, Auto-rotate off and the map view (where the planet does not turn) pause it. |
-| Pace | **One turn = one day** of hourly data (smoke, CO2), **one week** of daily data, **one year** of monthly data (lightning) | Smoke turns with the planet like the real Earth; lightning shows the seasons once per turn. At `SPIN_SPEED` (0.08 rad/s, about 78 s per turn) an hour of smoke lasts about 3.3 s and a month of lightning about 6.5 s. |
+| Pace | **One turn = one day** of hourly data (smoke), **30 days** of daily data (CO2), **one year** of monthly data (lightning) | Smoke turns with the planet like the real Earth; lightning shows the seasons once per turn. At `SPIN_SPEED` (0.08 rad/s, about 78 s per turn) an hour of smoke lasts about 3.3 s and a month of lightning about 6.5 s. |
 | Marks | **One per instant, placed by its real time**; the marks that start a day (hourly) or a year (monthly) are labelled | A gap in the data would show as a gap on the line. Layers without times (sample data) are evenly spaced. |
 | Between instants | **Crossfade** of the picture (two textures and `uFrameMix` in the shader) and **the same blend in the sound** (`framePosition`) | Picture and sound stay together and the animation is smooth. `?lite=1` keeps the nearest instant alone. |
 | Date shown | The **nearest** instant's label | Matches what the picture is closest to. |
@@ -32,7 +32,7 @@ the play/pause clock of `playback.ts`, which the app no longer uses.
 | Layer | Instants | Cadence | Period |
 |---|---|---|---|
 | Wildfire smoke (GEOS-CF) | 168 | `PT1H` | 1–7 Sep 2026 |
-| Atmospheric CO2 (SVS 5196) | 67 | `PT1H` | 23–25 Feb 2020 |
+| Atmospheric CO2 (OCO-2 GEOS L3) | 366 | `P1D` | every day of 2020 |
 | Lightning (SVS 5011) | 79 | `P1M` | Jan 2017 – Jul 2023 |
 | Forest height (GEDI L3) | 1 | — | Apr 2019 – Jul 2025 |
 
@@ -43,7 +43,7 @@ instant) and `cadence` (ISO 8601 duration), written by `tools/prep` from
 
 Grids are written as `.bin.gz` and inflated in the browser
 (`DecompressionStream`); a server that already sent them decompressed is
-handled too. The whole-planet grids of smoke and CO2 are 720 × 360 so the
+handled too. The whole-planet grids of smoke (720 × 360) and CO2 (360 × 180) are kept small so the
 browser can hold every instant.
 
 ## Where it lives
@@ -69,12 +69,11 @@ browser can hold every instant.
 
 ## Data truth and limitations
 
-- CO2 and lightning are relative values read from NASA visualizations, not
-  physical measurements; smoke and forest are model and measured values on
+- Lightning is a relative value read from a NASA visualization, not a
+  physical measurement; smoke, CO2 and forest are model and measured values on
   fixed scales (see `data/SOURCES.md`).
-- CO2: only the Americas and the Atlantic move with the timeline; the rest of
-  the planet is a fixed mosaic. The globe position of the hourly frames between
-  the fitted ones (every sixth) is interpolated.
+- CO2 (OCO-2 GEOS) covers the whole planet every day; it is a model with
+  satellite measurements assimilated, at 0.5 x 0.625 degree.
 - A crossfade between two instants is a visual blend, not measured data at that
   moment.
 

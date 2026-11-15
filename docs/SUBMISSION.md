@@ -68,10 +68,9 @@ TODO: confirm against the final app.
 - The interface is React with three.js for the planet and GSAP for the
   transition. A small Rust (Axum) server serves everything from the laptop, so
   the whole demo runs **without internet**, packaged in Docker.
-- CO2 is global but a mosaic: NASA only publishes it as a turning globe, so only
-  the Americas and the Atlantic move with the timeline (23 to 25 February 2020)
-  and the rest of the planet is a fixed picture, each region on the date of the
-  view that covers it. It is presented as global context, not as a measured
+- CO2 comes from OCO-2 GEOS (the GEOS model with OCO-2 satellite measurements
+  assimilated), one global map per day through 2020, so the whole planet moves
+  with the timeline. It is presented as global context, not as a measured
   effect of what happens in the Amazon.
 
 ### Benefits
@@ -116,9 +115,9 @@ The repository states the same in its README (FR10.4).
 | Layer | Source | Link |
 |---|---|---|
 | Forest height | GEDI L3 Gridded Land Surface Metrics V3, mean canopy height (NASA GEDI, ORNL DAAC), April 2019 – July 2025; gaps filled with GEDI Forest Height, NASA SVS 4950 | https://doi.org/10.3334/ORNLDAAC/2525 · https://svs.gsfc.nasa.gov/4950 |
-| Wildfire smoke | GEOS-CF v2 analysis, surface PM2.5 (NASA GMAO), 1 September 2026, 24 hourly means | https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ |
-| Carbon dioxide | DYAMOND Global Carbon Dioxide, NASA SVS 5196, 23 – 25 February 2020 | https://svs.gsfc.nasa.gov/5196 |
-| Lightning | Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011 | https://svs.gsfc.nasa.gov/5011 |
+| Wildfire smoke | GEOS-CF v2 analysis, surface PM2.5 (NASA GMAO), 1 – 7 September 2026, 168 hourly means | https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ |
+| Carbon dioxide | OCO-2 GEOS Level 3 daily, 0.5x0.625 assimilated CO2 V10r (NASA GES DISC), every day of 2020 | https://disc.gsfc.nasa.gov/datasets/OCO2_GEOS_L3CO2_DAY_10r/summary |
+| Lightning | Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011, monthly | https://svs.gsfc.nasa.gov/5011 |
 | Base image of the planet | Natural Earth I with Shaded Relief and Water (public domain; backdrop only, no data values) | https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/ |
 
 How each source becomes a value, and the limits of each method, are in
