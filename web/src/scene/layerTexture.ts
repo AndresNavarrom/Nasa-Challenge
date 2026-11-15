@@ -134,16 +134,25 @@ export function gridToRgba(grid: Grid, frame: number, ramp: ColorRamp, layerId: 
   if (!Number.isInteger(frame) || frame < 0 || frame >= grid.frames) {
     throw new Error(`Layer "${layerId}": instant ${frame} does not exist (the grid has ${grid.frames}).`);
   }
+  // Grid values are bytes: colour the 256 of them once, then copy per cell. Fast
+  // enough to redraw a whole-planet instant each time the timeline changes frame.
+  const lut = new Uint8Array(256 * 4);
+  for (let value = 0; value < 256; value += 1) {
+    const [r, g, b] = rampColor(ramp, value);
+    lut[value * 4] = r;
+    lut[value * 4 + 1] = g;
+    lut[value * 4 + 2] = b;
+    lut[value * 4 + 3] = rampAlpha(ramp, value);
+  }
   const pixels = new Uint8Array(cells * 4);
   const offset = frame * cells;
   for (let cell = 0; cell < cells; cell += 1) {
-    const value = grid.data[offset + cell] ?? 0;
-    const [r, g, b] = rampColor(ramp, value);
+    const from = (grid.data[offset + cell] ?? 0) * 4;
     const out = cell * 4;
-    pixels[out] = r;
-    pixels[out + 1] = g;
-    pixels[out + 2] = b;
-    pixels[out + 3] = rampAlpha(ramp, value);
+    pixels[out] = lut[from]!;
+    pixels[out + 1] = lut[from + 1]!;
+    pixels[out + 2] = lut[from + 2]!;
+    pixels[out + 3] = lut[from + 3]!;
   }
   return pixels;
 }
@@ -166,8 +175,14 @@ function heightTextureOf(grid: Grid, layerId: string, wrapAround: boolean): Data
   return texture;
 }
 
-function textureOf(grid: Grid, layerId: string, wrapAround: boolean): DataTexture {
-  const pixels = gridToRgba(grid, FIRST_INSTANT, rampFor(layerId), layerId);
+/** Instant `frame` limited to the grid's instants, so a stale index never throws. */
+function frameIn(grid: Grid, frame: number): number {
+  if (!Number.isFinite(frame)) return FIRST_INSTANT;
+  return Math.min(grid.frames - 1, Math.max(0, Math.round(frame)));
+}
+
+function textureOf(grid: Grid, layerId: string, wrapAround: boolean, frame: number): DataTexture {
+  const pixels = gridToRgba(grid, frameIn(grid, frame), rampFor(layerId), layerId);
   const texture = new DataTexture(pixels, grid.width, grid.height, RGBAFormat, UnsignedByteType);
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearFilter;
@@ -190,13 +205,16 @@ export interface LayerTextures {
   opacity: number;
   /** How much the base image is dimmed to grey under this layer (0..1). */
   baseDim: number;
+  /** Instant currently drawn in `global` and `region`. */
+  frame: number;
 }
 
 /**
- * three.js textures of the first instant of a layer. Rows keep the grid order
- * (north first), so shaders sample them with `v = (north - lat) / (north - south)`.
+ * three.js textures of one instant of a layer (the first by default). Rows keep
+ * the grid order (north first), so shaders sample them with
+ * `v = (north - lat) / (north - south)`.
  */
-export function layerTextureFor(layer: LoadedLayer): LayerTextures {
+export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTANT): LayerTextures {
   const id = layer.manifest.id;
   const created: DataTexture[] = [];
   const keep = (texture: DataTexture): DataTexture => {
@@ -204,8 +222,8 @@ export function layerTextureFor(layer: LoadedLayer): LayerTextures {
     return texture;
   };
   try {
-    const global = layer.global ? keep(textureOf(layer.global, id, true)) : null;
-    const region = keep(textureOf(layer.region, id, false));
+    const global = layer.global ? keep(textureOf(layer.global, id, true, frame)) : null;
+    const region = keep(textureOf(layer.region, id, false, frame));
     const relief = RELIEF_LAYERS.has(id);
     const heightGlobal = relief && layer.global ? keep(heightTextureOf(layer.global, id, true)) : null;
     const heightRegion = relief ? keep(heightTextureOf(layer.region, id, false)) : null;
@@ -217,12 +235,32 @@ export function layerTextureFor(layer: LoadedLayer): LayerTextures {
       heightRegion,
       opacity: ramp.opacity ?? LAYER_OPACITY_DEFAULT,
       baseDim: ramp.baseDim ?? 0,
+      frame: frameIn(layer.region, frame),
     };
   } catch (cause) {
     // Some textures may already exist when a later one throws.
     for (const texture of created) texture.dispose();
     throw cause;
   }
+}
+
+/**
+ * Redraws the layer's textures at another instant, in place: the shader keeps the
+ * same textures and only their pixels change, so one instant replaces the previous
+ * one (nothing accumulates). Does nothing when that instant is already drawn.
+ * Heights (relief) stay on the first instant: only static layers have relief.
+ */
+export function showLayerFrame(textures: LayerTextures, layer: LoadedLayer, frame: number): void {
+  const next = frameIn(layer.region, frame);
+  if (next === textures.frame) return;
+  const id = layer.manifest.id;
+  const redraw = (texture: DataTexture, grid: Grid): void => {
+    texture.image.data = gridToRgba(grid, frameIn(grid, next), rampFor(id), id);
+    texture.needsUpdate = true;
+  };
+  if (textures.global && layer.global) redraw(textures.global, layer.global);
+  redraw(textures.region, layer.region);
+  textures.frame = next;
 }
 
 export function disposeLayerTextures(textures: LayerTextures): void {

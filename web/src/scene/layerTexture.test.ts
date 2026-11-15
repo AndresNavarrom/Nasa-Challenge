@@ -12,6 +12,7 @@ import {
   rampAlpha,
   rampColor,
   rampFor,
+  showLayerFrame,
   type ColorRamp,
 } from "./layerTexture";
 
@@ -87,6 +88,56 @@ describe("forest drawn like NASA SVS 4950", () => {
     expect(flat.heightRegion).toBeNull();
     expect(flat.opacity).toBe(0.8);
     disposeLayerTextures(flat);
+  });
+});
+
+describe("instants following the timeline", () => {
+  const manifest: LayerManifest = {
+    id: "smoke",
+    title: "Smoke",
+    description: "Test layer",
+    source: { title: "Test", url: "https://example.com" },
+    static: false,
+    sample: true,
+    dates: ["t0", "t1", "t2"],
+    global: { width: 2, height: 1, frames: 3, file: "global.bin", texture: "global.png" },
+    region: { width: 1, height: 1, frames: 3, file: "region.bin", texture: "region.png" },
+  };
+  const layer: LoadedLayer = {
+    manifest,
+    global: { width: 2, height: 1, frames: 3, data: Uint8Array.from([0, 0, 255, 255, 51, 51]) },
+    region: { width: 1, height: 1, frames: 3, data: Uint8Array.from([0, 255, 51]) },
+  };
+  const ramp = rampFor("smoke");
+
+  it("starts on the instant asked for and replaces it in place, never accumulating", () => {
+    const textures = layerTextureFor(layer);
+    expect(textures.frame).toBe(0);
+    const region = textures.region;
+    const global = textures.global!;
+
+    showLayerFrame(textures, layer, 1);
+    expect(textures.frame).toBe(1);
+    // Same textures (the shader keeps them), new pixels: only instant 1 shows.
+    expect(textures.region).toBe(region);
+    expect(textures.global).toBe(global);
+    expect(Array.from(region.image.data as Uint8Array)).toEqual(Array.from(gridToRgba(layer.region, 1, ramp, "smoke")));
+    expect(Array.from(global.image.data as Uint8Array)).toEqual(Array.from(gridToRgba(layer.global!, 1, ramp, "smoke")));
+
+    // Going back shows instant 0 again, not a mix of what was shown before.
+    showLayerFrame(textures, layer, 0);
+    expect(Array.from(region.image.data as Uint8Array)).toEqual(Array.from(gridToRgba(layer.region, 0, ramp, "smoke")));
+    disposeLayerTextures(textures);
+  });
+
+  it("builds at a later instant and limits instants outside the grid", () => {
+    const textures = layerTextureFor(layer, 2);
+    expect(textures.frame).toBe(2);
+    showLayerFrame(textures, layer, 99);
+    expect(textures.frame).toBe(2);
+    showLayerFrame(textures, layer, -4);
+    expect(textures.frame).toBe(0);
+    disposeLayerTextures(textures);
   });
 });
 

@@ -13,7 +13,7 @@ import { useSoundEngine } from "./audio/useSoundEngine";
 import { loadJukeboxData } from "./data/loadManifest";
 import type { JukeboxData } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
-import { framePosition } from "./lib/timeline";
+import { frameIndexAt, framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
 import {
@@ -59,6 +59,7 @@ function PlanetView({
   onShowTour,
 }: PlanetViewProps) {
   const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
+  const [frame, setFrame] = useState(0);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
@@ -87,10 +88,12 @@ function PlanetView({
 
   return (
     <>
+      <FrameTracker frames={activeLayer?.region.frames ?? 1} onFrame={setFrame} />
       <div className="absolute inset-0">
         <EarthScene
           data={data}
           activeLayer={activeLayer}
+          frame={activeLayer ? Math.min(frame, activeLayer.region.frames - 1) : 0}
           targetView={targetView}
           lite={lite}
           onRequestView={setTargetView}
@@ -119,6 +122,21 @@ function PlanetView({
       />
     </>
   );
+}
+
+/**
+ * Turns the shared timeline position into the instant of the active layer that
+ * is on screen (the same one the timeline bar's date names). It reads the clock
+ * about 30 times a second but reports only when the instant changes, so the
+ * planet view re-renders once per instant, not on every clock tick.
+ */
+function FrameTracker({ frames, onFrame }: { frames: number; onFrame: (frame: number) => void }) {
+  const { position } = useTimeline();
+  const frame = frameIndexAt(position, frames);
+  useEffect(() => {
+    onFrame(frame);
+  }, [frame, onFrame]);
+  return null;
 }
 
 /**
