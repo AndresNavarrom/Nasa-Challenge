@@ -5,6 +5,7 @@
 // timeline.
 
 import type { LayerId } from "../data/types";
+import { clampUnit } from "./mapping";
 
 export interface TempoStyle {
   wave: OscillatorType;
@@ -19,6 +20,11 @@ export const TEMPO_BEATS_PER_FRAME: Partial<Record<LayerId, number>> = {};
 
 /** Editable character of each timed layer's mark. Empty for now. */
 export const TEMPO_STYLES: Partial<Record<LayerId, TempoStyle>> = {};
+
+/** Lightning regional tempo: 90 bpm at value 0, 120 bpm at value 1. */
+export function lightningBpm(value: number): number {
+  return 90 + clampUnit(value) * 30;
+}
 
 /** Timeline fraction between two marks, or null for a layer with no timed marks. */
 export function tempoStep(frames: number, beatsPerFrame: number | undefined): number | null {

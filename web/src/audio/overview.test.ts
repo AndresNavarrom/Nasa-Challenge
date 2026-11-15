@@ -12,7 +12,9 @@ import {
   buildOverviewColumns,
   overviewGain,
   overviewPitchHz,
+  pitchForValue,
   visibleAverage,
+  visibleValueRange,
   type VisibleField,
 } from "./overview";
 
@@ -35,6 +37,15 @@ describe("overview mapping", () => {
     expect(overviewGain(1)).toBeCloseTo(1, 6);
     expect(overviewGain(0.5)).toBeCloseTo(0.25, 6);
     expect(overviewGain(0.25)).toBeCloseTo(0.0625, 6);
+  });
+
+  it("finds the visible value range for the regional pitch span", () => {
+    const field: VisibleField = [
+      { screenX: 0, cells: [{ lon: -10, lat: 0, screenX: 0, screenY: 0 }] },
+      { screenX: 1, cells: [{ lon: 10, lat: 0, screenX: 1, screenY: 0 }] },
+    ];
+    expect(visibleValueRange(field, (lon) => (lon < 0 ? 0.2 : 0.8))).toEqual({ min: 0.2, max: 0.8 });
+    expect(visibleValueRange(field, () => null)).toBeNull();
   });
 
   it("uses the visible average as the trigger threshold", () => {
@@ -80,6 +91,16 @@ describe("overview mapping", () => {
     expect(columns[0]!.cells[1]!.gain).toBe(0);
     expect(columns[0]!.cells[0]!.gain).toBeGreaterThan(0);
     expect(columns[1]!.cells[0]!.gain).toBe(0);
+  });
+
+  it("maps a layer value directly to a rising pitch", () => {
+    expect(pitchForValue(0)).toBeCloseTo(OVERVIEW_BASE_HZ, 6);
+    expect(pitchForValue(0.5)).toBeGreaterThan(pitchForValue(0.25));
+    expect(pitchForValue(1)).toBeCloseTo(OVERVIEW_BASE_HZ * 4, 6);
+    expect(pitchForValue(1, MAJOR_PENTATONIC_SEMITONES, 0, 1)).toBeCloseTo(
+      OVERVIEW_BASE_HZ * 2,
+      6,
+    );
   });
 
   it("uses the minor pentatonic scale for CO2 and keeps the others major", () => {

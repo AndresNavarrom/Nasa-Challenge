@@ -130,18 +130,32 @@ export interface OverviewColumn {
   cells: OverviewCell[];
 }
 
+/**
+ * Pitch of a normalized 0..1 value on an overview scale. `octaves` controls
+ * how many octaves the 0..1 range spans (the overview uses two, the regional
+ * point uses one).
+ */
+export function pitchForValue(
+  value: number,
+  scale: readonly number[] = MAJOR_PENTATONIC_SEMITONES,
+  octave = 0,
+  octaves = 2,
+): number {
+  const notes = scale.length > 0 ? scale : MAJOR_PENTATONIC_SEMITONES;
+  const steps = Math.max(1, Math.round(notes.length * octaves));
+  const step = Math.round(clampUnit(value) * steps);
+  const note = notes[step % notes.length] ?? 0;
+  const scaleOctave = Math.floor(step / notes.length);
+  return OVERVIEW_BASE_HZ * 2 ** ((scaleOctave * 12 + note) / 12 + octave);
+}
+
 /** Pitch of an absolute latitude on an overview scale: poles low, equator high. */
 export function overviewPitchHz(
   latitude: number,
   scale: readonly number[] = MAJOR_PENTATONIC_SEMITONES,
   octave = 0,
 ): number {
-  const amount = clampUnit(Math.abs(latitude) / 90);
-  const step = Math.round(amount * OVERVIEW_PITCH_STEPS);
-  const notes = scale.length > 0 ? scale : MAJOR_PENTATONIC_SEMITONES;
-  const note = notes[step % notes.length] ?? 0;
-  const scaleOctave = Math.floor(step / notes.length);
-  return OVERVIEW_BASE_HZ * 2 ** ((scaleOctave * 12 + note) / 12 + octave);
+  return pitchForValue(Math.abs(latitude) / 90, scale, octave, 2);
 }
 
 /**
@@ -155,6 +169,31 @@ export function overviewGain(value: number | null, threshold = 0): number {
   const amount = clampUnit(value);
   if (amount < clampUnit(threshold)) return 0;
   return amount ** 2;
+}
+
+/** Lowest and highest valid values in the visible field, or null when empty. */
+export interface VisibleRange {
+  min: number;
+  max: number;
+}
+
+/** Lowest and highest valid values in the visible field, or null when empty. */
+export function visibleValueRange(
+  field: VisibleField,
+  sample: (lon: number, lat: number) => number | null,
+): VisibleRange | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const column of field) {
+    for (const cell of column.cells) {
+      if (!cell) continue;
+      const value = sample(cell.lon, cell.lat);
+      if (value === null || !Number.isFinite(value)) continue;
+      min = Math.min(min, clampUnit(value));
+      max = Math.max(max, clampUnit(value));
+    }
+  }
+  return min <= max ? { min, max } : null;
 }
 
 /** Average of the valid cells in the visible field; 0 when nothing is visible. */

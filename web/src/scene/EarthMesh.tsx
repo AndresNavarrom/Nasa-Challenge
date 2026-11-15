@@ -797,21 +797,25 @@ export function EarthMesh({
     emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX, touch: pointerRef.current.touch });
   };
 
-  // Sample a small screen grid over the visible globe for the overview scanner.
-  // It uses screen space, so the column on the right is the column heard on the
-  // right, and raycasting naturally leaves out the part of the grid off the globe.
+  // Sample a small screen grid over the visible globe or region map. It uses
+  // screen space, so the column on the right is the column heard on the right,
+  // and raycasting naturally leaves out the part of the grid off the surface.
   useFrame((state, delta) => {
     if (!onOverviewField) return;
-    if (mode !== "globe") {
+    const globe = mode === "globe";
+    const map = mode === "map";
+    if (!globe && !map) {
       overviewSince.current = 0;
       return;
     }
     overviewSince.current += delta;
     if (overviewSince.current < 0.1) return;
     overviewSince.current = 0;
-    const sphere = sphereMesh.current;
-    if (!sphere) return;
-    sphere.updateMatrixWorld(true);
+    const sphere = globe ? sphereMesh.current : null;
+    const plane = map ? planeMesh.current : null;
+    const target = sphere ?? plane;
+    if (!target) return;
+    target.updateMatrixWorld(true);
     pickGroup.current?.updateMatrixWorld(true);
 
     const columns: VisibleColumn[] = [];
@@ -822,8 +826,14 @@ export function EarthMesh({
         const screenY = (row + 0.5) / OVERVIEW_ROWS;
         overviewNdc.set(screenX * 2 - 1, 1 - screenY * 2);
         state.raycaster.setFromCamera(overviewNdc, state.camera);
-        const hit = state.raycaster.intersectObject(sphere, false)[0];
-        const point = hit ? sphereLonLat(hit.point) : null;
+        const hit = state.raycaster.intersectObject(target, false)[0];
+        const point = sphere
+          ? hit
+            ? sphereLonLat(hit.point)
+            : null
+          : hit?.uv
+            ? planeUvToLonLat(hit.uv.x, 1 - hit.uv.y)
+            : null;
         cells.push(point ? { lon: point.lon, lat: point.lat, screenX, screenY } : null);
       }
       columns.push({ screenX, cells });
@@ -832,7 +842,7 @@ export function EarthMesh({
   });
 
   useEffect(() => {
-    if (mode !== "globe") onOverviewField?.(null);
+    if (mode !== "globe" && mode !== "map") onOverviewField?.(null);
   }, [mode, onOverviewField]);
 
   // Browsers only send pointer events when the mouse moves. While the planet
@@ -969,7 +979,7 @@ export function EarthMesh({
             <sphereGeometry args={[GLOBE_RADIUS * 1.002, 64, 32]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="globe" selectedPoint={null} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="globe" selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
         </group>
       )}
 
@@ -987,7 +997,7 @@ export function EarthMesh({
             <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="map" bbox={bbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="map" bbox={focusBbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
           {scenes && scenes.length > 0 && onSceneSelect && (
             <SceneMarkers
               scenes={scenes}

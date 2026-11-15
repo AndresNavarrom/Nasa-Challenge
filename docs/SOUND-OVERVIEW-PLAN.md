@@ -12,8 +12,11 @@ single locked point. Every screen column sounds at once:
 - The 12 visible columns are panned across the stereo field and sound
   simultaneously; there is no scan clock or ping-pong.
 - Auto-rotate off freezes the data frame, but the field keeps sounding.
-- The region map keeps the existing point mode (click locks, drag moves, double
-  click returns). The planet has no point selection.
+- The region map keeps point selection (click locks, drag moves, double click
+  returns), but it uses the same instrument table as the overview: the selected
+  point's left-right screen position sets pan, and the layer value sets a
+  discrete pitch over one octave of the visible value range. The planet has no
+  point selection, but the selected marker remains visible there.
 
 ## Field and mapping
 
@@ -77,7 +80,13 @@ still apply.
 
 - `EarthMesh` samples the visible screen field and publishes it through a ref.
 - `DataAudio` turns the field into all columns and updates the engine every 100 ms.
-- Globe and return transitions use the overview; the region map uses point mode.
+- Globe and return transitions use the overview; the region map uses the same
+  instruments in a single regional voice (value -> discrete pitch across one
+  octave of the visible range, screen X -> pan). A separate regional gain keeps
+  that single voice below the overview mix. Lightning uses decaying notes at a
+  value-dependent 90–120 bpm instead of a sustained note.
+- Forest birds also play in the regional view; the selected marker is drawn on
+  both the globe and the regional map.
 - Auto-rotate, drag, and the map still control data time as before.
 - The globe uses drag-to-rotate and double-click-to-zoom; point selection is
   hidden from the globe HUD.
