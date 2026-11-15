@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import audioStartSource from "../audio/AudioStart.tsx?raw";
 import earthSceneSource from "../scene/EarthScene.tsx?raw";
 import planetHudSource from "./PlanetHud.tsx?raw";
+import timelineTrackSource from "./TimelineTrack.tsx?raw";
 import {
   TOUR_BUTTON_TEST_ID,
   TOUR_SEEN_KEY,
@@ -33,7 +34,7 @@ const brokenStore: FlagStore = {
 };
 
 /** Source of the files that render the controls the tour points at. */
-const CONTROL_SOURCES = [planetHudSource, audioStartSource, earthSceneSource];
+const CONTROL_SOURCES = [planetHudSource, audioStartSource, earthSceneSource, timelineTrackSource];
 
 describe("guided tour steps", () => {
   it("opens with a centred welcome window", () => {
@@ -42,19 +43,31 @@ describe("guided tour steps", () => {
     expect(TOUR_STEPS[0]?.title).toMatch(/welcome/i);
   });
 
-  it("points every other step at a control by its data-testid", () => {
-    for (const step of TOUR_STEPS.slice(1)) {
-      expect(step.testId).toBeTruthy();
+  it("points every highlighted step at a control by its data-testid", () => {
+    const highlighted = TOUR_STEPS.slice(1).filter((step) => step.testId);
+    expect(highlighted.length).toBeGreaterThan(0);
+    for (const step of highlighted) {
       expect(stepSelector(step)).toBe(`[data-testid="${step.testId}"]`);
     }
   });
 
   it("only points at controls that exist in the interface", () => {
     for (const step of TOUR_STEPS.slice(1)) {
+      if (!step.testId) continue;
       const literal = `data-testid="${step.testId}"`;
       const viaConstant = step.testId === TOUR_BUTTON_TEST_ID && CONTROL_SOURCES[0]!.includes("data-testid={TOUR_BUTTON_TEST_ID}");
       expect(viaConstant || CONTROL_SOURCES.some((source) => source.includes(literal)), `${step.testId} not found`).toBe(true);
     }
+  });
+
+  it("opens a timed layer before pointing at the timeline", () => {
+    const autoIndex = TOUR_STEPS.findIndex((step) => step.testId === "planet-hud-auto-rotate");
+    const timelineIndex = TOUR_STEPS.findIndex((step) => step.testId === "timeline-track");
+    const speedIndex = TOUR_STEPS.findIndex((step) => step.testId === "timeline-speed");
+    expect(autoIndex).toBeGreaterThanOrEqual(0);
+    expect(TOUR_STEPS[autoIndex]?.onNext).toBe("show-timeline");
+    expect(timelineIndex).toBeGreaterThan(autoIndex);
+    expect(speedIndex).toBeGreaterThan(timelineIndex);
   });
 
   it("ends on the button that repeats it", () => {
