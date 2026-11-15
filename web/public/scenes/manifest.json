@@ -35,9 +35,9 @@
     {
       "id": "storm",
       "title": "Amazon Storms",
-      "description": "Storms and heavy rain are part of the Amazon water cycle. Lightning is most frequent where the atmosphere is unstable, and the forest depends on this water and energy.",
-      "lon": -70.05,
-      "lat": -13.25,
+      "description": "Storms and heavy rain are part of the Amazon water cycle. Lightning is most frequent where the atmosphere is unstable, and the forest depends on this water and energy. The Amazon rainforest receives some of the highest levels of rainfall in the world, with an average of 2.000 to 3.000 millimeters per year in many areas.",
+      "lon": -62.45,
+      "lat": -3.65,
       "image": "scenes/storm/storm.jpg",
       "imageAlt": "Rain falling over an Amazon river",
       "loop": "scenes/storm/storm.ogg",
@@ -48,7 +48,7 @@
     {
       "id": "deforestation",
       "title": "Deforestation",
-      "description": "This point has some of the lowest forest height in the data while tall forest surrounds it: a clearing in the Amazon. Cleared and degraded forest changes the landscape and its ecosystems.",
+      "description": "Deforestation is one of the major threats to the Amazon rainforest, mainly caused by agriculture, cattle ranching, illegal logging and mining; every year, large areas of forest are cleared, destroying natural habitats, threatening wildlife and contributing to climate change.",
       "lon": -58.65,
       "lat": -1.05,
       "image": "scenes/deforestation/deforestation.jpg",

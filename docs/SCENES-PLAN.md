@@ -264,10 +264,11 @@ Total: roughly **10–12 h**; the audio and marker pieces can be developed in pa
 ## Implementation notes
 
 - Coordinates are filled: birds `(-68.546, -3.398)`, river `(-73.246, -0.868)`,
-  storm `(-70.050, -13.250)`, deforestation `(-58.650, -1.050)`.
-- The storm point is the maximum of the lightning layer in the Amazon; the
-  deforestation point is a low-forest cell surrounded by tall forest in the
-  central Amazon (value 7/255, about 1.4 m on the GEDI scale).
+  storm `(-62.450, -3.650)`, deforestation `(-58.650, -1.050)`.
+- The storm point is a high-lightning cell (190/255) in the central Amazon,
+  chosen instead of the absolute maximum near the Andean edge. The deforestation
+  point is a low-forest cell surrounded by tall forest in the central Amazon
+  (value 7/255, about 1.4 m on the GEDI scale).
 - `tools/scenes/prepare.py` validates them against the Amazon box and publishes
   `web/public/scenes/` (`scenes-prep` Docker service).
 - Markers are small white dots (half the previous size) with a thin white pulse
