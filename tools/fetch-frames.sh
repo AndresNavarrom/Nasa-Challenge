@@ -1,25 +1,37 @@
 #!/usr/bin/env bash
-# Downloads the NASA Scientific Visualization Studio frames used by Earth Jukebox
-# into data/raw/ and rewrites data/SOURCES.md with every file and its link.
+# Downloads the sources used by Earth Jukebox into data/raw/, turns the formats
+# that jukebox-prep cannot read (NetCDF, video, 16-bit TIFF) into plain images,
+# and rewrites data/SOURCES.md with every file and its link.
 #
-# Usage (from the repository root):  tools/fetch-frames.sh
-# Needs: curl, ffmpeg. Set FORCE=1 to download again files that already exist.
+# Runs inside the earth-jukebox-fetch container (tools/fetch/Dockerfile), which
+# holds curl, ffmpeg, unzip and Python with netCDF4, numpy and Pillow:
 #
-# Total download is about 30 MB plus a few seconds of range requests against one
-# large video (frames are extracted remotely, the video is not stored).
+#   docker compose build fetch
+#   docker compose run --rm fetch          (from the repository root)
+#
+# Set FORCE=1 (docker compose run --rm -e FORCE=1 fetch) to download again files
+# that already exist. No download needs a login.
+#
+# Total download is about 1.9 GB: Natural Earth (324 MB zip), 24 hours of
+# GEOS-CF (about 160 MB), one pass over the SVS 5011 lightning video (350 MB,
+# streamed, not stored) and 14 frames of SVS 4950 in 4K (66 MB each as 16-bit
+# TIFF, kept as 8-bit PNG). Files from earlier versions of this script (SVS
+# 5533, SVS 5196, SVS 3615) stay in data/raw/ and are no longer downloaded.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RAW="$ROOT/data/raw"
 SOURCES="$ROOT/data/SOURCES.md"
+FETCH_TOOLS="$ROOT/tools/fetch"
 UA="Mozilla/5.0 (compatible; data-fetch-script)"
 SVS="https://svs.gsfc.nasa.gov/vis/a000000"
 FORCE="${FORCE:-0}"
 ROWS=""
 
-for tool in curl ffmpeg; do
+for tool in curl ffmpeg unzip python3; do
   if ! command -v "$tool" >/dev/null 2>&1; then
-    echo "fetch-frames: '$tool' is required but was not found in PATH" >&2
+    echo "fetch-frames: '$tool' is required but was not found in PATH." >&2
+    echo "fetch-frames: run it in Docker: docker compose run --rm fetch" >&2
     exit 1
   fi
 done
@@ -28,140 +40,171 @@ record() { # file, link, how it was obtained
   ROWS+="| \`data/raw/$1\` | <$2> | $3 |"$'\n'
 }
 
+have() { # relative path: true when the file exists and FORCE is off
+  [[ "$FORCE" != "1" && -s "$RAW/$1" ]]
+}
+
 download() { # relative destination, url
   local dest="$RAW/$1" url="$2"
   mkdir -p "$(dirname "$dest")"
-  if [[ "$FORCE" != "1" && -s "$dest" ]]; then
+  if have "$1"; then
     echo "  have   $1"
   else
     echo "  fetch  $1"
-    if ! curl -fsSL --retry 2 --connect-timeout 20 --max-time 600 -A "$UA" -o "$dest.part" "$url"; then
+    if ! curl -fsSL --retry 3 --connect-timeout 20 --max-time 1800 -A "$UA" -o "$dest.part" "$url"; then
       rm -f "$dest.part"
       echo "fetch-frames: download failed: $url" >&2
       exit 1
     fi
     mv "$dest.part" "$dest"
   fi
-  record "$1" "$url" "downloaded as published"
 }
 
-frame_from_file() { # relative video, seconds, relative destination
-  local video="$RAW/$1" at="$2" dest="$RAW/$3"
-  mkdir -p "$(dirname "$dest")"
-  if [[ "$FORCE" == "1" || ! -s "$dest" ]]; then
-    echo "  frame  $3 (at ${at}s)"
-    if ! ffmpeg -v error -y -ss "$at" -i "$video" -frames:v 1 "$dest"; then
-      echo "fetch-frames: could not extract a frame at ${at}s from $1" >&2
+echo "Base image - Natural Earth I 10m with shaded relief and water"
+NE_ZIP_URL="https://naciscdn.org/naturalearth/10m/raster/NE1_HR_LC_SR_W_DR.zip"
+NE_TIF="naturalearth/NE1_HR_LC_SR_W_DR.tif"
+download "naturalearth/NE1_HR_LC_SR_W_DR.zip" "$NE_ZIP_URL"
+record "naturalearth/NE1_HR_LC_SR_W_DR.zip" "$NE_ZIP_URL" "downloaded as published"
+if have "$NE_TIF"; then
+  echo "  have   $NE_TIF"
+else
+  echo "  unzip  $NE_TIF"
+  if ! unzip -o -q -j "$RAW/naturalearth/NE1_HR_LC_SR_W_DR.zip" "NE1_HR_LC_SR_W_DR.tif" -d "$RAW/naturalearth"; then
+    echo "fetch-frames: NE1_HR_LC_SR_W_DR.tif is not in the Natural Earth zip ($NE_ZIP_URL)" >&2
+    exit 1
+  fi
+fi
+record "$NE_TIF" "$NE_ZIP_URL" "extracted from the zip (21600 x 10800 GeoTIFF)"
+
+echo "Wildfire smoke - GEOS-CF v2 surface PM2.5, 1 September 2026, hourly"
+GEOSCF="https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ana/Y2026/M09/D01"
+for hour in $(seq -w 0 23); do
+  name="GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20260901_${hour}30z.R0.nc4"
+  png="geoscf/pm25_${hour}30.png"
+  download "geoscf/nc/$name" "$GEOSCF/$name"
+  record "geoscf/nc/$name" "$GEOSCF/$name" "downloaded as published"
+  if have "$png"; then
+    echo "  have   $png"
+  elif ! python3 "$FETCH_TOOLS/geoscf_to_png.py" "$RAW/geoscf/nc/$name" "$RAW/$png"; then
+    echo "fetch-frames: could not convert $name" >&2
+    exit 1
+  fi
+  record "$png" "$GEOSCF/$name" "PM25_RH35 on 1440 x 720 cells, 0 to 150 ug/m3 as grey 0 to 255, by tools/fetch/geoscf_to_png.py"
+done
+
+echo "Lightning - ISS LIS 2017-2023 (SVS 5011)"
+LIGHTNING_VIDEO="$SVS/a005000/a005011/iss_lightning_sos_yearly_07312023_2048p60.mp4"
+LIGHTNING_PNG="5011/lightning_2017_2023.png"
+mkdir -p "$RAW/5011"
+if have "$LIGHTNING_PNG"; then
+  echo "  have   $LIGHTNING_PNG"
+else
+  # The video shows a 10-day roving window (its last frame is empty), so the
+  # accumulated map combines one frame every 0.4 s (about every 10 days) of the
+  # whole video. The video is read once over the network and not stored.
+  echo "  frames $LIGHTNING_PNG (remote, one frame every 0.4 s, about 2 minutes)"
+  if ! ffmpeg -v error -user_agent "$UA" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10 \
+      -i "$LIGHTNING_VIDEO" -vf "fps=2.5" -f rawvideo -pix_fmt rgb24 - \
+      | python3 "$FETCH_TOOLS/lightning_composite.py" 4096 2048 "$RAW/$LIGHTNING_PNG" 240; then
+    rm -f "$RAW/$LIGHTNING_PNG"
+    echo "fetch-frames: could not build the lightning map from $LIGHTNING_VIDEO" >&2
+    exit 1
+  fi
+fi
+record "$LIGHTNING_PNG" "$LIGHTNING_VIDEO" "mean lightning (yellow) of about 250 frames, one every 0.4 s, by tools/fetch/lightning_composite.py"
+
+echo "Forest height - GEDI (SVS 4950), 4K frames"
+GEDI="$SVS/a004900/a004950"
+GEDI_FRAMES="$GEDI/frames/3840x2160_16x9_60p/GEDI_global"
+download "4950/GEDI_colorbar_0to50_01_print.jpg" "$GEDI/GEDI_colorbar_0to50_01_print.jpg"
+record "4950/GEDI_colorbar_0to50_01_print.jpg" "$GEDI/GEDI_colorbar_0to50_01_print.jpg" "downloaded as published"
+# Same 14 globe turns as the 1080p video frames used before (3.3 s to 46.5 s,
+# 3.6 s apart): 4K frame number = seconds x 60 + 1 (checked by image
+# comparison: frame 1500 matches video frame 1499 counted from 0). The 4K
+# sequence ends at frame 2999 (49.97 s), so it replaces the 50.1 s view.
+for frame in 0199 0415 0631 0847 1063 1279 1495 1711 1927 2143 2359 2575 2791 2999; do
+  tif="4950/4k/GEDI_global.$frame.tif"
+  png="4950/4k/GEDI_global.$frame.png"
+  if have "$png"; then
+    echo "  have   $png"
+  else
+    download "$tif" "$GEDI_FRAMES/GEDI_global.$frame.tif"
+    echo "  png    $png"
+    if ! ffmpeg -v error -y -i "$RAW/$tif" -pix_fmt rgb24 "$RAW/$png"; then
+      rm -f "$RAW/$png"
+      echo "fetch-frames: could not convert $tif to PNG" >&2
       exit 1
     fi
-  else
-    echo "  have   $3"
+    rm -f "$RAW/$tif" # 66 MB of 16-bit TIFF; the 8-bit PNG is what jukebox-prep reads
   fi
-}
-
-frame_from_url() { # url, seconds, relative destination, ffmpeg scale
-  local url="$1" at="$2" dest="$RAW/$3" scale="$4"
-  mkdir -p "$(dirname "$dest")"
-  if [[ "$FORCE" == "1" || ! -s "$dest" ]]; then
-    echo "  frame  $3 (remote, at ${at}s)"
-    if ! ffmpeg -v error -y -user_agent "$UA" -ss "$at" -i "$url" -frames:v 1 -vf "scale=$scale" "$dest"; then
-      echo "fetch-frames: could not extract a frame at ${at}s from $url" >&2
-      exit 1
-    fi
-  else
-    echo "  have   $3"
-  fi
-  record "$3" "$url" "video frame at ${at} s, scaled to ${scale/:/ x } with ffmpeg"
-}
-
-echo "Forest height - GEDI (SVS 4950)"
-GEDI_VIDEO="$SVS/a004900/a004950/GEDI_global_w_colorbar_1080p60.mp4"
-download "4950/GEDI_global_w_colorbar_1080p60.mp4" "$GEDI_VIDEO"
-download "4950/GEDI_colorbar_0to50_01_print.jpg" "$SVS/a004900/a004950/GEDI_colorbar_0to50_01_print.jpg"
-# The globe makes one turn in about 50.6 s; 14 frames, 3.6 s (25.6 degrees) apart.
-for at in 3.3 6.9 10.5 14.1 17.7 21.3 24.9 28.5 32.1 35.7 39.3 42.9 46.5 50.1; do
-  frame_from_file "4950/GEDI_global_w_colorbar_1080p60.mp4" "$at" "4950/gedi_globe_${at}.png"
-  record "4950/gedi_globe_${at}.png" "$GEDI_VIDEO" "video frame at ${at} s, extracted with ffmpeg"
+  record "$png" "$GEDI_FRAMES/GEDI_global.$frame.tif" "4K frame (16-bit TIFF) converted to 8-bit PNG with ffmpeg"
 done
-
-echo "Wildfire smoke - GEOS-CF air quality (SVS 5533)"
-SMOKE_VIDEO="$SVS/a005500/a005533/EIC_AirQuality_Preview_3840x1080.mp4"
-# Clip times at which the Amazon rectangle sits fully inside the PM2.5 stripe.
-for at in 0 4 53 57 61 65; do
-  frame_from_url "$SMOKE_VIDEO" "$at" "5533/eic_airquality_${at}.png" "1920:540"
-done
-
-echo "Global CO2 - DYAMOND (SVS 5196)"
-CO2_VIDEO="$SVS/a005100/a005196/dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_1080p30_h265.mp4"
-download "5196/dyamond_co2_globe_orbit_1080p30_h265.mp4" "$CO2_VIDEO"
-download "5196/dyamondCbar_6-27-2024a.png" "$SVS/a005100/a005196/dyamondCbar_6-27-2024a.png"
-# South America faces the camera here. The video advances one model hour per
-# frame (30 per second), so frames 0.2 s apart are six hours apart:
-# 23 Feb 2020 00:00 UTC to 25 Feb 2020 18:00 UTC.
-for at in 31.3 31.5 31.7 31.9 32.1 32.3 32.5 32.7 32.9 33.1 33.3 33.5; do
-  frame_from_file "5196/dyamond_co2_globe_orbit_1080p30_h265.mp4" "$at" "5196/co2_globe_${at}.png"
-  record "5196/co2_globe_${at}.png" "$CO2_VIDEO" "video frame at ${at} s, extracted with ffmpeg"
-done
-
-echo "Base image of the planet (SVS 3615)"
-download "earth/earth_noClouds.0330.jpg" "$SVS/a003600/a003615/earth_noClouds.0330.jpg"
 
 cat >"$SOURCES" <<EOF
 # Data sources
 
-Everything shown and heard in Earth Jukebox comes from visualizations published
-by the NASA Scientific Visualization Studio (SVS) for the Earth Information
-Center. This file is rewritten by \`tools/fetch-frames.sh\`.
-
-## Important: what the values are
-
-The values are **relative intensities (0 to 1) read from the colours of rendered
-visualization frames**. They are not physical measurements and must not be read
-as metres, micrograms or ppm. Georeferencing of the globe views was done by hand
-(coastline landmarks) and is approximate, with errors of roughly 1 to 2 degrees.
+Everything shown and heard in Earth Jukebox comes from the public sources
+below. No source needs a login. This file is rewritten by
+\`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fetch\`).
 
 ## Layers
 
-| Layer | NASA visualization | Frames used | View | How colour becomes a value |
-|---|---|---|---|---|
-| Forest height | [GEDI Forest Height, SVS 4950](https://svs.gsfc.nasa.gov/4950) (data April 2019 - April 2020) | 14 frames of the rotating-globe video | Global mosaic and Amazon detail | Position on the published colour bar (0 to 50 m) |
-| Wildfire smoke | [Air Quality Model Runs, SVS 5533](https://svs.gsfc.nasa.gov/5533) (GEOS-CF, July - August 2024), Earth Information Center hyperwall version | 6 frames of the flat-map video | **Amazon only** | Darkness of the PM2.5 colour (pale = clean, dark = smoky) |
-| Global CO2 | [DYAMOND Global Carbon Dioxide, SVS 5196](https://svs.gsfc.nasa.gov/5196) (January - March 2020) | 12 frames of the orbiting-globe video, 23 - 25 Feb 2020, every 6 hours | **Amazon only** | "Warmth" of the pixel (red minus blue), which rises along the published colour bar (cream, orange, red) and with the opacity of the gas |
+| Layer | Source | Period | What the value is |
+|---|---|---|---|
+| Forest height | [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - April 2020 | Relative height (0 to 1) read from the colours of 14 rendered globe views, by position on the published colour bar (0 to 50 m). Not a measurement in metres. |
+| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 September 2026, 24 hourly means (00:30 to 23:30 UTC) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
+| Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, accumulated | Relative frequency (0 to 1): how often lightning was drawn at each place across the whole period, read from the video frames. Not a flash count. |
 
-## Fallbacks applied (see the risk table in the requirements)
+## How each source was turned into a map
 
-- **No .exr files** are published for these visualizations; png, jpg and mp4 frames were used.
-- **Smoke has no single flat global view of one pollutant.** The published map
-  shows four pollutants in vertical stripes that sweep across a fixed map. Only
-  the moments when the Amazon rectangle sits entirely inside the PM2.5 stripe
-  were used, so the layer is regional only. The video carries no date stamp, so
-  each instant is labelled with the period (July - August 2024) and its clip time.
-- **CO2 has no flat global view.** The camera orbits a rendered globe, so only
-  the frames where South America faces the camera were used; the layer is
-  regional only and covers 23 to 25 February 2020 in six-hour steps (dates
-  worked out from the stamp in the frames: one model hour per video frame).
-  Brightness in this visualization also depends on the viewing angle through
-  the gas, which adds to the uncertainty. The gas is drawn semi-transparent, so
-  its colours on screen are darker than the published colour bar; the bar
-  position could not be read directly and the red-minus-blue "warmth" is used
-  instead. In these frames the Amazon is brightest at 06:00 and 12:00 UTC (night
-  and early morning there) and dimmest at 18:00 UTC (early afternoon there), on
-  all three days.
-- **Forest height is a mosaic** of 14 views of a rotating globe rendered with
-  lighting and exaggerated height, so shading affects the colours.
-- On the planet, the two regional-only layers are drawn and heard over the
-  Amazon rectangle only.
+- **Smoke.** GEOS-CF stores 721 latitudes (with the poles on the end rows) by
+  1440 longitudes starting at 180 W. Each app cell (1440 x 720, 0.25 degrees,
+  north row first) is the mean of the 2 x 2 block of model points around its
+  centre (tools/fetch/geoscf_to_png.py). The layer is global, and its Amazon
+  grid keeps the model resolution (0.25 degrees).
+- **Lightning.** The video shows a 10-day roving window: each frame holds only
+  the last ten days and its last frame is empty, so no single frame holds the
+  accumulated period. One frame every 0.4 s of the video (about every 10 days
+  of data, about 250 frames in all) was combined: the value is the mean "yellowness"
+  of each pixel (lightning is drawn in yellow over a grey map), so places with
+  lightning in more windows are brighter (tools/fetch/lightning_composite.py).
+  LIS sees only between about 55 N and 55 S.
+- **Forest height.** 14 views of the rotating globe, 3.6 s apart in the video
+  (4K frames 0199 to 2999), blended into one flat map; each place takes most
+  of its value from the view that sees it most directly. The globe is rendered
+  with lighting and exaggerated height, so shading affects the colours, and
+  the georeferencing was done by hand (errors of roughly 1 to 2 degrees).
+  Places the views never show (near the poles) are 0.
+
+## Base image of the planet
+
+[Natural Earth I with Shaded Relief and Water](https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/),
+1:10 million scale (\`NE1_HR_LC_SR_W_DR\`, 21600 x 10800 pixels). Public
+domain. The app gets it in two sizes (8192 x 4096 and 4096 x 2048) plus a
+crop of the Amazon rectangle at full resolution (2160 x 1680). It is only the
+backdrop of the planet and the map; it carries no data values.
 
 ## Amazon rectangle
 
 West 80 W, east 44 W, south 20 S, north 8 N.
 
-## Base image of the planet
+## Licences and credit
 
-Cloud-free flat map of the Earth from "Equirectangular Projected Earth for
-LARGEST", NASA Scientific Visualization Studio, SVS 3615:
-<https://svs.gsfc.nasa.gov/3615>. It is only the backdrop of the planet and the
-map; it carries no data values.
+- Natural Earth: public domain
+  (<https://www.naturalearthdata.com/about/terms-of-use/>).
+- GEOS-CF: NASA Global Modeling and Assimilation Office (GMAO); NASA Earth
+  science data are open, with no restrictions on use. Credit: NASA GMAO GEOS-CF.
+- SVS 4950 and SVS 5011: NASA Scientific Visualization Studio. NASA imagery is
+  generally not copyrighted; credit NASA's Scientific Visualization Studio.
+
+## No longer used
+
+- **Global CO2** (DYAMOND, SVS 5196) is no longer in the data file. Its frames
+  in \`data/raw/5196/\` and its grid in \`web/public/data/\` stay in the
+  repository, unused.
+- The old smoke frames (SVS 5533), the 1080p GEDI video and the SVS 3615 base
+  image (\`earth.jpg\`) are no longer downloaded; files already in
+  \`data/raw/\` and \`web/public/data/earth.jpg\` are kept.
 
 ## Files
 

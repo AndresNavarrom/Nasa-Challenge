@@ -4,10 +4,14 @@
 #   docker compose up web                  interface with live reload on http://127.0.0.1:5173
 #   docker compose run --rm web-test       Vitest suite (web/src/**/*.test.ts)
 #   docker compose run --rm prep-test      cargo test for tools/prep
+#   docker compose run --rm fetch-test     pytest for the conversions in tools/fetch
+#   docker compose run --rm fetch          download the sources into data/raw/ and rewrite
+#                                          data/SOURCES.md (about 1.9 GB, needs internet)
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
 #
-# There is no database. `web-test`, `prep-test` and `prep` are one-off jobs
-# behind profiles, so a plain `docker compose up` starts the interface only.
+# Data from scratch: `fetch`, then `prep`. There is no database. `web-test`,
+# `prep-test`, `fetch-test`, `fetch` and `prep` are one-off jobs behind
+# profiles, so a plain `docker compose up` starts the interface only.
 #
 # The final app container (built interface + the Rust local server in server/)
 # is added with Steps 11 and 15 of the plan; it is not defined here yet.
@@ -33,6 +37,19 @@ x-prep: &prep
   image: earth-jukebox-prep:dev
   init: true
   working_dir: /work
+
+x-fetch: &fetch
+  build:
+    context: ./tools/fetch
+  image: earth-jukebox-fetch:dev
+  init: true
+  working_dir: /work
+  environment:
+    # geoscf_to_png.py is imported by the tests and run by fetch-frames.sh.
+    PYTHONPATH: /work/tools/fetch
+    # The source is mounted read-only: no pytest cache, no .pyc files.
+    PYTEST_ADDOPTS: "-p no:cacheprovider"
+    PYTHONDONTWRITEBYTECODE: "1"
 
 services:
   web:
@@ -67,8 +84,25 @@ services:
       - ./data:/work/data:ro
       # Output: grids, textures and manifest.json used by the interface.
       - ./web/public/data:/work/web/public/data
-    entrypoint: ["cargo", "run", "--locked", "--manifest-path", "tools/prep/Cargo.toml", "--"]
+    # Release build: 24 smoke instants at 1440 x 720 and an 8192-pixel base
+    # image are too slow to prepare with the test profile.
+    entrypoint: ["cargo", "run", "--release", "--locked", "--manifest-path", "tools/prep/Cargo.toml", "--"]
     command: ["--config", "data/prep-config.json"]
+
+  fetch-test:
+    <<: *fetch
+    profiles: ["test"]
+    volumes:
+      - ./tools/fetch:/work/tools/fetch:ro
+    command: ["pytest", "-q", "tools/fetch/tests"]
+
+  fetch:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      # Output: the downloaded and converted sources in data/raw/ and data/SOURCES.md.
+      - ./data:/work/data
 
 volumes:
   web_node_modules:
