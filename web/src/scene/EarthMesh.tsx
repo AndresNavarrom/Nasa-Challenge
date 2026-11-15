@@ -136,12 +136,6 @@ export interface EarthMeshProps {
   /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
   autoRotate: boolean;
   /**
-   * Called on every frame the planet turns by itself (never for a drag), with the
-   * angle turned in radians. The timeline plays from it, so it moves exactly
-   * while, and as fast as, the planet turns.
-   */
-  onSpin?: (radians: number) => void;
-  /**
    * How far the timeline is from the instant in `layerTextures.global/region`
    * towards the one in `globalNext/regionNext` (0..1). Read on every frame, so
    * the picture fades smoothly without React re-rendering.
@@ -522,7 +516,6 @@ export function EarthMesh({
   segments,
   raiseRelief,
   autoRotate,
-  onSpin,
   frameMix,
   reliefImages,
   dotImage,
@@ -732,14 +725,12 @@ export function EarthMesh({
   const rotation = useMemo(() => new Matrix4(), []);
   useFrame((_, delta) => {
     const state = view.current;
-    const before = state.yaw;
     state.yaw = spinStep(state.yaw, delta, {
       spinning: state.spinning,
       autoRotate,
       mode,
       dragging: dragRef.current !== null,
     });
-    if (state.yaw !== before) onSpin?.(state.yaw - before);
     uniforms.uFrameMix.value = frameMix?.current ?? 0;
     euler.set(state.pitch, state.yaw, 0);
     rotation.makeRotationFromEuler(euler);

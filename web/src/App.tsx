@@ -117,8 +117,10 @@ function PlanetView({
   const clockRef = useRef<SpinAccumulator | null>(null);
   clockRef.current ??= new SpinAccumulator(1000 / TIMELINE_UPDATE_HZ, step);
   useEffect(() => clockRef.current?.reset(), [activeLayer]);
+  // No clock for the plain Earth view or a static layer: nothing would move.
+  const timelineMoves = perTurnRef.current > 0;
   useEffect(() => {
-    if (!timelinePlaying) return;
+    if (!timelinePlaying || !timelineMoves) return;
     let frameId = 0;
     let last = performance.now();
     const tick = (now: number): void => {
@@ -128,7 +130,7 @@ function PlanetView({
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [timelinePlaying]);
+  }, [timelinePlaying, timelineMoves]);
   const selectedPoint = useListeningPoint();
   const selectedValue =
     selectedPoint && activeLayer

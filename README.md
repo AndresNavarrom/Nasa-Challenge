@@ -168,11 +168,12 @@ docker compose up web     # then open http://127.0.0.1:5173/
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked
   layer, at its real time (three hours of smoke, a day of CO2, a month of
-  lightning). It plays while the planet turns by itself: one turn is one day of
+  lightning). It plays by itself at the pace of the planet's turn: one turn is one day of
   smoke, 30 days of CO2 and one year of lightning, and the picture and the sound fade from one
   instant to the next. The 4× and 8× buttons (4× to start) make each turn cover more time
-  (the line shows `1 turn = …`); the planet keeps its pace. A drag,
-  Auto-rotate off or the map view pause it; click
+  (the line shows `1 turn = …`); the planet keeps its pace. It keeps playing on the map
+  view, during a drag and with Auto-rotate off; only the **❚❚ Pause** button
+  on the line stops it (**▶ Play** goes on). Click
   or drag along the line (or use the arrow keys, Page Up/Down for a whole
   turn) to pick a moment. The forest shows a dimmed line with its one period.
 - **Amazon only layers** (`global: null`; none today): drawn inside
