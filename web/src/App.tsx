@@ -1,7 +1,9 @@
+import type { Driver } from "driver.js";
 import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -19,9 +21,12 @@ import {
   useListeningPoint,
 } from "./scene/listeningPoint";
 import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
+import { allHeard, isHeard, withHeard, type HeardLayers } from "./ui/heardLayers";
 import { PlanetHud } from "./ui/PlanetHud";
 import { TimelineBar } from "./ui/TimelineBar";
 import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
+import { startTour } from "./ui/tour";
+import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
 type LoadState =
   | { status: "loading" }
@@ -40,18 +45,26 @@ function defaultLayerId(data: JukeboxData): string {
   return withGlobal?.manifest.id ?? "";
 }
 
+interface PlanetViewProps {
+  data: JukeboxData;
+  lite: boolean;
+  audio?: ReactNode;
+  timeline?: ReactNode;
+  heard?: HeardLayers;
+  onToggleHeard?: (layerId: string, on: boolean) => void;
+  onShowTour?: () => void;
+}
+
 /** The planet, the Amazon map and their controls, once the data is loaded. */
 function PlanetView({
   data,
   lite,
   audio,
   timeline,
-}: {
-  data: JukeboxData;
-  lite: boolean;
-  audio?: ReactNode;
-  timeline?: ReactNode;
-}) {
+  heard,
+  onToggleHeard,
+  onShowTour,
+}: PlanetViewProps) {
   const [activeLayerId, setActiveLayerId] = useState(() =>
     defaultLayerId(data),
   );
@@ -109,6 +122,9 @@ function PlanetView({
         sceneError={sceneError}
         audio={audio}
         timeline={timeline}
+        heard={heard}
+        onToggleHeard={onToggleHeard}
+        onShowTour={onShowTour}
       />
     </>
   );
@@ -175,8 +191,50 @@ function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
   );
 }
 
+/** Delay before the first-visit tour, so the HUD is laid out when it measures it. */
+const TOUR_START_DELAY_MS = 400;
+
+/**
+ * The welcome window and guided tour: shown by itself on the first visit of
+ * this browser, and again whenever `show` is called (the "?" button).
+ */
+function useGuidedTour(): () => void {
+  const tourRef = useRef<Driver | null>(null);
+
+  const show = useCallback(() => {
+    tourRef.current?.destroy();
+    tourRef.current = startTour(() => {
+      markTourSeen(browserFlagStore());
+      tourRef.current = null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hasSeenTour(browserFlagStore())) return undefined;
+    const timer = window.setTimeout(show, TOUR_START_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [show]);
+
+  // Close a tour that is still open when the view goes away.
+  useEffect(() => () => tourRef.current?.destroy(), []);
+
+  return show;
+}
+}
+
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
+  const [heard, setHeard] = useState<HeardLayers>(() => allHeard(data.layers.map((layer) => layer.manifest.id)));
+  const toggleHeard = useCallback((layerId: string, on: boolean) => setHeard((current) => withHeard(current, layerId, on)), []);
+  const showTour = useGuidedTour();
+
+  // A layer that is not heard keeps its data and drawing; only its voice goes quiet.
+  useEffect(() => {
+    for (const layer of data.layers) {
+      engine.setLayerEnabled(layer.manifest.id, isHeard(heard, layer.manifest.id));
+    }
+  }, [engine, data, heard]);
+
   return (
     <>
       <PlanetView
@@ -184,6 +242,9 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         lite={lite}
         audio={<AudioStart engine={engine} className="w-56" />}
         timeline={<TimelineControls layers={data.layers} />}
+        heard={heard}
+        onToggleHeard={toggleHeard}
+        onShowTour={showTour}
       />
       <AudioListener data={data} engine={engine} />
     </>

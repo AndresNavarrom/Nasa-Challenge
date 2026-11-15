@@ -29,6 +29,90 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * Welcome window and guided tour (driver.js, popoverClass "jukebox-tour").
+ * driver.js ships a white theme; these rules give its windows exactly the look
+ * of the HUD panels and buttons (ui/PlanetHud.tsx: `panel`, `button`, and the
+ * outlined "Mute" button of audio/AudioStart.tsx). Two class names per selector
+ * so they win over driver.css whatever the load order. Nothing outside the tour
+ * is affected.
+ */
+.driver-popover.jukebox-tour {
+  @apply rounded-lg bg-slate-950/75 p-3 font-sans text-sm shadow-lg backdrop-blur;
+  /* The panels inherit the page's text colour (body); driver.css sets its own. */
+  color: #e8edf5;
+  max-width: 20rem;
+}
+
+.jukebox-tour .driver-popover-title {
+  @apply pr-6 text-base font-semibold;
+  font-family: inherit;
+}
+
+.jukebox-tour .driver-popover-description {
+  @apply text-slate-300;
+  font-family: inherit;
+}
+
+.jukebox-tour .driver-popover-progress-text {
+  @apply text-xs text-slate-400;
+}
+
+.jukebox-tour .driver-popover-footer {
+  @apply mt-3 gap-2;
+}
+
+.jukebox-tour .driver-popover-navigation-btns {
+  @apply gap-2;
+}
+
+.jukebox-tour .driver-popover-navigation-btns button + button {
+  margin-left: 0;
+}
+
+/* "Next" and "Done": the green HUD button (Amazon, Back to Earth). */
+.jukebox-tour .driver-popover-footer-btn {
+  @apply rounded-md bg-emerald-600 px-4 py-2 font-medium text-white;
+  border: 0;
+  text-shadow: none;
+}
+
+.jukebox-tour .driver-popover-footer-btn:hover,
+.jukebox-tour .driver-popover-footer-btn:focus {
+  @apply bg-emerald-500;
+}
+
+/* "Back": the outlined button (Mute). */
+.jukebox-tour .driver-popover-prev-btn {
+  @apply border border-solid border-slate-500 bg-transparent text-slate-100;
+}
+
+.jukebox-tour .driver-popover-prev-btn:hover,
+.jukebox-tour .driver-popover-prev-btn:focus {
+  @apply border-slate-300 bg-transparent;
+}
+
+.jukebox-tour .driver-popover-close-btn {
+  @apply text-slate-400;
+}
+
+.jukebox-tour .driver-popover-close-btn:hover,
+.jukebox-tour .driver-popover-close-btn:focus-visible {
+  @apply text-slate-100;
+}
+
+/* Same keyboard focus ring as the rest of the app (FR9); driver.css removes it. */
+.jukebox-tour .driver-popover-footer-btn:focus-visible,
+.jukebox-tour .driver-popover-close-btn:focus-visible {
+  outline: 3px solid #ffd166;
+  outline-offset: 2px;
+}
+
+/* The HUD panels have no pointer, so the tour windows have none either. */
+.jukebox-tour .driver-popover-arrow {
+  display: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
