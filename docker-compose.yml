@@ -19,6 +19,8 @@
 #                                          `prep` has run, it also writes the sharp forest
 #                                          images web/public/data/forest-height-*.png
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
+#   docker compose run --rm audio-prep     prepare data/audio/source into web/public/audio/
+#                                          (Ogg Vorbis + manifest + credits)
 #   docker compose run --rm web npm run build && docker compose up server
 #                                          dev server over web/dist on http://127.0.0.1:8081
 #
@@ -175,6 +177,17 @@ services:
       # Output: lightning-4k.png, the lightning dots drawn on the planet (not used by
       # the sound). Nothing else in this folder is written by this service.
       - ./web/public/data:/work/web/public/data
+
+  audio-prep:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      - ./data:/work/data:ro
+      # Output: the prepared library, its manifest and the credits document.
+      - ./web/public/audio:/work/web/public/audio
+      - ./docs:/work/docs
+    command: ["python", "tools/audio/prepare.py"]
 
   # GEDI L3 canopy height: the only source behind a NASA Earthdata login, so it has
   # its own service and `fetch` needs no account.
