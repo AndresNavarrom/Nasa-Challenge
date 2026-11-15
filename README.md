@@ -162,8 +162,11 @@ The interface opens on the 3D planet (code in `web/src/scene/` and
 docker compose up web     # then open http://127.0.0.1:5173/
 ```
 
-- **Planet**: it turns slowly by itself; drag it with the mouse to turn it,
-  release and it keeps turning. The active layer is drawn over `earth.jpg`.
+- **Planet**: it turns slowly by itself. Click a point to lock its sound; then
+  drag to move that point and hear the change. Hold **Shift** and drag to turn
+  the planet, or leave the auto-rotate switch on. On a touch screen a finger drag
+  turns the planet (there is no Shift) and a tap locks the point. The active
+  layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked
@@ -179,17 +182,18 @@ docker compose up web     # then open http://127.0.0.1:5173/
   the Amazon rectangle (`region.bbox`) from their regional grid, on the planet
   and on the map, and nothing elsewhere. Layers with a global grid use it
   outside the rectangle and their regional grid inside it.
-- **To the Amazon and back**: click inside the Amazon (the cursor becomes a
-  hand) or press **Amazon**; the planet turns, flattens into the map and the
-  camera moves close (1.6 s). **Back to Earth** does the reverse (1.4 s) and
-  the planet turns again.
+- **To a region and back**: double-click a region (the cursor becomes a hand)
+  or press **Amazon**; the planet turns, flattens into the map and the camera
+  moves close (1.6 s). Double-click the map or press **Back to Earth** to
+  return (1.4 s) and the planet turns again.
 - **Indicator** (bottom left): longitude, latitude and the active layer's
-  value (0 to 100 %) under the cursor, or "no data here".
+  value (0 to 100 %) for the point under the cursor and for the locked point,
+  or "no data here".
 - **Listening point** for the sound engine:
-  `useListeningPoint()` from `web/src/scene/listeningPoint.tsx` returns
-  `{ lon, lat, screenX }` (`screenX` 0 at the left edge of the canvas, 1 at the
-  right) or `null` when the cursor is off the planet or the map, and during
-  the transition.
+  `useListeningPoint()` from `web/src/scene/listeningPoint.tsx` returns the
+  locked point as `{ lon, lat, screenX }` (`screenX` 0 at the left edge of the
+  canvas, 1 at the right), or `null` until a point is selected. Clicking or
+  dragging the planet/map updates it; hovering no longer changes the sound.
 - **Frames per second** (top right): the average over the last second; green
   at 30 or more (the target), red below. The browser's own performance monitor
   (Chrome DevTools, "Performance monitor") gives the same figure as a backup.

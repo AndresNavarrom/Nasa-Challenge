@@ -543,6 +543,8 @@ export function EarthMesh({
   const sphereMesh = useRef<Mesh>(null);
   const planeMesh = useRef<Mesh>(null);
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const scrubDrag = useRef(false);
+  const planeDown = useRef<{ x: number; y: number } | null>(null);
   const clickTimer = useRef<number | null>(null);
   // Where the cursor rests over the canvas, so the point under it can be found
   // again while the planet turns or a transition ends beneath a still cursor.
@@ -695,13 +697,17 @@ export function EarthMesh({
   useEffect(() => {
     const move = (event: PointerEvent) => {
       const drag = dragRef.current;
-      if (!drag) return;
+      // A scrubbing drag moves the listening point (handleSphereMove); only the
+      // other drags turn the planet.
+      if (!drag || scrubDrag.current) return;
       const state = view.current;
       state.yaw = drag.yaw + (event.clientX - drag.x) * DRAG_SPEED;
       state.pitch = Math.min(MAX_PITCH, Math.max(-MAX_PITCH, drag.pitch + (event.clientY - drag.y) * DRAG_SPEED));
     };
     const end = () => {
       dragRef.current = null;
+      scrubDrag.current = false;
+      planeDown.current = null;
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
@@ -816,17 +822,6 @@ export function EarthMesh({
     }
   });
 
-  const handleSphereMove = (event: ThreeEvent<PointerEvent>) => {
-    reportSphere(event.point, event.nativeEvent.clientX);
-  };
-
-  const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
-    event.stopPropagation();
-    lastPressTouch.current = event.nativeEvent.pointerType === "touch";
-    const state = view.current;
-    dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
-  };
-
   const clearClickTimer = () => {
     if (clickTimer.current !== null) {
       window.clearTimeout(clickTimer.current);
@@ -836,75 +831,104 @@ export function EarthMesh({
 
   useEffect(() => clearClickTimer, []);
 
+  const handleSphereMove = (event: ThreeEvent<PointerEvent>) => {
+    const clientX = event.nativeEvent.clientX;
+    reportSphere(event.point, clientX);
+    const drag = dragRef.current;
+    if (!scrubDrag.current || !drag) return;
+    if (Math.hypot(clientX - drag.x, event.nativeEvent.clientY - drag.y) <= CLICK_TOLERANCE_PX) return;
+    const point = sphereLonLat(event.point);
+    if (point) onGlobeSelectPoint(point.lon, point.lat, clientX);
+  };
+
+  const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation();
+    clearClickTimer();
+    lastPressTouch.current = event.nativeEvent.pointerType === "touch";
+    // A mouse drag scrubs the selected point; hold Shift to turn the planet
+    // instead. Fingers keep turning it, as they did before.
+    scrubDrag.current = !lastPressTouch.current && !event.nativeEvent.shiftKey;
+    const state = view.current;
+    dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
+  };
+
   const handleSphereDoubleClick = (event: ThreeEvent<MouseEvent>) => {
     clearClickTimer();
     if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
-    if (point) onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
+    if (point) onGlobeFocusRegion(point.lon, point.lat);
   };
 
   const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
     if (!point) return;
+    const clientX = event.nativeEvent.clientX;
     // Touch screens have their own tap flow: keep selecting the sound point on a
     // tap while the region flow (tap to choose, tap again to fly) stays as it is.
     if (lastPressTouch.current) {
-      onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
+      onGlobeSelectPoint(point.lon, point.lat, clientX);
       onGlobeTap(point.lon, point.lat);
       return;
     }
-    // Wait: a second click cancels this timer and selects the point instead.
+    // Wait: a second click cancels this timer and zooms to the region instead.
     if (event.nativeEvent.detail > 1) {
       clearClickTimer();
       return;
     }
     clearClickTimer();
+    const { lon, lat } = point;
     clickTimer.current = window.setTimeout(() => {
       clickTimer.current = null;
-      onGlobeFocusRegion(point.lon, point.lat);
+      onGlobeSelectPoint(lon, lat, clientX);
     }, SINGLE_CLICK_MS);
   };
 
   const handlePlaneDown = (event: ThreeEvent<PointerEvent>) => {
+    clearClickTimer();
     lastPressTouch.current = event.nativeEvent.pointerType === "touch";
+    planeDown.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY };
   };
 
   const handlePlaneClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
+    if (!event.uv) return;
+    const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
+    const clientX = event.nativeEvent.clientX;
     // Touch screens keep their double-tap flow; a tap still selects the point.
     if (lastPressTouch.current) {
-      if (event.uv) {
-        const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
-        onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
-      }
+      onGlobeSelectPoint(point.lon, point.lat, clientX);
       onMapTap();
       return;
     }
-    // Wait: a second click cancels this timer and selects the point instead.
+    // Wait: a second click cancels this timer and returns to the planet instead.
     if (event.nativeEvent.detail > 1) {
       clearClickTimer();
       return;
     }
     clearClickTimer();
+    const { lon, lat } = point;
     clickTimer.current = window.setTimeout(() => {
       clickTimer.current = null;
-      onMapBack();
+      onGlobeSelectPoint(lon, lat, clientX);
     }, SINGLE_CLICK_MS);
   };
 
   const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
     if (!event.uv) return;
-    reportPlane(event.uv.x, event.uv.y, event.nativeEvent.clientX);
+    const clientX = event.nativeEvent.clientX;
+    reportPlane(event.uv.x, event.uv.y, clientX);
+    const down = planeDown.current;
+    if (!down) return;
+    if (Math.hypot(clientX - down.x, event.nativeEvent.clientY - down.y) <= CLICK_TOLERANCE_PX) return;
+    const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
+    onGlobeSelectPoint(point.lon, point.lat, clientX);
   };
 
   const handlePlaneDoubleClick = (event: ThreeEvent<MouseEvent>) => {
     clearClickTimer();
     if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
-    if (event.uv) {
-      const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
-      onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
-    }
+    onMapBack();
   };
 
   const handleOut = () => {
