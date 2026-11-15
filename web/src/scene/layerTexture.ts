@@ -24,6 +24,8 @@ export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {
   smoke: SMOKE_RAMP,
   aerosol: SMOKE_RAMP,
   co2: { low: [140, 90, 10], high: [255, 196, 50], maxAlpha: 1 },
+  // Dark blue where lightning is rare to electric white where it strikes most often.
+  lightning: { low: [20, 30, 110], high: [235, 245, 255], maxAlpha: 1 },
 };
 
 /** Index of the instant drawn while there is no timeline yet (plan rule: first instant). */

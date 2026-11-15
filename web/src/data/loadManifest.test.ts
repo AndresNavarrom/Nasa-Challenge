@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DataLoadError, loadJukeboxData } from "./loadManifest";
-import type { Manifest } from "./types";
+import type { LayerManifest, Manifest } from "./types";
 
 const manifest: Manifest = {
   layers: [
@@ -85,5 +85,33 @@ describe("loadJukeboxData", () => {
     await expect(loadJukeboxData("./data/", fakeFetch({ "./data/manifest.json": "{not json" }))).rejects.toThrow(
       /not valid JSON/,
     );
+  });
+
+  it("accepts a data file with the lightning layer in place of co2 (FR7.2)", async () => {
+    const lightning: LayerManifest = {
+      id: "lightning",
+      title: "Lightning",
+      description: "2017 - 2023 accumulated",
+      source: { title: "Lightning from the ISS (NASA SVS 5011)", url: "https://svs.gsfc.nasa.gov/5011" },
+      static: true,
+      sample: false,
+      dates: ["2017 - 2023 (accumulated)"],
+      global: { width: 4, height: 2, frames: 1, file: "lightning_global.bin", texture: "lightning_global.png" },
+      region: { width: 2, height: 2, frames: 1, file: "lightning_region.bin", texture: "lightning_region.png" },
+    };
+    const withLightning: Manifest = { ...manifest, layers: [...manifest.layers, lightning] };
+    const files = {
+      ...filesFor(withLightning),
+      "./data/lightning_global.bin": new Uint8Array(8).fill(200),
+      "./data/lightning_region.bin": new Uint8Array(4),
+    };
+
+    const data = await loadJukeboxData("./data/", fakeFetch(files));
+
+    expect(data.layers.map((layer) => layer.manifest.id)).toEqual(["forest", "smoke", "lightning"]);
+    expect(data.layers[2]?.global?.data[0]).toBe(200);
+    // co2 is still a known id, even though the data file no longer lists it.
+    const withCo2 = { ...manifest, layers: [{ ...manifest.layers[1], id: "co2" }] };
+    await expect(loadJukeboxData("./data/", fakeFetch(filesFor(withCo2)))).resolves.toBeDefined();
   });
 });

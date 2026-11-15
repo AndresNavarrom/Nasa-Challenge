@@ -12,6 +12,7 @@ const LAYER_LABELS: Record<LayerId, string> = {
   forest: "Forest",
   smoke: "Smoke",
   co2: "CO2",
+  lightning: "Lightning",
 };
 
 const engine = createSoundEngine();

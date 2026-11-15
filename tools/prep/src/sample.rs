@@ -58,7 +58,20 @@ fn co2(lon: f64, lat: f64, time: f64) -> f64 {
     (0.3 + 0.3 * northern + 0.15 * wave + 0.15 * time).clamp(0.0, 1.0)
 }
 
-const LAYERS: [SampleLayer; 3] = [
+fn lightning(lon: f64, lat: f64, _time: f64) -> f64 {
+    // Thunderstorm hot spots over tropical land: Congo basin, Lake Maracaibo and the
+    // Amazon, the Maritime Continent; nothing beyond the reach of the ISS (about 55 degrees).
+    if lat.abs() > 55.0 {
+        return 0.0;
+    }
+    let hot_spots = 0.95 * bump(lon, lat, (25.0, -2.0), (10.0, 8.0))
+        + 0.9 * bump(lon, lat, (-71.6, 9.8), (3.0, 3.0))
+        + 0.55 * bump(lon, lat, (-60.0, -8.0), (14.0, 10.0))
+        + 0.6 * bump(lon, lat, (110.0, 0.0), (15.0, 9.0));
+    hot_spots.clamp(0.0, 1.0)
+}
+
+const LAYERS: [SampleLayer; 4] = [
     SampleLayer {
         id: "forest",
         title: "Forest height",
@@ -94,6 +107,18 @@ const LAYERS: [SampleLayer; 3] = [
         value: co2,
         low: [40, 70, 120],
         high: [255, 196, 120],
+    },
+    SampleLayer {
+        id: "lightning",
+        title: "Lightning",
+        description: "Where lightning strikes most often, seen from the International Space Station. \
+                      Fixed layer. SAMPLE DATA: generated values, not NASA data.",
+        source_title: "Lightning Events Detected from the ISS 2017-2023 (NASA SVS 5011)",
+        source_url: "https://svs.gsfc.nasa.gov/5011",
+        is_static: true,
+        value: lightning,
+        low: [20, 30, 80],
+        high: [240, 245, 255],
     },
 ];
 

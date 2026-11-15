@@ -3,26 +3,26 @@
     {
       "id": "forest",
       "title": "Forest height",
-      "description": "How tall the forest canopy is, seen by NASA's GEDI laser instrument on the International Space Station (April 2019 to April 2020). Taller forest sounds as a higher, fuller note. This is the fixed base layer.",
+      "description": "Mean height of the forest canopy measured by NASA's GEDI laser instrument on the International Space Station, April 2019 to July 2025 (GEDI L3 Version 3). Fixed scale: 0 m is the bottom and 50 m or more is the top. Where GEDI has no measurement (mostly beyond about 52° N and S) the value comes from the NASA SVS 4950 visualization instead; the two are never blended. Taller forest sounds as a higher, fuller note. This is the fixed base layer.",
       "source": {
-        "title": "GEDI Forest Height (NASA SVS 4950)",
-        "url": "https://svs.gsfc.nasa.gov/4950"
+        "title": "GEDI L3 Gridded Land Surface Metrics V3 (NASA GEDI, ORNL DAAC), filled with NASA SVS 4950",
+        "url": "https://doi.org/10.3334/ORNLDAAC/2525"
       },
       "static": true,
       "sample": false,
       "dates": [
-        "Apr 2019 - Apr 2020"
+        "Apr 2019 - Jul 2025"
       ],
       "global": {
-        "width": 144,
-        "height": 72,
+        "width": 1440,
+        "height": 720,
         "frames": 1,
         "file": "forest_global.bin",
         "texture": "forest_global.png"
       },
       "region": {
-        "width": 96,
-        "height": 72,
+        "width": 360,
+        "height": 280,
         "frames": 1,
         "file": "forest_region.bin",
         "texture": "forest_region.png"
@@ -31,26 +31,50 @@
     {
       "id": "smoke",
       "title": "Wildfire smoke",
-      "description": "Fine smoke particles (PM2.5) from fires, modelled by NASA's GEOS-CF system for July and August 2024, an active fire season. More smoke makes the sound rougher and darker. Shown over the Amazon only.",
+      "description": "Fine particles (PM2.5) in the air near the ground, mostly smoke from fires, modelled hour by hour by NASA's GEOS-CF system for 1 September 2026, in the fire season. Fixed scale: 0 µg/m³ is the bottom and 150 µg/m³ or more is the top. More smoke makes the sound rougher and darker.",
       "source": {
-        "title": "Air Quality Model Runs (NASA SVS 5533)",
-        "url": "https://svs.gsfc.nasa.gov/5533"
+        "title": "GEOS-CF v2 surface PM2.5 (NASA GMAO)",
+        "url": "https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/"
       },
       "static": false,
       "sample": false,
       "dates": [
-        "Jul-Aug 2024, clip 0:00",
-        "Jul-Aug 2024, clip 0:04",
-        "Jul-Aug 2024, clip 0:53",
-        "Jul-Aug 2024, clip 0:57",
-        "Jul-Aug 2024, clip 1:01",
-        "Jul-Aug 2024, clip 1:05"
+        "Sep 1, 2026 00:30 UTC",
+        "Sep 1, 2026 01:30 UTC",
+        "Sep 1, 2026 02:30 UTC",
+        "Sep 1, 2026 03:30 UTC",
+        "Sep 1, 2026 04:30 UTC",
+        "Sep 1, 2026 05:30 UTC",
+        "Sep 1, 2026 06:30 UTC",
+        "Sep 1, 2026 07:30 UTC",
+        "Sep 1, 2026 08:30 UTC",
+        "Sep 1, 2026 09:30 UTC",
+        "Sep 1, 2026 10:30 UTC",
+        "Sep 1, 2026 11:30 UTC",
+        "Sep 1, 2026 12:30 UTC",
+        "Sep 1, 2026 13:30 UTC",
+        "Sep 1, 2026 14:30 UTC",
+        "Sep 1, 2026 15:30 UTC",
+        "Sep 1, 2026 16:30 UTC",
+        "Sep 1, 2026 17:30 UTC",
+        "Sep 1, 2026 18:30 UTC",
+        "Sep 1, 2026 19:30 UTC",
+        "Sep 1, 2026 20:30 UTC",
+        "Sep 1, 2026 21:30 UTC",
+        "Sep 1, 2026 22:30 UTC",
+        "Sep 1, 2026 23:30 UTC"
       ],
-      "global": null,
+      "global": {
+        "width": 1440,
+        "height": 720,
+        "frames": 24,
+        "file": "smoke_global.bin",
+        "texture": "smoke_global.png"
+      },
       "region": {
-        "width": 96,
-        "height": 72,
-        "frames": 6,
+        "width": 144,
+        "height": 112,
+        "frames": 24,
         "file": "smoke_region.bin",
         "texture": "smoke_region.png"
       }
@@ -81,11 +105,39 @@
       ],
       "global": null,
       "region": {
-        "width": 96,
-        "height": 72,
+        "width": 144,
+        "height": 112,
         "frames": 12,
         "file": "co2_region.bin",
         "texture": "co2_region.png"
+      }
+    },
+    {
+      "id": "lightning",
+      "title": "Lightning",
+      "description": "How often lightning was seen from the International Space Station (NASA's LIS instrument) between January 2017 and July 2023, all years accumulated. Brighter means lightning in more of the ten-day windows of the period; it is a relative frequency read from a NASA visualization, not a flash count. LIS sees only between about 55° N and 55° S.",
+      "source": {
+        "title": "Lightning Events Detected from the ISS 2017-2023 (NASA SVS 5011)",
+        "url": "https://svs.gsfc.nasa.gov/5011"
+      },
+      "static": true,
+      "sample": false,
+      "dates": [
+        "2017 - 2023 (accumulated)"
+      ],
+      "global": {
+        "width": 1440,
+        "height": 720,
+        "frames": 1,
+        "file": "lightning_global.bin",
+        "texture": "lightning_global.png"
+      },
+      "region": {
+        "width": 360,
+        "height": 280,
+        "frames": 1,
+        "file": "lightning_region.bin",
+        "texture": "lightning_region.png"
       }
     }
   ],

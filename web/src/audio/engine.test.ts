@@ -41,12 +41,12 @@ function masterGain(context: FakeAudioContext): FakeGain {
 }
 
 describe("sound engine", () => {
-  it("builds all three voices once and reuses the graph when start is called again", async () => {
+  it("builds every voice once and reuses the graph when start is called again", async () => {
     const { context, engine } = setup();
     await engine.start();
     expect(context.oscillators).toHaveLength(6);
     expect(context.bufferSources).toHaveLength(1);
-    expect(context.panners).toHaveLength(3);
+    expect(context.panners).toHaveLength(4);
     expect(context.resume).toHaveBeenCalledTimes(1);
 
     await engine.start();
@@ -241,6 +241,60 @@ describe("sound engine", () => {
     for (const panner of context.panners) {
       expect(Number.isFinite(scheduled(panner.pan))).toBe(true);
     }
+    engine.dispose();
+  });
+
+  it("turns the lightning frequency into percussion hits", async () => {
+    vi.useFakeTimers();
+    const { context, engine } = setup();
+    engine.setLayerIntensity("lightning", 0.5);
+    await engine.start();
+
+    const lightning = layerVoiceGain(context, 3);
+    expect(scheduled(lightning.gain)).toBe(1);
+    expect(context.oscillators).toHaveLength(6); // no hit before the scheduler runs
+
+    vi.advanceTimersByTime(1);
+    expect(context.oscillators).toHaveLength(7); // one body oscillator
+    expect(context.oscillators[6]!.frequency.value).toBeCloseTo(210, 6); // 90 + 240 x 0.5
+    expect(context.filters[3]!.frequency.value).toBeCloseTo(210 * 8, 6);
+
+    // 3 hits per second at value 0.5: the next one is ~333 ms later.
+    vi.advanceTimersByTime(334);
+    expect(context.oscillators).toHaveLength(8);
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops the lightning rhythm when the layer has no data", async () => {
+    vi.useFakeTimers();
+    const { context, engine } = setup();
+    engine.setLayerIntensity("lightning", 0.9);
+    await engine.start();
+
+    vi.advanceTimersByTime(1);
+    expect(context.oscillators).toHaveLength(7);
+
+    engine.setLayerIntensity("lightning", null);
+    expect(scheduled(layerVoiceGain(context, 3).gain)).toBe(0);
+    vi.advanceTimersByTime(5000);
+    expect(context.oscillators).toHaveLength(7); // no new hits
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps the CO2 voice independent of the lightning layer", async () => {
+    vi.useFakeTimers();
+    const { context, engine } = setup();
+    engine.setLayerIntensity("co2", 0.7);
+    engine.setLayerIntensity("lightning", 0.9);
+    await engine.start();
+
+    vi.advanceTimersByTime(500);
+    expect(scheduled(layerVoiceGain(context, 2).gain)).toBeCloseTo(intensityToGain(0.7), 6);
+    expect(context.panners).toHaveLength(4);
     engine.dispose();
   });
 

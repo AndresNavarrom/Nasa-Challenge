@@ -1,60 +1,49 @@
-# Code Quality Assessment
+# Evaluación de calidad — Earth Jukebox
 
 ## Pruebas
 
-| Área | Archivos | Casos | Qué cubren |
+| Componente | Framework | Cantidad | Comando |
 |---|---|---|---|
-| Interfaz (Vitest, entorno `node`) | `web/src/data/loadManifest.test.ts` | 3 | Carga correcta, archivo faltante o de tamaño erróneo, manifiesto inválido |
-| | `web/src/lib/interpolate.test.ts` | 4 | Bilineal, lineal en tiempo, capa estática, bordes |
-| | `web/src/lib/timeline.test.ts` | 3 | Fechas por capa, límites, avance con bucle |
-| | `web/src/audio/mapping.test.ts` | 3 | Escala pentatónica, monotonía humo/CO2, límites |
-| Rust (`cargo test`) | `color.rs`, `grid.rs`, `project.rs` | 5 | Color → valor, reducción de cuadrícula, tamaños, proyecciones |
+| earth-jukebox-web | Vitest (node) | 7 archivos, 28 casos | `docker compose run --rm web-test` |
+| jukebox-prep | cargo test | 10 pruebas | `docker compose run --rm prep-test` |
+| fetch-tools | pytest | 7 pruebas | `docker compose run --rm fetch-test` |
+| jukebox-server, scraping-tools | — | 0 | — |
 
-Total 18 casos, coincide con `TAREAS.md`. Se ejecutan con `docker compose run --rm web-test` y `docker compose run --rm prep-test` (no ejecutados en este escaneo).
+Sin configuración de cobertura. Las pruebas cubren funciones puras (interpolación, línea de tiempo, mapeo a sonido, geometría, texturas, validación del manifiesto, reducción a cuadrícula, color, proyecciones, conversiones de fetch); los componentes 3D se verifican a mano con `docs/PLANET-CHECKLIST.md`.
 
-Huecos:
+## Calidad rápida
 
-- Sin configuración ni umbral de cobertura.
-- Sin pruebas de `App.tsx` ni entorno DOM (jsdom/Testing Library ausentes); los componentes 3D del paso 12 no tendrán dónde probarse sin añadirlo o sin extraer lógica pura.
-- `pipeline.rs`, `config.rs` (validación), `sample.rs` y `main.rs` (argumentos) sin pruebas.
-- `sampleLayerAt` con cambio región↔global no tiene caso propio.
+| Criterio | Nota | Evidencia |
+|---|---|---|
+| Claridad de nombres | buena | nombres descriptivos en los tres lenguajes |
+| Tamaño de funciones | aceptable | `render()` y `prepare_layer()` en `pipeline.rs`, `SceneContents`/`EarthMesh` largos |
+| Manejo de errores | buena | errores tipados con mensaje para la persona; sin silencios |
+| Presencia de pruebas | aceptable | lógica pura probada; escena 3D y E/S sin pruebas automáticas |
+| Duplicación | aceptable | `LAYER_IDS` y formato del manifiesto duplicados Rust/TS a propósito |
+| Código muerto | aceptable | `co2` y archivos `co2_region.*`, `earth.jpg` sin uso; `server/` esqueleto |
 
-## Linting y formato
+## Linting y CI
 
-- No hay ESLint, Prettier, `rustfmt.toml` ni configuración de clippy. La comprobación estática es `tsc --noEmit` estricto (`npm run typecheck`, también dentro de `npm run build`).
-- El estilo es consistente a mano: camelCase/snake_case idiomáticos, comentarios de documentación en inglés.
-
-## CI/CD
-
-- No hay pipeline (ni `.github/workflows` ni equivalente). Pruebas y compilación son manuales en Docker; la integración entre ramas se hace a mano al cierre de cada bloque.
+- Sin ESLint, Prettier, rustfmt ni Ruff configurados; `tsc --noEmit` estricto como única verificación estática.
+- Sin pipeline de CI; ninguna marca TODO/FIXME/HACK ni supresiones de linter.
 
 ## Documentación
 
-- `README.md` (inglés): estado, estructura, ejecución con y sin Docker, formato de datos, fuentes y límites, declaración de uso de IA. Buena calidad.
-- `TAREAS.md` y `VISION-MISION.md` (español): reparto, propiedad de carpetas, riesgos y alcance POC→MVP.
-- `data/SOURCES.md` generado con cada archivo, enlace y método.
-- Comentarios en código claros, con referencias a requisitos (`FR1.5`, `FR3.x`, `FR7`, `FR9`).
-
-## Manejo de errores y seguridad
-
-- Errores en fronteras bien tratados: `DataLoadError` y `PrepError` con mensajes accionables; `App.tsx` muestra el error con `role="alert"` y lo registra en consola; `fetch-frames.sh` falla con mensaje y limpia `.part`.
-- Sin secretos en el código del proyecto. El puerto de desarrollo y el servidor previsto se limitan a `127.0.0.1`.
-- `docker-entrypoint.sh` puede necesitar internet si cambia `package-lock.json` (riesgo para la demo sin red, documentado).
+README amplio pero desactualizado (dice que `fetch-frames.sh` no corre en contenedor, cita SVS 5533/3615 y `earth.jpg`, dice que humo y CO2 son solo de la Amazonía, omite rayos). `data/SOURCES.md` al día. Comentarios de módulo claros.
 
 ## Deuda técnica
 
-| Señal | Ubicación | Impacto para el paso 12 |
-|---|---|---|
-| Conjunto cerrado `LAYER_IDS` duplicado | `web/src/data/types.ts:4`, `tools/prep/src/config.rs:10`, `web/src/data/loadManifest.ts:70` | Una capa de aerosoles exige cambiar TS y Rust y regenerar datos; carpetas ajenas a Samuel y cambio de formato que requiere acuerdo de los tres |
-| Texturas de capas con tiempo solo del primer instante | `tools/prep/src/pipeline.rs` (`prepare_layer`) | Para que imagen y sonido avancen juntos hay que dibujar desde las cuadrículas |
-| Humo y CO2 sin cuadrícula global | `web/public/data/manifest.json` (`global: null`) | En el planeta solo el bosque tiene textura y valor fuera de la Amazonía |
-| Título "Global CO2" engañoso | `data/prep-config.json` | Corregir y regenerar antes de mostrarlo (`TAREAS.md:95`) |
-| Instantes de humo equiespaciados aunque el video no lo está | `manifest.json` (`dates` con tiempos de clip) | Las etiquetas muestran tiempo de clip, no fecha |
-| Salto de resolución en el borde de la Amazonía (96×72 regional vs 144×72 global) | `web/src/lib/interpolate.ts` (`sampleLayerAt`) | Posible salto audible/visible al cruzar el borde |
-| Carcasa provisional | `web/src/App.tsx` | Se reemplaza en el paso 12 |
-| Servidor esqueleto | `server/src/main.rs` | Fuera del paso 12 |
-| Sin linter ni CI | raíz | Regresiones solo se detectan ejecutando pruebas a mano |
+- `server/` sin implementar; `web/src/audio/engine.ts` y `run-demo.sh` citados pero inexistentes.
+- `pipeline.rs` (491 líneas) mezcla responsabilidades; render por vecino más cercano y repetido para cuadrícula y textura.
+- Un solo método de valor por capa y regla de "mejor vista": no permite combinar fuentes con prioridad (bloquea el relleno de GEDI L3 con SVS 4950).
+- "Sin dato" y 0 se confunden en las cuadrículas (`grid.rs` `quantize`; `sampleLayerAt` devuelve 0).
+- La capa de bosque actual es intensidad relativa leída de un globo renderizado, georreferenciado a mano (1 a 2 grados de error).
 
-## Valoración general
+## Riesgos para el intent GEDI L3
 
-Base pequeña, limpia y bien documentada, con lógica pura probada y fronteras validadas. Las debilidades son de proceso (sin CI ni linter, cobertura sin medir) y de contrato (capas cerradas y duplicadas), además de lo que falta por construir (escena, sonido, servidor).
+- **Lectura del GeoTIFF**: EASE-Grid 2.0 global (EPSG:6933), 1 km, float32, del orden de 34704×14616 píxeles (unos 2 GB en memoria). Pillow lo rechaza por defecto (`DecompressionBombError`) y puede fallar con TIFF en mosaico comprimido en modo `F`; preferir `tifffile`+`imagecodecs` o `rasterio`, lectura por franjas, georreferencia desde las etiquetas GeoTIFF.
+- **Reproyección**: promediar por celda (0.25° global, 0.1° región) los píxeles válidos, con x, y de la cilíndrica de áreas iguales; descartar nodata.
+- **Escala**: metros / 50 recortado a 0..1 para coincidir con la barra 0–50 m de SVS 4950 usada como relleno.
+- **Relleno fuera de ±52°**: requiere cambio en `prep` (prioridad entre fuentes o método por vista); hoy una vista `equirect` gana siempre la "mejor vista" y deja sin dato donde GEDI no mide.
+- **Credenciales**: montar `~/.netrc` solo en `fetch`, en solo lectura, con sintaxis larga y `create_host_path: false` (la corta crea un directorio si falta el archivo); cookie jar en `/tmp`; nunca imprimir el archivo; la imagen no debe copiarlo.
+- **Datos no verificados**: URL, nombre de archivo, valor nodata y compresión de GEDI L3 V3 en ORNL DAAC no se comprobaron (escaneo sin red).

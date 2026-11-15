@@ -40,6 +40,25 @@ For each layer: clear the other two, move the slider slowly from 0 to 1 and back
 | Any layer with **no data** checked | The voice is silent; unchecking brings it back. |
 | Pan slider | The sound moves left/right; it never disappears from one ear. |
 
+## 2b. Lightning percussion (new layer)
+
+The lightning layer is a relative frequency (0..1, static), so it is tested as a
+rhythm, not as a sustained voice. The mapping is exact:
+
+| Slider | Expected |
+|---|---|
+| 0 | No hits (silence) |
+| 0.5 | 3 hits per second, body around 210 Hz |
+| 1 | 6 hits per second, body around 330 Hz |
+
+| Check | Pass condition |
+|---|---|
+| Count over 10 s at 0.5 / 1 | About 30 / 60 hits, evenly spaced |
+| Pitch | The body is clearly higher at 1 than at 0.5 |
+| Pan | The hits move with the pan control |
+| Disable the layer / tick "no data" | The rhythm stops within one hit; the other voices are unchanged |
+| CO2 with lightning | The CO2 breathing does not change when the lightning slider moves |
+
 ## 3. Three-layer mix (FR4)
 
 | Check | Pass condition |

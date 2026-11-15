@@ -1,110 +1,96 @@
-# Architecture
+# Arquitectura — Earth Jukebox
 
 ## Architecture Analysis
 
 ### System Overview
 
-Aplicación local de una sola página. Un proceso por lotes en Rust (`jukebox-prep`) convierte cuadros de visualizaciones NASA en datos estáticos preparados (`web/public/data/`); la interfaz React los descarga una vez al iniciar, los interpola en el navegador y traduce valores a parámetros de sonido. No hay base de datos ni backend con lógica: el único servidor previsto (`jukebox-server`, Axum) solo entregará archivos estáticos en `127.0.0.1`.
+Sistema local de tres etapas desacopladas por archivos: **descarga** (`tools/fetch-frames.sh` en el contenedor `fetch`) → **preparación** (`jukebox-prep`, Rust, contenedor `prep`) → **presentación** (SPA React + three.js servida por Vite; servidor Axum previsto). No hay base de datos ni API HTTP propia. El contrato entre etapas son archivos: `data/raw/*` y `data/prep-config.json` entre descarga y preparación; `web/public/data/manifest.json` + `<id>_<global|region>.bin` entre preparación y web.
 
 ### Architectural Style
 
-Monolito cliente con preparación de datos fuera de línea (patrón "static data pipeline + thick client"). Evidencia: `vite.config.ts` con `base: "./"` y sin proxy; `loadJukeboxData()` usa `fetch` relativo a `./data/`; `server/Cargo.toml` solo declara `tower-http` con `fs`. Todo se ejecuta en contenedores Docker (`docker-compose.yml`).
+Pipeline de datos por lotes + cliente estático (monolito de frontend). Evidencia: los servicios `fetch` y `prep` son trabajos de una sola ejecución tras perfiles de Compose (`docker-compose.yml`); la web solo hace `fetch()` de archivos estáticos (`web/src/data/loadManifest.ts`); `server/` es un esqueleto.
 
 ### Component Relationships
 
 ```mermaid
 flowchart LR
-  NASA["NASA SVS (videos y cuadros)"] --> Fetch["tools/fetch-frames.sh"]
-  Fetch --> Raw["data/raw/ (ignorado)"]
-  Config["data/prep-config.json"] --> Prep["jukebox-prep (Rust)"]
-  Raw --> Prep
-  Prep --> Data["web/public/data/ (manifest.json, *.bin, *.png, earth.jpg)"]
-  Data --> Loader["web/src/data/loadManifest.ts"]
-  Loader --> App["web/src/App.tsx"]
-  App --> Interp["web/src/lib/interpolate.ts"]
-  App --> Timeline["web/src/lib/timeline.ts"]
-  Interp --> Mapping["web/src/audio/mapping.ts"]
-  Mapping -.-> Engine["web/src/audio/engine.ts (pendiente)"]
-  App -.-> Scene["web/src/scene/ y web/src/ui/ (pendiente)"]
-  Data -.-> Server["jukebox-server Axum (pendiente)"]
+  NASA["Fuentes NASA<br/>SVS 4950, SVS 5011,<br/>GEOS-CF, Natural Earth"] -->|curl / ffmpeg| FETCH["fetch-tools<br/>fetch-frames.sh + Python"]
+  FETCH -->|PNG, TIFF| RAW[("data/raw/")]
+  FETCH -->|reescribe| SRC["data/SOURCES.md"]
+  CFG["data-config<br/>data/prep-config.json"] --> PREP["jukebox-prep<br/>Rust"]
+  RAW --> PREP
+  PREP -->|manifest.json, .bin, .png, .jpg| OUT[("web/public/data/")]
+  OUT --> WEB["earth-jukebox-web<br/>React + three.js"]
+  SERVER["jukebox-server<br/>esqueleto"] -.->|previsto| WEB
+  COMPOSE["compose-services"] -.->|orquesta| FETCH
+  COMPOSE -.-> PREP
+  COMPOSE -.-> WEB
 ```
-<!-- Texto alternativo: NASA SVS alimenta tools/fetch-frames.sh, que escribe data/raw/. jukebox-prep lee data/raw/ y data/prep-config.json y escribe web/public/data/. loadManifest.ts carga esos datos para App.tsx, que usa interpolate.ts y timeline.ts; interpolate.ts alimenta mapping.ts. Pendientes (líneas punteadas): engine.ts recibe los parámetros de mapping.ts, scene/ y ui/ cuelgan de App.tsx, y jukebox-server servirá los datos y la app compilada. -->
+
+Texto alternativo: las fuentes de la NASA llegan a `fetch-tools`, que escribe `data/raw/` y reescribe `data/SOURCES.md`. `jukebox-prep` lee `data/prep-config.json` y `data/raw/` y escribe `web/public/data/`. La web lee esa carpeta. `jukebox-server` servirá la web más adelante. `compose-services` orquesta los tres contenedores.
 
 ### Data Flow
 
-1. **Fuera de línea**: `fetch-frames.sh` descarga cuadros y extrae fotogramas con `ffmpeg`; `jukebox-prep` proyecta cada celda (equirectangular u ortográfica), convierte color → valor (`colorbar`, `brightness`, `warmth`), promedia con supermuestreo 4x4, cuantiza a 0..255 y escribe `<id>_<global|region>.bin/.png` y `manifest.json`.
-2. **Al iniciar**: `loadJukeboxData("./data/")` valida el manifiesto y descarga todas las cuadrículas en paralelo, comprobando que cada archivo tenga `width*height*frames` bytes.
-3. **En interacción**: lon/lat + posición de línea de tiempo → `framePosition()` → `sampleLayerAt()` (bilineal en espacio, lineal en tiempo; cuadrícula regional dentro de `bbox`, global fuera, `null` si no hay) → funciones de `mapping.ts` → parámetros de audio.
-
-Formato de cuadrícula: un byte por celda, ordenado por instante, luego fila (norte primero), luego columna (oeste primero). Detalle del contrato en `api-documentation.md`.
+1. `fetch-frames.sh` descarga cada fuente con `curl` (sin autenticación hoy), convierte NetCDF→PNG (`geoscf_to_png.py`), video→PNG acumulado (`lightning_composite.py`) y TIFF 16 bits→PNG 8 bits (ffmpeg).
+2. `jukebox-prep --config data/prep-config.json` valida la configuración, prepara la imagen base (8k, 4k y recorte de la Amazonía) y, por capa e instante, renderiza la región y el mundo a 4× la resolución de la cuadrícula: para cada celda busca el píxel en cada vista (`Projection::locate`), convierte color→valor (`colorbar`, `brightness` o `warmth`), mezcla las vistas por peso al cuadrado, promedia a la cuadrícula (`reduce_to_grid`) y cuantiza a bytes.
+3. La web carga el manifiesto y las cuadrículas, valida tamaños, dibuja la capa activa como `DataTexture` con una rampa de color por capa y muestrea el valor bajo el cursor con interpolación bilineal (región dentro del rectángulo, global fuera).
 
 ### Key Design Decisions
 
-- **Datos preparados y estáticos** en lugar de leer los cuadros NASA en vivo: arranque sin internet y carga pequeña (1.2 MB). Costo: los valores son aproximados y dependen de una georreferenciación manual.
-- **Contrato de datos duplicado** Rust (`config.rs`, escribe) / TypeScript (`types.ts`, valida al leer) con conjunto cerrado de ids de capa. Da errores claros, pero cualquier capa nueva exige cambiar ambos lados.
-- **Lógica pura separada de la Web Audio API** (`mapping.ts`) y de la escena, para probarla en Vitest con entorno `node`.
-- **Docker como único requisito** (Node y Rust dentro de contenedores; puerto publicado solo en `127.0.0.1`).
+- **Formato de intercambio mínimo**: 1 byte por celda, fila norte primero, columna oeste primero, instante tras instante; el navegador no decodifica imágenes para los valores.
+- **Configuración declarativa de capas**: añadir o cambiar una fuente es editar `prep-config.json` (vistas, proyección, método de valor), sin código, mientras la fuente encaje en `equirect`/`orthographic` y un método de color.
+- **Un método de valor por capa y mezcla por "mejor vista"** (`pipeline.rs:136-186`): la vista que ve el punto más de frente decide si hay dato; las demás se mezclan por peso. Pensado para globos renderizados, no para combinar fuentes con prioridad.
+- **Todo en Docker** (regla del proyecto): imágenes con versiones fijas, código montado en vivo, salidas de build dentro de la imagen.
+- **Sin internet en tiempo de ejecución**: fuentes del sistema, datos en `web/public/data/`.
 
 ### Improvement Opportunities
 
-- Generar los tipos TS desde el esquema Rust (o un JSON Schema compartido) para no duplicar `LAYER_IDS` y la forma del manifiesto.
-- Dibujar las texturas de capas con tiempo desde las cuadrículas en el cliente (las PNG son solo del primer instante).
-- Definir una frontera explícita entre escena 3D (pasos 12-14) y motor de sonido (paso 10), por ejemplo un estado compartido "punto escuchado" con lon/lat y posición horizontal en pantalla.
+- Soporte de prioridad/relleno entre fuentes en `prep` (necesario para GEDI L3 + SVS 4950 fuera de ±52°).
+- Lectura de rásteres científicos (GeoTIFF flotante, EASE-Grid 2.0) en `fetch` con una librería adecuada, entregando a `prep` una imagen equirectangular.
+- Separar en `pipeline.rs` el render de capas, la escritura y la imagen base; muestreo por área en lugar de vecino más cercano.
+- Representar "sin dato" distinto de 0 en las cuadrículas.
 
 ## Interaction Diagrams
 
-### Carga de datos al iniciar
+### Regenerar los datos (flujo actual del bosque)
 
 ```mermaid
 sequenceDiagram
-  participant Main as main.tsx
-  participant App as App.tsx
-  participant Loader as loadManifest.ts
-  participant Static as web/public/data
-  Main->>App: render en StrictMode
-  App->>Loader: loadJukeboxData()
-  Loader->>Static: GET ./data/manifest.json
-  Static-->>Loader: JSON
-  Loader->>Loader: parseManifest (lanza DataLoadError si es inválido)
-  Loader->>Static: GET cada region.file y global.file en paralelo
-  Static-->>Loader: bytes
-  Loader->>Loader: verifica bytes = width x height x frames
-  Loader-->>App: JukeboxData (layers, bbox, baseUrl)
-  App->>App: estado ready o error con mensaje visible
+  participant Dev as Persona
+  participant F as fetch (contenedor)
+  participant SVS as NASA SVS 4950
+  participant P as prep (contenedor)
+  participant W as web
+  Dev->>F: docker compose run --rm fetch
+  F->>SVS: curl 14 TIFF 4K + barra de color
+  SVS-->>F: TIFF 16 bits
+  F->>F: ffmpeg a PNG 8 bits en data/raw/4950/4k/
+  F->>F: reescribe data/SOURCES.md
+  Dev->>P: docker compose run --rm prep
+  P->>P: lee prep-config.json, colorbar 0-50 m
+  P->>P: render 14 vistas orthographic, mezcla por peso
+  P->>P: forest_global.bin 1440x720, forest_region.bin 360x280
+  Dev->>W: docker compose up web
+  W->>W: loadJukeboxData, textura y muestreo bajo el cursor
 ```
-<!-- Texto alternativo: main.tsx monta App; App llama a loadJukeboxData, que pide manifest.json, lo valida con parseManifest, pide en paralelo cada archivo de cuadrícula, comprueba su tamaño y devuelve JukeboxData. App pasa al estado ready o muestra el error. -->
 
-### Punto bajo el cursor → sonido (flujo previsto del paso 12 con lo existente)
+Texto alternativo: la persona corre `fetch`, que baja 14 TIFF de SVS 4950 sin login, los pasa a PNG y reescribe `SOURCES.md`; luego corre `prep`, que lee la barra de color y las 14 vistas orthographic y escribe las cuadrículas del bosque; la web las carga y muestra.
+
+### Leer el valor bajo el cursor
 
 ```mermaid
 sequenceDiagram
-  participant User as Persona
-  participant Scene as Escena 3D (pendiente)
-  participant Timeline as timeline.ts
-  participant Interp as interpolate.ts
-  participant Mapping as mapping.ts
-  participant Engine as engine.ts (pendiente)
-  User->>Scene: mueve el cursor sobre el planeta o el mapa
-  Scene->>Scene: raycast a lon y lat
-  Scene->>Timeline: framePosition(posición, frames)
-  Timeline-->>Scene: índice fraccional
-  Scene->>Interp: sampleLayerAt(capa, bbox, lon, lat, framePosition)
-  Interp-->>Scene: valor 0..1 o null
-  Scene->>Mapping: forestToVoice, smokeToTimbre, co2ToBreath, intensityToGain, positionToPan
-  Mapping-->>Engine: parámetros de sonido
+  participant U as Usuario
+  participant M as EarthMesh
+  participant S as EarthScene
+  participant I as interpolate.sampleLayerAt
+  participant H as PlanetHud
+  U->>M: mueve el cursor
+  M->>S: onHover(lon, lat, clientX)
+  S->>S: setListeningPoint(lon, lat, screenX)
+  S->>I: sampleLayerAt(capa, bbox, lon, lat, 0)
+  I-->>S: valor 0..1 o null
+  S->>H: onProbe(lon, lat, valor)
 ```
-<!-- Texto alternativo: la persona mueve el cursor; la escena (pendiente) convierte el punto a lon/lat, obtiene el índice de instante con framePosition, pide el valor con sampleLayerAt (0..1 o null), lo traduce con las funciones de mapping.ts y entrega los parámetros al motor de sonido (pendiente). -->
 
-### Preparación de datos
-
-```mermaid
-flowchart TD
-  A["jukebox-prep --config data/prep-config.json"] --> B["validate: bbox, tamaños, ids de capa"]
-  B --> C["prepare_earth: earth.jpg 2048x1024"]
-  B --> D["por capa y por instante: load_views"]
-  D --> E["render: proyección y color a valor, supermuestreo 4x4"]
-  E --> F["reduce_to_grid y quantize a 0..255"]
-  F --> G["write_area: id_region y id_global .bin y .png"]
-  G --> H["write_manifest: manifest.json"]
-```
-<!-- Texto alternativo: jukebox-prep valida la configuración, redimensiona la imagen del planeta a earth.jpg, y por cada capa e instante carga las vistas, las proyecta y convierte color en valor con supermuestreo, reduce y cuantiza la cuadrícula, escribe los archivos bin y png de región y global, y al final escribe manifest.json. -->
+Texto alternativo: el movimiento del cursor llega a `EarthMesh`, que informa lon/lat a `EarthScene`; esta publica el punto de escucha, pide el valor a `sampleLayerAt` (región o global) y lo envía al HUD.

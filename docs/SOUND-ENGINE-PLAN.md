@@ -1,6 +1,6 @@
 # Sound Engine Plan — Step 10
 
-Status: B1–B2 implemented; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak) and playback confirmed in Chromium; engine wired into `App.tsx` and driven by the scene's listening point (Step 12). Frame position is still the first instant until Step 13's timeline.
+Status: B1–B2 implemented, the lightning layer voiced as percussion, and the PR #2 data merged; B3 verified in Firefox (43 ms device latency, no perceived latency, clean 10-minute soak) and playback confirmed in Chromium; engine wired into `App.tsx` and driven by the scene's listening point (Step 12). Frame position is still the first instant until Step 13's timeline.
 Owner: Fernando Gonzalez Rivero
 Branch: `sonido`
 Date: 2026-11-14
@@ -9,7 +9,7 @@ Date: 2026-11-14
 
 Turn the pure value → sound mapping that already exists in
 `web/src/audio/mapping.ts` into audible, real-time sound with the Web Audio API:
-one voice per NASA layer (forest, smoke, CO2), mixed without clipping, driven by
+one voice per NASA layer (forest, smoke, CO2, lightning), mixed without clipping, driven by
 the point under the cursor and by the shared timeline.
 
 This is Step 10 of the code plan
@@ -78,9 +78,10 @@ cursor x ───────────▶ positionToPan() ──▶ engine.s
 timeline position ──▶ frame position ───▶ (sampling already returns values)
 
 engine
-  forest voice  ─┐
-  smoke voice   ─┼─▶ voice bus ─▶ DynamicsCompressor ─▶ master gain ─▶ Analyser ─▶ destination
-  CO2 voice     ─┘
+  forest voice      ─┐
+  smoke voice       ─┼─▶ voice bus ─▶ DynamicsCompressor ─▶ master gain ─▶ Analyser ─▶ destination
+  CO2 voice         ─┤
+  lightning pulses  ─┘
 ```
 
 All nodes are created once at `start()` and reused; per-frame updates only
@@ -112,6 +113,29 @@ Static layer (no time dimension).
 - Breathing movement: an LFO at `rateHz` modulating an amplitude gain; `depth`
   sets how far the swell travels. Heavier values breathe faster and lower.
 - Gain and pan as above; silence where the layer has no data.
+
+### Lightning percussion (layer added by PR #2)
+
+The lightning grid is a **relative frequency** of strikes (0..1, static), not a
+continuous signal. It drives percussion instead of a sustained voice. The
+mapping in `mapping.ts` is exact and linear, with no perception curve:
+
+| Value | Hits per second | Body pitch | Ring time |
+|---|---|---|---|
+| 0 | 0 (silence) | — | — |
+| 0.5 | 3 | 210 Hz | 0.22 s |
+| 1 | 6 | 330 Hz | 0.28 s |
+
+- `lightningToPercussion(value)` returns `{ rateHz, pitchHz, decaySeconds }`;
+  the hit rate is the audible “frequency of lightning”, and the pitch makes the
+  intensity audible within one hit.
+- Each hit is a short band-passed noise crack (shared noise buffer) plus a
+  triangle body, both with a 4–6 ms attack and an exponential decay.
+- A single `setTimeout` chain schedules the hits; it is cleared when the layer
+  has no data or is disabled, and it is pulled forward when the rate rises so a
+  faster rhythm does not wait for an old, long interval.
+- Hit nodes are created per hit and released on `ended`; the per-frame path
+  only updates the rate, pitch and gain.
 
 ### Master chain
 
@@ -221,6 +245,8 @@ Automated (Vitest, in Docker: `docker compose run --rm web-test`):
   - pan follows `positionToPan`;
   - `stop()` fades out and `dispose()` disconnects;
   - `getOutputLevel()` reads the analyser without throwing.
+  - the lightning rhythm fires a hit, maps value 0.5 to 3 hits/s at 210 Hz,
+    stops when the layer has no data, and never touches the CO2 gain.
 - `engine.soak.test.ts`: 18,000 simulated updates (10 minutes at the 30 fps
   target) keeps the graph size fixed and every parameter finite; repeated
   stop/start cycles do not duplicate nodes; `dispose()` is idempotent.
@@ -265,7 +291,8 @@ Manual checklist: `docs/SOUND-ENGINE-CHECKLIST.md` (open
 | FR3.2 | Smoke value changes roughness and darkness audibly. |
 | FR3.3 | CO2 value changes breathing rate and weight audibly. |
 | FR3.4 | Pan follows the listened point; `null` is silent. |
-| FR4 | All three layers sound together without clipping. |
+| FR4 | All three continuous layers sound together without clipping; the percussion adds without masking them. |
+| Lightning | Relative frequency maps exactly to the hit rate (value × 6/s) and pitch (90–330 Hz). |
 | FR6 | Sound follows the point under the cursor (API ready for Step 12). |
 | NFR2 | Measured latency ≤ 100 ms. |
 | NFR5 | 10-minute continuous run without dropouts. |
@@ -285,3 +312,6 @@ Manual checklist: `docs/SOUND-ENGINE-CHECKLIST.md` (open
 - Deferred as low impact: camera distance on resize mid-transition and
   antimeridian support in `isInsideBbox`.
 - Mute stays a fade to zero (instant unmute), by team decision.
+- PR #2 adds the `lightning` layer. Instead of silencing it, it is voiced as
+  percussion (rate = value × 6 hits/s, pitch 90–330 Hz). The merged scene keeps
+  the listening point through the view transition (FR5.2), as PR #2 requires.
