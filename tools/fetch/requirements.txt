@@ -3,3 +3,7 @@ netCDF4==1.7.2
 numpy==2.1.3
 Pillow==11.0.0
 pytest==8.3.3
+# GEDI L3 GeoTIFF (EASE-Grid 2.0) -> equirectangular PNG (gedi_l3_to_png.py).
+tifffile==2024.9.20
+imagecodecs==2024.9.22
+pyproj==3.7.0

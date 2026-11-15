@@ -7,11 +7,15 @@
 #   docker compose run --rm fetch-test     pytest for the conversions in tools/fetch
 #   docker compose run --rm fetch          download the sources into data/raw/ and rewrite
 #                                          data/SOURCES.md (about 1.9 GB, needs internet)
+#   docker compose run --rm fetch-gedi     download GEDI L3 forest height into data/raw/gedi/
+#                                          (about 617 MB); needs a NASA Earthdata login in
+#                                          ~/.netrc, mounted read-only in this service only
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
 #
-# Data from scratch: `fetch`, then `prep`. There is no database. `web-test`,
-# `prep-test`, `fetch-test`, `fetch` and `prep` are one-off jobs behind
-# profiles, so a plain `docker compose up` starts the interface only.
+# Data from scratch: `fetch`, `fetch-gedi`, then `prep`. There is no database.
+# `web-test`, `prep-test`, `fetch-test`, `fetch`, `fetch-gedi` and `prep` are
+# one-off jobs behind profiles, so a plain `docker compose up` starts the
+# interface only.
 #
 # The final app container (built interface + the Rust local server in server/)
 # is added with Steps 11 and 15 of the plan; it is not defined here yet.
@@ -103,6 +107,25 @@ services:
       - ./tools:/work/tools:ro
       # Output: the downloaded and converted sources in data/raw/ and data/SOURCES.md.
       - ./data:/work/data
+
+  # GEDI L3 canopy height: the only source behind a NASA Earthdata login, so it has
+  # its own service and `fetch` needs no account.
+  fetch-gedi:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      # Output: data/raw/gedi/ (the GeoTIFF and the converted PNG).
+      - ./data:/work/data
+      # The Earthdata login, read-only and only in this service. If ~/.netrc is
+      # missing Docker stops with an error naming it instead of creating a folder.
+      - type: bind
+        source: ${HOME}/.netrc
+        target: /root/.netrc
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["bash", "tools/fetch/fetch-gedi.sh"]
 
 volumes:
   web_node_modules:
