@@ -21,6 +21,8 @@ export interface PlanetHudProps {
   sceneError: string | null;
   /** Sound controls, docked in the bottom-right panel so they never overlap the HUD. */
   audio?: ReactNode;
+  /** Timeline bar (play, position, speed, dates), docked above the sound controls. */
+  timeline?: ReactNode;
 }
 
 /** Below this the NFR1 target (30 frames per second) is missed. */
@@ -54,7 +56,7 @@ const button =
   "rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400";
 
 export function PlanetHud(props: PlanetHudProps) {
-  const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError, audio } = props;
+  const { layers, activeLayerId, onSelectLayer, mode, onAmazon, onBackToEarth, probe, fps, lite, sceneError, audio, timeline } = props;
   const activeLayer = layers.find((layer) => layer.manifest.id === activeLayerId);
 
   return (
@@ -120,6 +122,7 @@ export function PlanetHud(props: PlanetHudProps) {
         </div>
 
         <div className={`${panel} flex flex-col items-end gap-2`}>
+          {timeline && <div className="w-full">{timeline}</div>}
           {audio && <div className="w-full">{audio}</div>}
           <p role="status" data-testid="planet-hud-status" className="text-slate-300">
             {modeLabel(mode)}
