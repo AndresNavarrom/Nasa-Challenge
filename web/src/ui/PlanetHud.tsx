@@ -78,6 +78,10 @@ export interface PlanetHudProps {
   timeline?: (arc: ArcFrame | null, color: string) => ReactNode;
   /** Shows the welcome window and guided tour again (the "?" button). */
   onShowTour?: () => void;
+  /** Whether the narrator reads the app aloud; undefined hides the Voice button (no speech in this browser). */
+  narratorOn?: boolean;
+  /** Switches the narrator on or off (also the V key). */
+  onToggleNarrator?: () => void;
 }
 
 /** Below this the NFR1 target (30 frames per second) is missed. */
@@ -405,6 +409,8 @@ export function PlanetHud(props: PlanetHudProps) {
     orientation,
     timeline,
     onShowTour,
+    narratorOn,
+    onToggleNarrator,
   } = props;
   // null on the plain Earth view, and while the chosen layer is loading or failed.
   const activeLayer = loadingLayer || layerLoadError ? null : layerForChoice(layers, activeLayerId);
@@ -430,6 +436,24 @@ export function PlanetHud(props: PlanetHudProps) {
           onClick={onShowTour}
         >
           ?
+        </button>
+      )}
+      {onToggleNarrator && narratorOn !== undefined && (
+        <button
+          type="button"
+          data-testid="planet-hud-narrator-button"
+          className={`flex h-7 items-center justify-center rounded-full border px-2.5 font-label text-[11px] font-medium uppercase tracking-[0.16em] ${
+            narratorOn
+              ? "border-landing-accent text-landing-accent"
+              : "border-landing-label/60 text-landing-ink hover:border-landing-ink"
+          }`}
+          aria-pressed={narratorOn}
+          aria-keyshortcuts="V"
+          aria-label="Narrator: read the app aloud (V key)"
+          title={narratorOn ? "Narrator on: press V to turn it off, I to hear where you are, H for the keys" : "Turn the narrator on (V key)"}
+          onClick={onToggleNarrator}
+        >
+          {narratorOn ? "Voice on" : "Voice"}
         </button>
       )}
     </div>
