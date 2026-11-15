@@ -53,7 +53,9 @@ describe("timeline line text", () => {
       expect(timelineTrackSource).toContain(`data-testid="${id}"`);
     }
     expect(timelineTrackSource).toContain("data-testid={`timeline-date-${manifest.id}`}");
-    expect(timelineTrackSource).toContain("data-testid={`timeline-speed-${value}`}");
+    expect(timelineTrackSource).toContain('data-testid="timeline-speed"');
+    expect(timelineTrackSource).toContain("min={TIMELINE_MIN_SPEED}");
+    expect(timelineTrackSource).toContain("max={TIMELINE_MAX_SPEED}");
   });
 
   it("has a pause button, so only the person stops the timeline", () => {

@@ -11,7 +11,12 @@ export interface TourStep {
   description: string;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
+  /** UI change to apply when the person presses Next on this step. */
+  onNext?: TourAction;
 }
+
+/** A UI change the tour asks the app to make while it is open. */
+export type TourAction = "show-timeline" | "restore-layer";
 
 /** Where the tour remembers that this browser has already seen it. */
 export const TOUR_SEEN_KEY = "earth-jukebox:tour-seen";
@@ -44,13 +49,51 @@ export const TOUR_STEPS: readonly TourStep[] = [
     testId: "planet-canvas",
     title: "Explore the planet",
     description:
-      "The overview plays the visible planet all at once: low notes near the poles, high notes near the equator. Drag to turn it; double-click a region to fly there.",
+      "The overview sounds the visible planet: low notes at the poles, high at the equator. Click and drag to turn it; a single click alone selects no point here; double-click a region to fly there.",
+  },
+  {
+    testId: "planet-hud-auto-rotate",
+    title: "Keep the planet turning",
+    description:
+      "Auto-rotate turns the planet by itself. Turn it off to stop the planet while the timeline and the visible-area sound keep going.",
+    side: "right",
+    align: "start",
+    onNext: "show-timeline",
+  },
+  {
+    testId: "timeline-track",
+    title: "The timeline",
+    description:
+      "The line shows the instants of the picked layer. It runs on its own clock; use Play/Pause, drag along it, or the arrow keys to choose an instant.",
+    side: "top",
+    align: "center",
+  },
+  {
+    testId: "timeline-speed",
+    title: "Timeline speed",
+    description:
+      "Use the speed slider (4×–32×) on the line to cover more data time per turn. The line shows how much one turn spans.",
+    side: "top",
+    align: "center",
   },
   {
     testId: "planet-hud-amazon-button",
     title: "Fly to a region",
     description:
-      "The world is divided into regions, with the Amazon on its own. Double-click (or tap twice) one, or press Amazon, to open its map; double-click the map or press Back to Earth to return.",
+      "The world is divided into regions, with the Amazon on its own. Double-click (or tap twice) one, or press Amazon, to open its map.",
+    side: "left",
+    align: "end",
+  },
+  {
+    title: "On a regional map",
+    description:
+      "Click a point to lock its sound, click and drag to move it and change its pitch, and double-click the map to return to the globe.",
+  },
+  {
+    testId: "planet-hud-back-button",
+    title: "Back to the planet",
+    description:
+      "On a regional map, Back to Earth returns to the globe. Double-clicking the map does the same.",
     side: "left",
     align: "end",
   },

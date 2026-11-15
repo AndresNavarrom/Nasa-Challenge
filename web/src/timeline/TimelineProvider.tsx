@@ -4,7 +4,7 @@
 // Decisions recorded here (full rationale in docs/TIMELINE-HANDOFF.md):
 // - Shared normalized position, loop forever.
 // - In the app the timeline plays on its own clock at the planet's pace: it calls
-//   `step` (about 30 times a second), scaled by `speed` (4x or 8x on the line),
+//   `step` (about 30 times a second), scaled by `speed` (4x–32x on the line),
 //   and the person can `seek` on the line. The play/pause clock below stays for
 //   the dev harness.
 // - The provider owns no UI. Controls (TimelineTrack) call the actions.
@@ -37,7 +37,7 @@ const TimelineContext = createContext<TimelineValue | null>(null);
 const TimelineActionsContext = createContext<TimelineActions | null>(null);
 
 export function TimelineProvider({ children }: { children: ReactNode }) {
-  // The line offers 4x and 8x only, so the timeline starts at 4x.
+  // The line starts at 4x and can be raised to 32x with its slider.
   const [state, dispatch] = useReducer(playbackReducer, undefined, () =>
     createPlayback({ speed: DEFAULT_TIMELINE_SPEED }),
   );
