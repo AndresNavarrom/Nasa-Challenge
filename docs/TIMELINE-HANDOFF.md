@@ -1,13 +1,36 @@
 # Timeline — decisions and handoff
 
 Status: playback logic and audio are implemented on the `timeline` branch
-(based on `sonido`). The visual frames, the timeline bar and keyboard support
-are still to be built by the interfaz owner.
+(rebased on the latest `main`). The visual frames, the timeline bar and keyboard
+support are still to be built by the interfaz owner, **Andrés
+(`AndresNavarrom`)** — this is the explicit ask on the pull request.
 
 Try it now: `docker compose up web`, then open
 <http://127.0.0.1:5173/timeline-check.html>. That development page uses the real
 playback reducer and sound engine at a fixed Amazon-centre point; it is not part
 of the app or the production bundle.
+
+## Ask for Andrés (UI/scene)
+
+Please build the visible half against the contract below. Work in this order:
+
+1. **`web/src/ui/TimelineBar.tsx`** — play/pause, range `0..1` (scrub),
+   range `0.1..8` (speed), position/percentage and `dateLabelAt` for every
+   non-static layer. `data-testid`: `timeline-bar`, `timeline-scrub`,
+   `timeline-play`, `timeline-speed`, `timeline-date-<id>`.
+2. **Dock it in `PlanetHud`** — add a `timeline?: ReactNode` slot next to
+   `audio`, same bottom-right panel.
+3. **Per-frame textures** — `layerTexture.ts` from a single texture to arrays,
+   built from every frame of the grid.
+4. **Crossfade** — two samplers per view and `uFrameMix` in `EarthMesh`; set the
+   pair from `frameBlend(position, frames)`.
+5. **Scene position** — `EarthScene` takes `position`, uses
+   `framePosition(position, frames)` for the probe, and re-runs the probe when
+   the position changes.
+
+The `timeline` logic is already in place: `useTimeline()` gives
+`position/playing/speed/loop/durationSeconds` and the actions; do not duplicate
+the clock. Try the sound side at `/timeline-check.html` while wiring.
 
 ## Decisions
 

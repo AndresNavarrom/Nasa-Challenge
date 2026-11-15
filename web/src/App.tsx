@@ -85,10 +85,10 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
 }
 
 /**
- * Feeds the sound engine from the point under the cursor (plan Step 10, FR3 and
- * FR6). Lives inside ListeningPointProvider, so the scene publishes the point
- * without knowing about audio. The first instant is used until the timeline of
- * Step 13 exists.
+ * Feeds the sound engine from the point under the cursor and the shared
+ * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
+ * ListeningPointProvider, so the scene publishes the point without knowing
+ * about audio. The timeline starts paused at 0 until Step 13's controls exist.
  */
 function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngine }) {
   const point = useListeningPoint();
