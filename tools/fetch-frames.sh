@@ -20,11 +20,10 @@
 # GEOS-CF (about 1.2 GB), two passes over the SVS 5011 lightning video (350 MB
 # each, streamed, not stored: one for the map the sound uses, one for the dots
 # drawn on the planet; each only when its file is missing) and 14 frames of SVS 4950 in 4K (66 MB each as 16-bit
-# TIFF, kept as 8-bit PNG), plus 72 frames of the SVS 5196 CO2 orbit (25 MB
-# each as EXR, kept as 8-bit PNG).
-# Files from earlier versions of this script (SVS 5533, SVS 3615, the 1080p
-# SVS 5196 video and its co2_globe_*.png frames) stay in
-# data/raw/ and are no longer downloaded.
+# TIFF, kept as 8-bit PNG). The CO2 layer (OCO-2 GEOS, behind the Earthdata
+# login) has its own script: docker compose run --rm fetch-oco2.
+# Files from earlier versions of this script (SVS 5533, SVS 3615 and the SVS
+# 5196 CO2 frames) stay in data/raw/ and are no longer downloaded.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -176,36 +175,10 @@ for png in "$RAW/$LIGHTNING_MONTHS"/lightning_*_??.png; do
   record "$LIGHTNING_MONTHS/$(basename "$png")" "$LIGHTNING_VIDEO" "mean lightning of the ten-day windows of one month only, from \`data/raw/$LIGHTNING_DOTS\`, by tools/fetch/lightning_months.py"
 done
 
-echo "Atmospheric CO2 - DYAMOND (SVS 5196), 5760 x 3240 EXR frames"
-# The orbit animation, frame by frame, as uncompressed EXR (about 25 MB each).
-# The camera stays put while the Earth turns east under it, so the point under
-# the camera moves west 0.2017 degrees per frame; each frame is one model hour, frame 00001 is 14 Jan 2020 22:00 UTC.
-# 00939 to 01005 (every frame): South America faces the camera, 23 Feb 2020
-# 00:00 UTC to 25 Feb 2020 18:00 UTC, the 67 hourly instants of the layer.
-# 00001, 00232, 00463, 00694 and 01176: the rest of the planet (Asia and
-# Australia, India, Africa and the Atlantic, the eastern Pacific), each on its
-# own date, for the fixed fallback mosaic outside the animated views.
-# Where the globe sits in each frame (data/prep-config.json) was fitted to real
-# coastlines by tools/fetch/co2_calibrate.py.
-CO2_STEM="dyamondPointCloud_12-1-2023b_dyamond_co2_anim_globe_orbit_3x3Hyperwall"
-CO2_FRAMES="$SVS/a005100/a005196/frames/5760x3240_16x9_30p/$CO2_STEM"
-for n in 00001 00232 00463 00694 01176 $(seq -f '%05g' 939 1005); do
-  png="5196/co2_orbit.${n}.png"
-  url="$CO2_FRAMES/$CO2_STEM.$n.exr"
-  if have "$png"; then
-    echo "  have   $png"
-  else
-    download "5196/exr/orbit.$n.exr" "$url"
-    echo "  frame  $png"
-    if ! ffmpeg -v error -y -apply_trc iec61966_2_1 -i "$RAW/5196/exr/orbit.$n.exr" -pix_fmt rgb24 "$RAW/$png"; then
-      rm -f "$RAW/$png"
-      echo "fetch-frames: could not convert the CO2 frame $n from EXR to PNG" >&2
-      exit 1
-    fi
-    rm -f "$RAW/5196/exr/orbit.$n.exr"
-  fi
-  record "$png" "$url" "EXR frame (5760 x 3240, linear) converted to 8-bit sRGB PNG with ffmpeg"
-done
+echo "Atmospheric CO2 - OCO-2 GEOS L3 daily (downloaded by fetch-oco2, not by this script)"
+OCO2_URL="https://data.gesdisc.earthdata.nasa.gov/data/OCO2_DATA/OCO2_GEOS_L3CO2_DAY.10r/2020/"
+record "oco2/nc/oco2_GEOS_L3CO2_day_2020<mmdd>_*.nc4" "$OCO2_URL" "366 daily files of 2020, downloaded with a NASA Earthdata login by tools/fetch/fetch-oco2.sh (docker compose run --rm fetch-oco2), not by this script"
+record "oco2/xco2_2020<mmdd>.png" "$OCO2_URL" "XCO2 on 576 x 360 cells, 404 to 420 ppm as grey 0 to 255, by tools/fetch/oco2_to_png.py"
 
 echo "Forest height fill - GEDI (SVS 4950), 4K frames"
 GEDI_L3_NAME="GEDI03_rh100_mean_2019108_2025190_003_01.tif"
@@ -257,11 +230,13 @@ cat >"$SOURCES" <<EOF
 # Data sources
 
 Everything shown and heard in Earth Jukebox comes from the public sources
-below. Only GEDI L3 (forest height) needs a free NASA Earthdata login: it is
-downloaded on its own with \`docker compose run --rm fetch-gedi\`, which reads
-the login from \`~/.netrc\`. Keep only the \`urs.earthdata.nasa.gov\` line in that
-file: the download container can read all of it. No other source needs a
-login. This file is
+below. Only GEDI L3 (forest height) and OCO-2 GEOS (CO2) need a free NASA
+Earthdata login: they are downloaded on their own with \`docker compose run --rm
+fetch-gedi\` and \`docker compose run --rm fetch-oco2\`, which read the login from
+\`~/.netrc\` (OCO-2 also needs the "NASA GESDISC DATA ARCHIVE" application
+authorised in the Earthdata profile). Keep only the \`urs.earthdata.nasa.gov\`
+line in that file: the download containers can read all of it. No other source
+needs a login. This file is
 rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fetch\`).
 
 ## Layers
@@ -270,7 +245,7 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
 |---|---|---|---|
 | Forest height | [GEDI L3 Gridded Land Surface Metrics, Version 3](https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-gedi-l3-landsurface-metrics-v3-2525-3) (NASA GEDI, ORNL DAAC, DOI [10.3334/ORNLDAAC/2525](https://doi.org/10.3334/ORNLDAAC/2525)), file \`GEDI03_rh100_mean_2019108_2025190_003_01.tif\` (mean canopy height, rh100). Fill: [GEDI Forest Height, NASA SVS 4950](https://svs.gsfc.nasa.gov/4950), 4K frames of the rotating globe | April 2019 - July 2025 (SVS 4950 fill: April 2019 - April 2020) | Mean canopy height measured by GEDI on a fixed scale: **0 m = 0 (byte 0), 50 m or more = 1 (byte 255)**, linear in between. Only cells without any GEDI measurement take the SVS 4950 value instead (relative height 0 to 1 read from the colours of 14 rendered globe views on the published 0 to 50 m colour bar); the two are never blended. |
 | Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) analysis, NASA GMAO, file \`aqc_tavg_1hr_glo_L1440x721_slv\`, variable \`PM25_RH35\` (surface PM2.5 at 35 % relative humidity) | 1 to 7 September 2026, 168 hourly means (00:30 to 23:30 UTC each day) | Model PM2.5 on a fixed scale: **0 ug/m3 = 0 (byte 0), 150 ug/m3 or more = 1 (byte 255)**, linear in between. Missing or fill values are 0. |
-| Atmospheric CO2 | [DYAMOND Global Carbon Dioxide, NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) (GEOS model, DYAMOND simulation), 72 frames (5760 x 3240 EXR) of the orbiting-globe animation | 23 - 25 February 2020, every hour (67 instants), where South America faces the camera; elsewhere one fixed date per region between 14 January and 3 March 2020 | Relative intensity (0 to 1): the "warmth" of each pixel (red minus blue), read from the rendered frames. Not ppm. **Global, but only the Americas and the Atlantic move with the timeline**; the rest of the planet is a fixed mosaic. |
+| Atmospheric CO2 | [OCO-2 GEOS Level 3 daily, 0.5x0.625 assimilated CO2, V10r](https://disc.gsfc.nasa.gov/datasets/OCO2_GEOS_L3CO2_DAY_10r/summary) (NASA GES DISC: the GEOS model with OCO-2 satellite measurements assimilated), variable \`XCO2\` | Every day of 2020 (366 daily means) | Column-averaged CO2 (XCO2) on a fixed scale: **404 ppm = 0 (byte 0), 420 ppm or more = 1 (byte 255)**, linear in between. The whole planet moves with the timeline. Fill values are 0. |
 | Lightning | [Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011](https://svs.gsfc.nasa.gov/5011), equirectangular video for spheres (LIS on the ISS) | January 2017 - July 2023, one frame per month (79 frames) | Relative frequency (0 to 1): how often lightning was drawn at each place during that month only (nothing accumulated between frames), read from the video frames. Not a flash count. Drawn from its grids, one month at a time, on the timeline. |
 
 ## How each source was turned into a map
@@ -282,25 +257,16 @@ rewritten by \`tools/fetch-frames.sh\` (run it with \`docker compose run --rm fe
   grid is kept at 720 x 360 (0.5 degree) so the browser can hold all 168
   hours, and its Amazon grid keeps the model resolution (0.25 degrees). In the
   app one turn of the planet is one day of smoke.
-- **CO2.** SVS 5196 is only published as a rendered globe that turns under a
-  fixed camera (the point under the camera moves 0.2017 degrees west per frame, because the
-  Earth turns east; one model hour per frame), so no
-  frame shows the whole planet at one moment. The 67 instants are every frame
-  where South America faces the camera (00939 to 01005, one model hour each);
-  each is used up to 60 degrees from the point under the camera. Where the
-  globe sits was fitted on every sixth frame; the frames in between take the
-  longitude under the camera interpolated linearly between the two fitted
-  frames around them (tools/fetch/timeline_config.py). The whole-planet grid
-  is kept at 720 x 360 (0.5 degree). The rest of the planet
-  comes from five more frames (00001, 00232, 00463, 00694 and 01176: 14 and 24
-  January, 3 and 12 February and 3 March 2020), blended as fixed fallback views,
-  so outside the animated views each region shows the date of the view that
-  covers it (where two views overlap, near 23 degrees E for example, their dates
-  are blended, up to nine days apart). Where the globe
-  sits in each frame was fitted to the Natural Earth coastlines
-  (tools/fetch/co2_calibrate.py). The "warmth" also picks up bright beige
-  land: deserts (Sahara, Australia, Atacama) read about 0.1, a low value, more
-  than the Amazon itself in February 2020 (about 0.04).
+- **CO2.** OCO-2 GEOS L3 stores 361 latitudes (with the poles on the end
+  rows) by 576 longitudes starting at 180 W (0.5 x 0.625 degree). Each image
+  cell (576 x 360) is the mean of the 2 x 2 block of model points around its
+  centre (tools/fetch/oco2_to_png.py), on the fixed 404 to 420 ppm scale, the
+  same every day, so both the yearly rise and the northern summer dip (plants
+  taking CO2 up) show. The app grids are 360 x 180 (1 degree) for the planet
+  and 72 x 56 (0.5 degree, the model's own) for the Amazon. In the app one turn
+  of the planet is 30 days. Downloaded with the Earthdata login by
+  tools/fetch/fetch-oco2.sh, which lists the daily files from NASA's public
+  catalogue (CMR).
 - **Lightning.** The video shows a 10-day roving window: each frame holds only
   the last ten days and its last frame is empty, so no single frame holds the
   accumulated period. One frame every 0.4 s of the video (about every 10 days
@@ -391,13 +357,17 @@ inside a hand-drawn area around the basin.
 - GEDI L3 V3: NASA GEDI mission, distributed by the ORNL DAAC
   (doi:10.3334/ORNLDAAC/2525); NASA Earth science data are open, with no
   restrictions on use. Download needs a free NASA Earthdata login.
+- OCO-2 GEOS L3: NASA OCO-2 project and GMAO, distributed by the GES DISC;
+  NASA Earth science data are open, with no restrictions on use. Download
+  needs a free NASA Earthdata login.
 - SVS 4950 and SVS 5011: NASA Scientific Visualization Studio. NASA imagery is
   generally not copyrighted; credit NASA's Scientific Visualization Studio.
 
 ## No longer used
 
-- The old smoke frames (SVS 5533), the 1080p GEDI video and the SVS 3615 base
-  image (\`earth.jpg\`) are no longer downloaded; files already in
+- The old smoke frames (SVS 5533), the 1080p GEDI video, the SVS 3615 base
+  image (\`earth.jpg\`) and the SVS 5196 CO2 orbit frames (replaced by OCO-2
+  GEOS, which covers the whole planet every day) are no longer downloaded; files already in
   \`data/raw/\` and \`web/public/data/earth.jpg\` are kept.
 
 ## Files

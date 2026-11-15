@@ -227,5 +227,23 @@ services:
           create_host_path: false
     command: ["bash", "tools/fetch/fetch-gedi.sh"]
 
+  # OCO-2 GEOS daily CO2 (NASA GES DISC): behind the same Earthdata login as GEDI,
+  # with the "NASA GESDISC DATA ARCHIVE" application authorised in the profile.
+  fetch-oco2:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      # Output: data/raw/oco2/ (the daily NetCDF files and their grey images).
+      - ./data:/work/data
+      # The Earthdata login, read-only and only in this service (see fetch-gedi).
+      - type: bind
+        source: ~/.netrc
+        target: /root/.netrc
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["bash", "tools/fetch/fetch-oco2.sh"]
+
 volumes:
   web_node_modules:

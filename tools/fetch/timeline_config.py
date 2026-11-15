@@ -6,16 +6,12 @@ names its spacing (``cadence``, ISO 8601):
 
 - smoke: GEOS-CF hourly means, 1 to 7 September 2026 (168 instants, ``PT1H``),
   images ``geoscf/pm25_<yyyymmdd>_<hh>30.png`` from fetch-frames.sh;
-- co2: every frame of the SVS 5196 orbit while South America faces the camera,
-  frames 00939 to 01005, one model hour each (67 instants, ``PT1H``). Only
-  ``center_lon`` of the globe changes from frame to frame (the Earth turns under
-  a fixed camera); it is interpolated linearly between the frames already
-  fitted to real coastlines (co2_calibrate.py), every sixth one. The five fixed
-  fallback views stay as they are;
+- co2: OCO-2 GEOS daily XCO2, every day of 2020 (366 instants, ``P1D``),
+  images ``oco2/xco2_<yyyymmdd>.png`` from fetch-oco2.sh;
 - lightning: one image per month, January 2017 to July 2023 (79 instants,
   ``P1M``), from lightning_months.py.
 
-Only the ``instants`` list, ``cadence`` and ``grid`` of these three layers are
+Only the ``instants`` list, ``cadence`` and ``grid`` sizes of these three layers are
 rewritten; the rest of the file keeps its text and layout. Run it again after
 changing the periods below.
 
@@ -35,15 +31,15 @@ MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", 
 
 SMOKE_FIRST_DAY = datetime(2026, 9, 1, tzinfo=timezone.utc)
 SMOKE_DAYS = 7
-CO2_FIRST_FRAME, CO2_LAST_FRAME = 939, 1005
-# Frame 00001 of the SVS 5196 orbit is 14 January 2020 22:00 UTC; one model hour per frame.
-CO2_FRAME_ONE = datetime(2020, 1, 14, 22, tzinfo=timezone.utc)
+CO2_FIRST_DAY = datetime(2020, 1, 1, tzinfo=timezone.utc)
+CO2_DAYS = 366  # 2020 is a leap year
 LIGHTNING_FIRST = (2017, 1)
 LIGHTNING_LAST = (2023, 7)
 
-# Global grids of the layers with many instants are kept at 720 x 360 (0.5 degree):
-# smoke and CO2 are smooth fields and the browser holds every instant in memory.
-GLOBAL_GRID = {"smoke": [720, 360], "co2": [720, 360]}
+# Grid sizes of the layers with many instants: the browser holds every instant in
+# memory. Smoke keeps 0.5 degree on the planet; CO2 (a smooth field, 0.5 x 0.625
+# degree at the source) is 1 degree on the planet and its own 0.5 degree in the Amazon.
+GRID_SIZES = {"smoke": {"global": [720, 360]}, "co2": {"global": [360, 180], "region": [72, 56]}}
 
 
 def iso(moment: datetime) -> str:
@@ -64,44 +60,17 @@ def smoke_instants() -> list[dict]:
     return instants
 
 
-def co2_frame_time(frame: int) -> datetime:
-    return CO2_FRAME_ONE + timedelta(hours=frame - 1)
+def day_label(moment: datetime) -> str:
+    """Readable day, e.g. "Jan 1, 2020"."""
+    return f"{MONTHS[moment.month - 1]} {moment.day}, {moment.year}"
 
 
-def interpolate_center_lon(frame: int, fitted: dict[int, float]) -> float:
-    """``center_lon`` of a frame, linear between the nearest fitted frames (rounded to 0.01 degree)."""
-    if frame in fitted:
-        return fitted[frame]
-    known = sorted(fitted)
-    if frame < known[0] or frame > known[-1]:
-        raise ValueError(f"frame {frame} lies outside the fitted frames {known[0]}..{known[-1]}")
-    after = next(k for k in known if k > frame)
-    before = max(k for k in known if k < frame)
-    share = (frame - before) / (after - before)
-    return round(fitted[before] + (fitted[after] - fitted[before]) * share, 2)
-
-
-def co2_instants(current: list[dict]) -> list[dict]:
-    """One instant per orbit frame, built on the fitted instants already in the file."""
-    pattern = re.compile(r"co2_orbit\.(\d{5})\.png$")
-    fitted: dict[int, float] = {}
-    template: dict | None = None
-    for instant in current:
-        main = instant["views"][0]
-        match = pattern.search(main["file"])
-        if not match:
-            raise ValueError(f"CO2 instant {instant['date']!r}: first view {main['file']!r} is not an orbit frame")
-        fitted[int(match.group(1))] = main["projection"]["center_lon"]
-        template = template or instant
-    if template is None:
-        raise ValueError("the CO2 layer lists no instant to start from")
-    fallbacks = template["views"][1:]
+def co2_instants() -> list[dict]:
     instants = []
-    for frame in range(CO2_FIRST_FRAME, CO2_LAST_FRAME + 1):
-        projection = dict(template["views"][0]["projection"], center_lon=interpolate_center_lon(frame, fitted))
-        moment = co2_frame_time(frame)
-        main = {"file": f"5196/co2_orbit.{frame:05d}.png", "projection": projection}
-        instants.append({"date": hour_label(moment), "time": iso(moment), "views": [main, *fallbacks]})
+    for day in range(CO2_DAYS):
+        moment = CO2_FIRST_DAY + timedelta(days=day)
+        file = f"oco2/xco2_{moment:%Y%m%d}.png"
+        instants.append({"date": day_label(moment), "time": iso(moment), "views": [{"file": file, "projection": EQUIRECT}]})
     return instants
 
 
@@ -160,16 +129,15 @@ def rewrite_layer(text: str, layer_id: str, instants: list[dict], cadence: str) 
     block = re.sub(r'"instants": \[.*\]', lambda _: f'"instants": [\n{lines}\n{indent}]', block, flags=re.S)
     block = re.sub(rf'\n{indent}"cadence": "[^"]*",', "", block)
     block = block.replace(f'\n{indent}"value":', f'\n{indent}"cadence": "{cadence}",\n{indent}"value":', 1)
-    if layer_id in GLOBAL_GRID:
-        width, height = GLOBAL_GRID[layer_id]
-        block = re.sub(r'"grid": \{[^}]*\}', lambda m: _with_global(m.group(0), width, height), block, count=1)
+    if layer_id in GRID_SIZES:
+        block = re.sub(r'"grid": \{[^}]*\}', lambda m: _with_sizes(m.group(0), GRID_SIZES[layer_id]), block, count=1)
     return text[:start] + block + text[end:]
 
 
-def _with_global(grid: str, width: int, height: int) -> str:
-    sizes = json.loads(grid.split(":", 1)[1])
-    sizes["global"] = [width, height]
-    return '"grid": ' + compact(sizes)
+def _with_sizes(grid: str, sizes: dict[str, list[int]]) -> str:
+    current = json.loads(grid.split(":", 1)[1])
+    current.update(sizes)
+    return '"grid": ' + compact(current)
 
 
 def main(argv: list[str]) -> int:
@@ -178,13 +146,8 @@ def main(argv: list[str]) -> int:
         return 2
     path = Path(argv[0])
     text = path.read_text(encoding="utf-8")
-    config = json.loads(text)
-    current_co2 = next(layer for layer in config["layers"] if layer["id"] == "co2")["instants"]
-    # Fitted frames are every sixth one; a file already rewritten lists every frame,
-    # and its interpolated values are recomputed from the fitted ones only.
-    fitted_co2 = [i for i in current_co2 if (int(re.search(r"(\d{5})", i["views"][0]["file"]).group(1)) - CO2_FIRST_FRAME) % 6 == 0]
     text = rewrite_layer(text, "smoke", smoke_instants(), "PT1H")
-    text = rewrite_layer(text, "co2", co2_instants(fitted_co2), "PT1H")
+    text = rewrite_layer(text, "co2", co2_instants(), "P1D")
     text = rewrite_layer(text, "lightning", lightning_instants(), "P1M")
     json.loads(text)  # still valid JSON
     path.write_text(text, encoding="utf-8")
