@@ -11,6 +11,7 @@ import type { ViewMode } from "./scene/FocusTransition";
 import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
 import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
 import { PlanetHud } from "./ui/PlanetHud";
+import { TimelineBar } from "./ui/TimelineBar";
 
 type LoadState =
   | { status: "loading" }
@@ -29,7 +30,7 @@ function defaultLayerId(data: JukeboxData): string {
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. */
-function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; audio?: ReactNode }) {
+function PlanetView({ data, lite, audio, timeline }: { data: JukeboxData; lite: boolean; audio?: ReactNode; timeline?: ReactNode }) {
   const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
@@ -79,6 +80,7 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
         lite={lite}
         sceneError={sceneError}
         audio={audio}
+        timeline={timeline}
       />
     </>
   );
@@ -88,7 +90,7 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
  * Feeds the sound engine from the point under the cursor and the shared
  * timeline position (plan Step 10, FR3, FR6 and FR7). Lives inside
  * ListeningPointProvider, so the scene publishes the point without knowing
- * about audio. The timeline starts paused at 0 until Step 13's controls exist.
+ * about audio. The timeline starts paused at 0; the timeline bar plays it.
  */
 function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngine }) {
   const point = useListeningPoint();
@@ -114,11 +116,38 @@ function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngin
   return null;
 }
 
+/**
+ * The timeline bar bound to the shared clock. Only this component reads the
+ * clock, so while the sequence plays (about 30 updates a second) it re-renders
+ * alone, not the planet view around it.
+ */
+function TimelineControls({ layers }: { layers: JukeboxData["layers"] }) {
+  const timeline = useTimeline();
+  return (
+    <TimelineBar
+      className="w-56"
+      position={timeline.position}
+      playing={timeline.playing}
+      speed={timeline.speed}
+      durationSeconds={timeline.durationSeconds}
+      layers={layers}
+      onSeek={timeline.seek}
+      onToggle={timeline.toggle}
+      onSpeed={timeline.setSpeed}
+    />
+  );
+}
+
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
   return (
     <>
-      <PlanetView data={data} lite={lite} audio={<AudioStart engine={engine} className="w-56" />} />
+      <PlanetView
+        data={data}
+        lite={lite}
+        audio={<AudioStart engine={engine} className="w-56" />}
+        timeline={<TimelineControls layers={data.layers} />}
+      />
       <AudioListener data={data} engine={engine} />
     </>
   );
