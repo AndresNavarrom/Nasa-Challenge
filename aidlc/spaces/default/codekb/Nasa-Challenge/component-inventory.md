@@ -1,80 +1,52 @@
-# Component Inventory
+# Inventario de componentes — Earth Jukebox
 
-Responsable según `TAREAS.md`. Las interfaces públicas se detallan en `api-documentation.md`; las versiones en `technology-stack.md`.
+Inventario único del repositorio; los demás artefactos lo referencian.
 
-## Web App Shell
+### earth-jukebox-web
 
-- **Ubicación**: `web/src/App.tsx`, `web/src/main.tsx`, `web/src/index.css`, `web/index.html`
-- **Responsabilidad**: montar React y, por ahora, cargar los datos y listar las capas con estados de carga y error (`data-testid` `data-loading`, `data-error`, `layer-list`). Los pasos 12-14 reemplazan el cuerpo de `App`.
-- **Depende de**: Data Loader
-- **Responsable**: Samuel (`web/src/App.tsx`, futuras `web/src/scene/` y `web/src/ui/`)
+- **Ruta**: `web/`
+- **Responsabilidad**: SPA del planeta 3D y el mapa de la Amazonía: carga y valida los datos (`src/data/`), interpola en espacio y tiempo (`src/lib/`), mapea valor→sonido (`src/audio/mapping.ts`), dibuja planeta, capa activa y transición (`src/scene/`), HUD con selector de capa, indicador y FPS (`src/ui/`).
+- **Depende de**: `web/public/data/` (salida de `jukebox-prep`); React, three.js, @react-three/fiber, GSAP, Tailwind.
+- **Pruebas**: 7 archivos Vitest, 28 casos.
 
-## Data Loader
+### jukebox-prep
 
-- **Ubicación**: `web/src/data/types.ts`, `web/src/data/loadManifest.ts`
-- **Responsabilidad**: tipos del contrato de datos y carga validada del manifiesto y las cuadrículas.
-- **Depende de**: Prepared Data
-- **Responsable**: compartido; el formato no cambia sin acuerdo de los tres
+- **Ruta**: `tools/prep/`
+- **Responsabilidad**: CLI Rust que convierte imágenes de fuentes NASA en cuadrículas de intensidad, texturas, imagen base del planeta y `manifest.json`; modo `--sample` con datos generados.
+- **Depende de**: `data/prep-config.json` y `data/raw/`; crates `image`, `serde`, `serde_json`.
+- **Pruebas**: 10 pruebas unitarias en `config`, `pipeline`, `project`, `grid`, `color`.
 
-## Interpolation
+### jukebox-server
 
-- **Ubicación**: `web/src/lib/interpolate.ts`
-- **Responsabilidad**: valor 0..1 (o `null`) de una capa en lon/lat e instante; bilineal en espacio, lineal en tiempo; elige cuadrícula regional o global.
-- **Depende de**: Data Loader (tipos)
-- **Responsable**: Fernando
+- **Ruta**: `server/`
+- **Responsabilidad**: futuro servidor estático Axum en 127.0.0.1 para la app compilada; hoy sale con código 2.
+- **Depende de**: axum, tokio, tower-http (declaradas, sin uso).
+- **Pruebas**: ninguna.
 
-## Timeline
+### fetch-tools
 
-- **Ubicación**: `web/src/lib/timeline.ts`
-- **Responsabilidad**: posición común 0..1 → índice de instante y etiqueta de fecha por capa; avance de reproducción con bucle.
-- **Depende de**: Data Loader (tipos)
-- **Responsable**: Fernando
+- **Ruta**: `tools/fetch-frames.sh`, `tools/fetch/`
+- **Responsabilidad**: descargar las fuentes (Natural Earth, GEOS-CF, video SVS 5011, cuadros SVS 4950) a `data/raw/`, convertirlas a PNG legibles por `prep` y reescribir `data/SOURCES.md`.
+- **Depende de**: curl, ffmpeg, unzip, Python 3.12 con numpy, Pillow, netCDF4 (imagen `earth-jukebox-fetch`).
+- **Pruebas**: 7 pruebas pytest de las conversiones.
 
-## Audio Mapping
+### data-config
 
-- **Ubicación**: `web/src/audio/mapping.ts`
-- **Responsabilidad**: funciones puras valor → nota/armonía (bosque), aspereza/filtro/ruido (humo), respiración (CO2), paneo y volumen.
-- **Depende de**: nada
-- **Responsable**: Fernando (el motor `engine.ts` está pendiente, paso 10)
+- **Ruta**: `data/prep-config.json`, `data/SOURCES.md`
+- **Responsabilidad**: declara capas, vistas, proyecciones y métodos de valor que lee `prep`; registra fuentes y licencias (generado por `fetch-frames.sh`).
+- **Depende de**: esquema de `tools/prep/src/config.rs`.
+- **Pruebas**: validado al correr `prep`.
 
-## Prepared Data
+### compose-services
 
-- **Ubicación**: `web/public/data/`
-- **Responsabilidad**: `manifest.json`, 4 cuadrículas `.bin`, 4 texturas `.png` y `earth.jpg` (1.2 MB) servidos tal cual.
-- **Depende de**: Data Prep CLI (los genera)
-- **Responsable**: Andres
+- **Ruta**: `docker-compose.yml`, `web/Dockerfile`, `tools/prep/Dockerfile`, `tools/fetch/Dockerfile`, `.dockerignore`
+- **Responsabilidad**: construir y correr todo en Docker: `web` (dev en 127.0.0.1:5173), `web-test`, `prep`, `prep-test`, `fetch`, `fetch-test`.
+- **Depende de**: Docker Desktop.
+- **Pruebas**: no aplica.
 
-## Data Prep CLI
+### scraping-tools
 
-- **Ubicación**: `tools/prep/` (`jukebox-prep`)
-- **Responsabilidad**: proyectar cuadros NASA, convertir color en valor, reducir/cuantizar y escribir los datos preparados y el manifiesto; modo `--sample`.
-- **Depende de**: Frame Fetcher (entradas en `data/raw/`), `data/prep-config.json`, crates `image`, `serde`, `serde_json`
-- **Responsable**: Andres
-
-## Frame Fetcher
-
-- **Ubicación**: `tools/fetch-frames.sh`
-- **Responsabilidad**: descargar cuadros y videos de NASA SVS, extraer fotogramas con `ffmpeg` y reescribir `data/SOURCES.md`. Corre en el anfitrión (necesita `curl` y `ffmpeg`), no en Docker.
-- **Depende de**: red, `curl`, `ffmpeg`
-- **Responsable**: Andres
-
-## Local Server
-
-- **Ubicación**: `server/` (`jukebox-server`)
-- **Responsabilidad**: servir la interfaz compilada y los datos en `127.0.0.1` (paso 11). Hoy es un esqueleto que sale con código 2.
-- **Depende de**: `axum`, `tokio`, `tower-http` (declarados)
-- **Responsable**: Andres
-
-## Container Setup
-
-- **Ubicación**: `docker-compose.yml`, `web/Dockerfile`, `web/docker-entrypoint.sh`, `tools/prep/Dockerfile`, `.dockerignore`, `web/.dockerignore`, `tools/prep/.dockerignore`
-- **Responsabilidad**: ejecutar la interfaz con recarga en vivo (`web`, `127.0.0.1:5173`), las pruebas (`web-test`, `prep-test`) y la preparación (`prep`); dependencias npm en el volumen `web_node_modules`. El contenedor final (interfaz compilada + servidor) está pendiente.
-- **Depende de**: Docker Desktop, imágenes `node:20-bookworm-slim` y `rust:1-slim-bookworm`
-- **Responsable**: Andres
-
-## Componentes previstos (no existen)
-
-- `web/src/scene/` y `web/src/ui/` (planeta, mapa, transición, paneles, modo historia, accesibilidad): Samuel, pasos 12-14.
-- `web/src/audio/engine.ts` (Web Audio): Fernando, paso 10.
-- `run-demo.sh`, `docs/DEMO-CHECKLIST.md`, `docs/SUBMISSION.md`: Andres, pasos 15-16.
-- Scripts GEOS-FP (`tools/scraping/`) en la rama `origin/datos-rust`, sin integrar.
+- **Ruta**: `tools/scraping/`
+- **Responsabilidad**: exploración de fuentes NASA (API de SVS, GISTEMP, portal GEOS-FP); fuera del POC.
+- **Depende de**: Python con requests, pandas, xarray, netcdf4; entorno Nix.
+- **Pruebas**: ninguna.

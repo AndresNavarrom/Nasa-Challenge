@@ -1,12 +1,17 @@
 // The planet: one segmented mesh that blends between a sphere and the flat
 // world map according to `view.flatten` (0 = sphere, 1 = map), drawn with
-// earth.jpg and the active layer on top (FR1.1, FR1.2, FR3, NFR1).
+// the base image (earth-8k.jpg or earth-4k.jpg) and the active layer on top
+// (FR1.1, FR1.2, FR3, NFR1).
 //
 // Both shapes live in one geometry: `position` holds the sphere and `aPlane`
 // the flat map, and the vertex shader mixes them, so the blend costs nothing
 // on the CPU. The flat map is shifted so the Amazon centre sits where the
 // sphere's front point is once the planet faces the Amazon: the region stays
 // in place while the planet flattens around it.
+//
+// Inside the Amazon rectangle the base colour comes from a full-resolution
+// crop of the base image (earth-amazon.jpg), on the planet and on the map;
+// outside it, from the global image.
 //
 // Picking (FR4.1, FR4.2): an invisible sphere while on the planet and an
 // invisible plane while on the map; nothing is picked during the transition.
@@ -24,6 +29,8 @@ import {
   Vector4,
   type Group,
   type IUniform,
+  type Mesh,
+  type Vector3,
   type Texture,
 } from "three";
 import type { BoundingBox } from "../data/types";
@@ -48,6 +55,8 @@ const DRAG_SPEED = 0.005;
 const MAX_PITCH = 1.2;
 /** A press that moves more than this is a drag, not a click. */
 const CLICK_TOLERANCE_PX = 5;
+/** How often the point under a resting cursor is looked up again, seconds. */
+const HOVER_REFRESH_SECONDS = 0.05;
 /** Opacity of the active layer over the base image. */
 const LAYER_OPACITY = 0.8;
 
@@ -58,8 +67,10 @@ export interface GlobeHit {
 }
 
 export interface EarthMeshProps {
-  /** earth.jpg; null while loading or when it failed (a plain ocean colour is drawn). */
+  /** Global base image (earth-8k.jpg or earth-4k.jpg); null while loading or when it failed (a plain ocean colour is drawn). */
   baseTexture: Texture | null;
+  /** Amazon crop of the base image (earth-amazon.jpg); null while loading or when it failed (the global image is used). */
+  regionBaseTexture: Texture | null;
   layerTextures: LayerTextures;
   bbox: BoundingBox;
   view: RefObject<ViewState>;
@@ -90,6 +101,8 @@ const VERTEX_SHADER = /* glsl */ `
 const FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uBase;
   uniform bool uHasBase;
+  uniform sampler2D uRegionBase;
+  uniform bool uHasRegionBase;
   uniform sampler2D uLayerGlobal;
   uniform bool uHasGlobal;
   uniform sampler2D uLayerRegion;
@@ -99,11 +112,17 @@ const FRAGMENT_SHADER = /* glsl */ `
   varying float vShade;
 
   void main() {
-    vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
     float lon = -180.0 + 360.0 * vUv.x;
     float lat = -90.0 + 180.0 * vUv.y;
+    bool inRegion = lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w;
+    vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
+    if (inRegion && uHasRegionBase) {
+      // Same calculation as regionUv() in geo.ts: v grows northwards like an image texture.
+      vec2 cropUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (lat - uBbox.y) / (uBbox.w - uBbox.y));
+      color = texture2D(uRegionBase, cropUv).rgb;
+    }
     vec4 overlay = vec4(0.0);
-    if (lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w) {
+    if (inRegion) {
       // Inside the Amazon: the detailed regional grid (north row first).
       vec2 regionUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
       overlay = texture2D(uLayerRegion, regionUv);
@@ -162,6 +181,8 @@ interface Uniforms {
   uFlatten: IUniform<number>;
   uBase: IUniform<Texture | null>;
   uHasBase: IUniform<boolean>;
+  uRegionBase: IUniform<Texture | null>;
+  uHasRegionBase: IUniform<boolean>;
   uLayerGlobal: IUniform<Texture | null>;
   uHasGlobal: IUniform<boolean>;
   uLayerRegion: IUniform<Texture | null>;
@@ -169,10 +190,28 @@ interface Uniforms {
   uLayerOpacity: IUniform<number>;
 }
 
-export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segments, onHover, onGlobeClick }: EarthMeshProps) {
+export function EarthMesh({
+  baseTexture,
+  regionBaseTexture,
+  layerTextures,
+  bbox,
+  view,
+  mode,
+  segments,
+  onHover,
+  onGlobeClick,
+}: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
+  const sphereMesh = useRef<Mesh>(null);
+  const planeMesh = useRef<Mesh>(null);
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  // Where the cursor rests over the canvas, so the point under it can be found
+  // again while the planet turns or a transition ends beneath a still cursor.
+  const pointerRef = useRef<{ inside: boolean; clientX: number }>({ inside: false, clientX: 0 });
+  const sinceHoverRefresh = useRef(0);
+  // True while the last report to the scene was a point (not "nothing under the cursor").
+  const reportedPoint = useRef(false);
 
   const uniforms = useMemo<Uniforms>(
     () => ({
@@ -180,6 +219,8 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
       uFlatten: { value: 0 },
       uBase: { value: null },
       uHasBase: { value: false },
+      uRegionBase: { value: null },
+      uHasRegionBase: { value: false },
       uLayerGlobal: { value: null },
       uHasGlobal: { value: false },
       uLayerRegion: { value: null },
@@ -203,11 +244,13 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
   useEffect(() => {
     uniforms.uBase.value = baseTexture;
     uniforms.uHasBase.value = baseTexture !== null;
+    uniforms.uRegionBase.value = regionBaseTexture;
+    uniforms.uHasRegionBase.value = regionBaseTexture !== null;
     uniforms.uLayerGlobal.value = layerTextures.global;
     uniforms.uHasGlobal.value = layerTextures.global !== null;
     uniforms.uLayerRegion.value = layerTextures.region;
     uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
-  }, [uniforms, baseTexture, layerTextures, bbox]);
+  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, bbox]);
 
   // Dragging follows the pointer anywhere on the page once it started on the planet.
   useEffect(() => {
@@ -250,18 +293,76 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
     pickGroup.current?.rotation.copy(euler);
   });
 
-  const sphereLonLat = (event: ThreeEvent<PointerEvent | MouseEvent>) => {
+  // Remember whether the cursor is over the canvas and where, for the lookup below.
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const move = (event: PointerEvent) => {
+      pointerRef.current = { inside: true, clientX: event.clientX };
+    };
+    const leave = () => {
+      pointerRef.current = { ...pointerRef.current, inside: false };
+    };
+    canvas.addEventListener("pointermove", move);
+    canvas.addEventListener("pointerleave", leave);
+    return () => {
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerleave", leave);
+    };
+  }, [gl]);
+
+  const sphereLonLat = (world: Vector3) => {
     const group = pickGroup.current;
     if (!group) return null;
-    const local = group.worldToLocal(event.point.clone());
+    const local = group.worldToLocal(world.clone());
     return spherePointToLonLat(local.x, local.y, local.z);
   };
 
-  const handleSphereMove = (event: ThreeEvent<PointerEvent>) => {
-    const point = sphereLonLat(event);
+  const emit = (hit: GlobeHit | null) => {
+    reportedPoint.current = hit !== null;
+    onHover(hit);
+  };
+
+  const reportSphere = (world: Vector3, clientX: number) => {
+    const point = sphereLonLat(world);
     if (!point) return;
     gl.domElement.style.cursor = isInsideBbox(point.lon, point.lat, bbox) ? "pointer" : "grab";
-    onHover({ ...point, clientX: event.nativeEvent.clientX });
+    emit({ ...point, clientX });
+  };
+
+  const reportPlane = (uvX: number, uvY: number, clientX: number) => {
+    // PlaneGeometry's texture v grows northwards; planeUvToLonLat counts from the north.
+    emit({ ...planeUvToLonLat(uvX, 1 - uvY), clientX });
+  };
+
+  // Browsers only send pointer events when the mouse moves. While the planet
+  // turns, or when a transition ends under a still cursor, look the point up
+  // again a few times a second so the sound follows what is under the cursor.
+  useFrame((state, delta) => {
+    sinceHoverRefresh.current += delta;
+    if (sinceHoverRefresh.current < HOVER_REFRESH_SECONDS) return;
+    sinceHoverRefresh.current = 0;
+    const { inside, clientX } = pointerRef.current;
+    if (!inside) {
+      // The cursor left the canvas while the scene was ignoring hovers (a transition).
+      if (reportedPoint.current) emit(null);
+      return;
+    }
+    state.raycaster.setFromCamera(state.pointer, state.camera);
+    if (mode === "globe" && sphereMesh.current) {
+      pickGroup.current?.updateMatrixWorld(true);
+      const hit = state.raycaster.intersectObject(sphereMesh.current, false)[0];
+      if (hit) reportSphere(hit.point, clientX);
+      else emit(null);
+    } else if (mode === "map" && planeMesh.current) {
+      planeMesh.current.updateMatrixWorld(true);
+      const hit = state.raycaster.intersectObject(planeMesh.current, false)[0];
+      if (hit?.uv) reportPlane(hit.uv.x, hit.uv.y, clientX);
+      else emit(null);
+    }
+  });
+
+  const handleSphereMove = (event: ThreeEvent<PointerEvent>) => {
+    reportSphere(event.point, event.nativeEvent.clientX);
   };
 
   const handleSphereDown = (event: ThreeEvent<PointerEvent>) => {
@@ -272,20 +373,18 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
 
   const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
-    const point = sphereLonLat(event);
+    const point = sphereLonLat(event.point);
     if (point) onGlobeClick(point.lon, point.lat);
   };
 
   const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
     if (!event.uv) return;
-    // PlaneGeometry's texture v grows northwards; planeUvToLonLat counts from the north.
-    const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
-    onHover({ ...point, clientX: event.nativeEvent.clientX });
+    reportPlane(event.uv.x, event.uv.y, event.nativeEvent.clientX);
   };
 
   const handleOut = () => {
     gl.domElement.style.cursor = "";
-    onHover(null);
+    emit(null);
   };
 
   const center = bboxCenter(bbox);
@@ -298,6 +397,7 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
       {mode === "globe" && (
         <group ref={pickGroup}>
           <mesh
+            ref={sphereMesh}
             onPointerMove={handleSphereMove}
             onPointerDown={handleSphereDown}
             onClick={handleSphereClick}
@@ -310,7 +410,7 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
       )}
 
       {mode === "map" && (
-        <mesh position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove} onPointerOut={handleOut}>
+        <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove} onPointerOut={handleOut}>
           <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>

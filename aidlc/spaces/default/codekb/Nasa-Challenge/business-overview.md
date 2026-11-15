@@ -1,40 +1,27 @@
-# Business Overview
+# Visión de negocio — Earth Jukebox
 
 ## Propósito
 
-Earth Jukebox (Jukebox Terrestre) es la prueba de concepto del equipo Sagitta para el reto *The Earth Information Jukebox* del NASA Space Apps Challenge 2026. Hace que la ciencia de la Tierra se pueda **ver y escuchar**: combina visualizaciones del Earth Information Center (EIC) de la NASA con sonido generado en tiempo real en el navegador (`VISION-MISION.md`, `README.md`).
+Earth Jukebox (equipo Sagitta, NASA Space Apps Challenge 2026, reto "The Earth Information Jukebox") es una prueba de concepto local que hace que los datos de la Tierra se puedan ver y escuchar. Abre un planeta 3D con capas de datos de la NASA; cada capa tiene su propia voz sonora y, al enfocar la Amazonía, el planeta se aplana en un mapa regional detallado. La historia: la Amazonía como pulmón del mundo (`README.md`, `VISION-MISION.md`).
 
-La historia de esta versión: **la Amazonía como pulmón del mundo**, contada con tres capas, cada una con su propia voz:
+## Funcionalidad clave
 
-| Capa | Fuente NASA | Cobertura | Voz |
-|---|---|---|---|
-| Altura del bosque (`forest`) | GEDI, SVS 4950 | Global + Amazonía, fija | Nota en escala pentatónica y armonía |
-| Humo de incendios (`smoke`) | GEOS-CF, SVS 5533 | Solo Amazonía, 6 instantes | Aspereza y filtro oscuro |
-| CO2 (`co2`) | DYAMOND/GEOS, SVS 5196 | Solo Amazonía, 12 instantes | Ritmo de respiración |
+- **Capas de datos** (definidas en `data/prep-config.json`, publicadas en `web/public/data/manifest.json`):
+  - `forest` — altura del bosque, hoy leída del color de 14 vistas 4K del globo de GEDI (NASA SVS 4950); capa base fija.
+  - `smoke` — PM2.5 de superficie del modelo GEOS-CF v2, 24 horas del 1 de septiembre de 2026, escala fija 0–150 µg/m³.
+  - `lightning` — frecuencia relativa de rayos vistos por LIS en la ISS, 2017–2023 (SVS 5011).
+  - `co2` — aceptado por el formato pero ya no listado en los datos.
+- **Planeta y mapa**: globo que gira, se arrastra y, con un clic en la Amazonía o el botón "Amazon", se aplana en el mapa del rectángulo 80 W–44 W, 20 S–8 N (1.6 s ida, 1.4 s vuelta).
+- **Punto de escucha**: longitud, latitud y valor de la capa activa bajo el cursor, para el motor de sonido.
+- **Sonorización**: funciones puras valor→sonido (nota pentatónica del bosque, aspereza del humo, respiración del CO2, paneo y volumen); el motor Web Audio aún no existe.
+- **Funciona sin internet**: todos los datos y fuentes son locales.
 
-## Funcionalidad clave (prevista y existente)
+## Dominio y reglas
 
-- Planeta 3D con la capa activa; al enfocar la Amazonía el planeta se aplana en un mapa regional detallado (pendiente: pasos 12-14).
-- Sonorización del punto bajo el cursor: valor 0..1 → parámetros de sonido (lógica lista; motor de audio pendiente, paso 10).
-- Línea de tiempo común que recorre los instantes de cada capa (lógica lista).
-- Funcionamiento local sin internet, servido desde `127.0.0.1` (servidor pendiente, paso 11).
-- Accesibilidad con teclado y lector de pantalla (paso 14, pendiente).
+- Los valores son intensidades relativas 0..1 (1 byte por celda), no mediciones físicas, salvo el humo que usa una escala física fija.
+- Cuadrícula global 1440×720 (0.25°) y regional de la Amazonía por capa (bosque y rayos 360×280, humo 144×112).
+- Fuentes públicas de la NASA sin login hoy; `data/SOURCES.md` registra cada archivo y enlace.
 
-Estado por parte: ver la tabla de `README.md` § Status; detalle de componentes en `component-inventory.md`.
+## Contexto del intent activo
 
-## Reglas de dominio que el código respeta
-
-- Los valores son **intensidades relativas** leídas de los colores de los cuadros, no mediciones físicas (`data/SOURCES.md`, comentarios de `tools/prep/src/main.rs`).
-- La georreferenciación de las vistas de globo es manual, con error de 1 a 2 grados.
-- Humo y CO2 solo existen sobre la Amazonía: fuera de ella el valor es `null` y el volumen es 0.
-- El CO2 se presenta como contexto global, no como efecto medido de la Amazonía (`TAREAS.md`).
-- Los datos de muestra generados se marcan `sample: true` en el manifiesto.
-
-## Actores y entrega
-
-- Público general y jurado (demo local, sin cuentas).
-- Equipo de tres desarrolladores con propiedad por carpetas y una rama por persona (`sonido`, `datos-rust`, `interfaz`), integración a `main` por bloques (`TAREAS.md`). Envío: domingo 15 de noviembre.
-
-## Relevancia para el intent actual (paso 12, interfaz)
-
-El paso 12 (Samuel, rama `interfaz`) construye el planeta que gira con la textura de la capa activa, la transición a la Amazonía (ida y vuelta en 2 s o menos), el mapa regional y la conversión del punto bajo el cursor a longitud/latitud para el sonido. El intent aprobado añade una capa global de aerosoles a partir de datos GEOS-FP cuyos scripts viven en la rama `origin/datos-rust` (`tools/scraping/`), fuera de este árbol; ver riesgos en `code-quality-assessment.md`.
+El intent `gedi-forest-layer` reemplaza la fuente del bosque por GEDI L3 V3 (altura media del dosel, 1 km, ORNL DAAC), descargada con Earthdata Login, y rellena fuera de ±52° con SVS 4950. Los detalles técnicos de entrada están en `architecture.md` y `code-quality-assessment.md`.

@@ -244,6 +244,17 @@ describe("sound engine", () => {
     engine.dispose();
   });
 
+  it("keeps the lightning layer silent and away from the CO2 voice", async () => {
+    const { context, engine } = setup();
+    engine.setLayerIntensity("co2", 0.7);
+    engine.setLayerIntensity("lightning", 0.9);
+    await engine.start();
+
+    expect(scheduled(layerVoiceGain(context, 2).gain)).toBeCloseTo(intensityToGain(0.7), 6);
+    expect(context.panners).toHaveLength(3); // the lightning voice does not exist yet
+    engine.dispose();
+  });
+
   it("reports the context latency for the B3 measurement", async () => {
     const { context, engine } = setup();
     context.baseLatency = 0.01;

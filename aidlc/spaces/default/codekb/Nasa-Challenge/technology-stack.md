@@ -1,46 +1,43 @@
-# Technology Stack
+# Pila tecnológica — Earth Jukebox
 
 ## Lenguajes
 
-| Lenguaje | Uso | Configuración |
+| Lenguaje | Versión | Dónde |
 |---|---|---|
-| TypeScript 5.8.3 | Interfaz (`web/src/`) | `tsconfig.json`: `target` ES2022, `moduleResolution` bundler, `jsx` react-jsx, `strict`, `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters` |
-| Rust (edición 2021, toolchain estable de `rust:1-slim-bookworm`) | `tools/prep/`, `server/` | `Cargo.toml` por crate; `opt-level = 2` en dev para prep |
-| Bash | `tools/fetch-frames.sh`, `web/docker-entrypoint.sh` (sh) | `set -euo pipefail` / `set -eu` |
-| CSS | Tailwind 4 vía `@import "tailwindcss"` | `@theme` con `--color-forest`, `--color-smoke`, `--color-co2` |
+| TypeScript | 5.8.3 (target ES2022, `strict`) | `web/src/` |
+| Rust | edition 2021, toolchain `rust:1-slim-bookworm` | `tools/prep/`, `server/` |
+| Python | 3.12.7 | `tools/fetch/`, `tools/scraping/` |
+| Bash | — | `tools/fetch-frames.sh`, `web/docker-entrypoint.sh` |
+| GLSL | WebGL 1 (`texture2D`) | shaders en `web/src/scene/EarthMesh.tsx` |
 
-## Interfaz (`web/package.json`, versiones exactas)
+## Frameworks y librerías
 
-| Paquete | Versión | Estado de uso |
+| Nombre | Versión | Uso |
 |---|---|---|
-| react / react-dom | 19.3.1 | En uso |
-| three | 0.177.0 | Declarado, sin uso aún |
-| @react-three/fiber | 9.8.2 | Declarado, sin uso aún |
-| gsap | 3.15.1 | Declarado, sin uso aún |
-| tailwindcss / @tailwindcss/vite | 4.3.5 | En uso |
-| vite | 7.3.8 | Servidor de desarrollo y compilación (`base: "./"`, `127.0.0.1:5173`) |
-| @vitejs/plugin-react | 4.7.0 | En uso |
-| vitest | 3.2.7 | Pruebas, entorno `node` |
-| @types/react, @types/react-dom | 19.3.0 | Tipos |
-| @types/three | 0.177.0 | Tipos |
+| React / react-dom | 19.3.1 | interfaz |
+| three / @types/three | 0.177.0 | render 3D |
+| @react-three/fiber | 9.8.2 | three.js declarativo |
+| gsap | 3.15.1 | animación |
+| tailwindcss, @tailwindcss/vite | 4.3.5 | estilos |
+| vite | 7.3.8 | dev server y build |
+| @vitejs/plugin-react | 4.7.0 | JSX/Fast Refresh |
+| vitest | 3.2.7 | pruebas web |
+| image (crate) | 0.25 | PNG/JPEG/TIFF, redimensionado |
+| serde, serde_json | 1 | configuración y manifiesto |
+| axum / tokio / tower-http | 0.8 / 1 / 0.6 | servidor (sin uso aún) |
+| netCDF4 | 1.7.2 | lectura GEOS-CF |
+| numpy | 2.1.3 | conversiones |
+| Pillow | 11.0.0 | escritura PNG |
+| pytest | 8.3.3 | pruebas fetch |
+| ffmpeg, curl, unzip | paquetes Debian bookworm | descarga y conversión |
 
-No hay `@react-three/drei`, librería de estado global, router, jsdom ni Testing Library.
+## Infraestructura y herramientas
 
-## Rust
+- Docker Desktop + Docker Compose (proyecto `earth-jukebox`); imágenes base `node:20-bookworm-slim`, `rust:1-slim-bookworm`, `python:3.12.7-slim-bookworm`.
+- Nix flake solo para `tools/scraping/`.
+- Sin nube, sin base de datos, sin CI.
 
-| Crate | Paquete | Versión declarada | Uso |
-|---|---|---|---|
-| jukebox-prep | image | 0.25 | Decodificar/redimensionar PNG y JPEG |
-| | serde (derive), serde_json | 1 | Configuración y manifiesto |
-| jukebox-server | axum | 0.8 | Servidor HTTP (pendiente) |
-| | tokio (rt-multi-thread, macros, net, signal) | 1 | Runtime |
-| | tower-http (fs) | 0.6 | Archivos estáticos |
+## Notas para GEDI L3
 
-Versiones resueltas en los `Cargo.lock` (no inspeccionados en detalle).
-
-## Ejecución y herramientas
-
-- Docker Desktop + Docker Compose (proyecto `earth-jukebox`); Node 20 (`node:20-bookworm-slim`) dentro del contenedor web; sin Node en el anfitrión.
-- `curl` y `ffmpeg` en el anfitrión solo para `tools/fetch-frames.sh`.
-- Alternativa secundaria documentada: Node 20.19+ o Deno 2 para la interfaz, cargo para Rust.
-- Sin base de datos, sin nube, sin servicios externos en tiempo de ejecución; fuentes del sistema.
+- El contenedor `fetch` no tiene GDAL, rasterio ni tifffile; leer un GeoTIFF float32 en EASE-Grid 2.0 requiere añadir una de ellas a `tools/fetch/requirements.txt` (y reconstruir la imagen) o depender de Pillow con `MAX_IMAGE_PIXELS = None`.
+- El crate `image` 0.25 de `prep` decodifica TIFF pero `prep` convierte todo a RGB de 8 bits (`load_rgb`), sin georreferencia.

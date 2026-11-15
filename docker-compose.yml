@@ -6,9 +6,18 @@
 #   docker compose run --rm web-test       Vitest suite (web/src/**/*.test.ts)
 #   docker compose run --rm prep-test      cargo test for tools/prep
 #   docker compose run --rm server-test    cargo test for server/
+#   docker compose run --rm fetch-test     pytest for the conversions in tools/fetch
+#   docker compose run --rm fetch          download the sources into data/raw/ and rewrite
+#                                          data/SOURCES.md (about 1.9 GB, needs internet)
+#   docker compose run --rm fetch-gedi     download GEDI L3 forest height into data/raw/gedi/
+#                                          (about 617 MB); needs a NASA Earthdata login in
+#                                          ~/.netrc (only the urs.earthdata.nasa.gov line),
+#                                          mounted read-only in this service only
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
 #   docker compose run --rm web npm run build && docker compose up server
 #                                          dev server over web/dist on http://127.0.0.1:8081
+#
+# Data from scratch: `fetch`, `fetch-gedi`, then `prep`.
 #
 # There is no database. Only `app` has no profile, so a plain `docker compose up`
 # starts the full app and nothing else. Naming a service (`up web`, `run --rm
@@ -42,6 +51,19 @@ x-server: &server
   image: earth-jukebox-server:dev
   init: true
   working_dir: /work
+
+x-fetch: &fetch
+  build:
+    context: ./tools/fetch
+  image: earth-jukebox-fetch:dev
+  init: true
+  working_dir: /work
+  environment:
+    # geoscf_to_png.py is imported by the tests and run by fetch-frames.sh.
+    PYTHONPATH: /work/tools/fetch
+    # The source is mounted read-only: no pytest cache, no .pyc files.
+    PYTEST_ADDOPTS: "-p no:cacheprovider"
+    PYTHONDONTWRITEBYTECODE: "1"
 
 services:
   # The demo: one image with the built interface, its data and the release
@@ -125,8 +147,47 @@ services:
       - ./data:/work/data:ro
       # Output: grids, textures and manifest.json used by the interface.
       - ./web/public/data:/work/web/public/data
-    entrypoint: ["cargo", "run", "--locked", "--manifest-path", "tools/prep/Cargo.toml", "--"]
+    # Release build: 24 smoke instants at 1440 x 720 and an 8192-pixel base
+    # image are too slow to prepare with the test profile.
+    entrypoint: ["cargo", "run", "--release", "--locked", "--manifest-path", "tools/prep/Cargo.toml", "--"]
     command: ["--config", "data/prep-config.json"]
+
+  fetch-test:
+    <<: *fetch
+    profiles: ["test"]
+    volumes:
+      - ./tools/fetch:/work/tools/fetch:ro
+    command: ["pytest", "-q", "tools/fetch/tests"]
+
+  fetch:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      # Output: the downloaded and converted sources in data/raw/ and data/SOURCES.md.
+      - ./data:/work/data
+
+  # GEDI L3 canopy height: the only source behind a NASA Earthdata login, so it has
+  # its own service and `fetch` needs no account.
+  fetch-gedi:
+    <<: *fetch
+    profiles: ["data"]
+    volumes:
+      - ./tools:/work/tools:ro
+      # Output: data/raw/gedi/ (the GeoTIFF and the converted PNG).
+      - ./data:/work/data
+      # The Earthdata login, read-only and only in this service. If ~/.netrc is
+      # missing Docker stops with an error naming it instead of creating a folder.
+      # `~` (not ${HOME}) so Windows PowerShell, which has no HOME, shows no
+      # warning on every docker compose command. Keep only the
+      # urs.earthdata.nasa.gov line in this file: the container sees all of it.
+      - type: bind
+        source: ~/.netrc
+        target: /root/.netrc
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["bash", "tools/fetch/fetch-gedi.sh"]
 
 volumes:
   web_node_modules:

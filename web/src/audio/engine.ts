@@ -58,7 +58,7 @@ const NOISE_SECONDS = 2;
  * keeps it audible in the three-layer mix (B3 listening feedback).
  */
 export const SMOKE_LAYER_TRIM = 1.6;
-const LAYER_TRIM: Record<LayerId, number> = { forest: 1, smoke: SMOKE_LAYER_TRIM, co2: 1 };
+const LAYER_TRIM: Record<LayerId, number> = { forest: 1, smoke: SMOKE_LAYER_TRIM, co2: 1, lightning: 0 };
 
 interface ForestVoice {
   main: OscillatorNode;
@@ -135,6 +135,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     forest: makeLayerRuntime(),
     smoke: makeLayerRuntime(),
     co2: makeLayerRuntime(),
+    lightning: makeLayerRuntime(),
   };
   private levelBuffer: Float32Array | undefined;
   private suspendTimer: ReturnType<typeof setTimeout> | undefined;
@@ -418,6 +419,11 @@ export class WebAudioSoundEngine implements SoundEngine {
       rampParameter(graph.smoke.gain.gain, gain, now, this.rampSeconds);
       return;
     }
+
+    // The lightning layer is voiced in a separate change; until then it is
+    // silent and must never fall through to the CO2 branch.
+    if (layer === "lightning") return;
+    if (layer !== "co2") return;
 
     const breath = co2ToBreath(smoothed);
     const depth = breath.depth * 0.5;

@@ -76,6 +76,20 @@ export function screenX01(clientX: number, canvasLeft: number, canvasWidth: numb
   return clamp01((clientX - canvasLeft) / canvasWidth);
 }
 
+/**
+ * Texture coordinate of a place inside the Amazon crop of the base image (FR1.3),
+ * or null outside the rectangle. Image-texture convention (three.js flips images
+ * on load): u = 0 at the west edge, 1 at the east edge; v = 0 at the south edge,
+ * 1 at the north edge. EarthMesh's fragment shader repeats this calculation.
+ */
+export function regionUv(lon: number, lat: number, bbox: BoundingBox): { u: number; v: number } | null {
+  if (lon < bbox.west || lon > bbox.east || lat < bbox.south || lat > bbox.north) return null;
+  return {
+    u: (lon - bbox.west) / (bbox.east - bbox.west),
+    v: (lat - bbox.south) / (bbox.north - bbox.south),
+  };
+}
+
 export function bboxCenter(bbox: BoundingBox): LonLat {
   return { lon: (bbox.west + bbox.east) / 2, lat: (bbox.south + bbox.north) / 2 };
 }

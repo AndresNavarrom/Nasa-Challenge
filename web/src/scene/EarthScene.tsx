@@ -1,13 +1,16 @@
 // The 3D view: canvas, camera, the planet mesh, the click on the Amazon
 // (FR2.1), the listening point under the cursor (FR4.3) and the active layer's
-// value there (FR4.4). Lite mode (`?lite=1`, plan B) uses a half-resolution
-// base image, fewer segments, no antialiasing and switches views at once.
+// value there (FR4.4). The base image is earth-8k.jpg when the graphics card
+// accepts 8192-pixel textures and earth-4k.jpg otherwise, plus the Amazon crop
+// earth-amazon.jpg (FR1.2, FR1.3). Lite mode (`?lite=1`, plan B) always uses
+// earth-4k.jpg, fewer segments, no antialiasing and switches views at once.
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CanvasTexture, DataTexture, TextureLoader, type Texture } from "three";
+import { DataTexture, TextureLoader, type Texture, type WebGLRenderer } from "three";
 import type { JukeboxData, LoadedLayer } from "../data/types";
 import { sampleLayerAt } from "../lib/interpolate";
+import { REGION_BASE_IMAGE, pickBaseImage } from "./baseImage";
 import { EarthMesh, type GlobeHit } from "./EarthMesh";
 import {
   GLOBE_CAMERA_Z,
@@ -41,7 +44,7 @@ export interface EarthSceneProps {
   onModeChange: (mode: ViewMode) => void;
   onProbe: (probe: Probe | null) => void;
   onFps: (fps: number) => void;
-  /** A problem that leaves the view usable (for example earth.jpg missing). */
+  /** A problem that leaves the view usable (for example a base image missing). */
   onSceneError: (message: string | null) => void;
 }
 
@@ -55,27 +58,28 @@ function emptyLayerTextures(): LayerTextures {
   return { global: null, region };
 }
 
-function halfResolution(texture: Texture): Texture {
-  const image = texture.image as HTMLImageElement | undefined;
-  if (!image || !image.width || !image.height) return texture;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.floor(image.width / 2));
-  canvas.height = Math.max(1, Math.floor(image.height / 2));
-  const context = canvas.getContext("2d");
-  if (!context) {
-    console.warn("Lite mode: no 2D canvas available, keeping the full-resolution planet image.");
-    return texture;
+/** WebGL's largest texture side, or null when the renderer does not report it. */
+function readMaxTextureSize(gl: WebGLRenderer): number | null {
+  try {
+    const size = gl.capabilities.maxTextureSize;
+    return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : null;
+  } catch (cause) {
+    console.warn("Earth Jukebox could not read the largest texture size; using the 4096 planet image.", cause);
+    return null;
   }
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  texture.dispose();
-  return new CanvasTexture(canvas);
 }
 
-/** Loads earth.jpg; on failure reports a message and leaves the texture null. */
-function useBaseTexture(url: string, lite: boolean, onError: (message: string | null) => void): Texture | null {
+/**
+ * Loads an image as a texture. On failure it logs the cause, reports
+ * `failureMessage` and leaves the texture null, so the caller draws without it.
+ * A success (or a new URL) clears the message, so a fixed image stops the banner.
+ */
+function useImageTexture(url: string, failureMessage: string, onError: (message: string | null) => void): Texture | null {
   const [texture, setTexture] = useState<Texture | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const messageRef = useRef(failureMessage);
+  messageRef.current = failureMessage;
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +92,7 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string | 
           result.dispose();
           return;
         }
-        loaded = lite ? halfResolution(result) : result;
+        loaded = result;
         setTexture(loaded);
         onErrorRef.current(null);
       },
@@ -96,9 +100,7 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string | 
       (cause) => {
         if (cancelled) return;
         console.error(`Earth Jukebox could not load ${url}:`, cause);
-        onErrorRef.current(
-          `The planet image (${url}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
-        );
+        onErrorRef.current(messageRef.current);
       },
     );
     return () => {
@@ -106,7 +108,7 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string | 
       loaded?.dispose();
       setTexture(null);
     };
-  }, [url, lite]);
+  }, [url]);
 
   return texture;
 }
@@ -145,11 +147,25 @@ function SceneContents(props: SceneContentsProps) {
   const targetRef = useRef<TargetView>(targetView);
   targetRef.current = targetView;
   const cancelRef = useRef<CancelTransition | null>(null);
-  const lastHit = useRef<GlobeHit | null>(null);
+  const lastHitRef = useRef<GlobeHit | null>(null);
+  const lastProbeRef = useRef<Probe | null>(null);
   const [baseError, setBaseError] = useState<string | null>(null);
+  const [regionError, setRegionError] = useState<string | null>(null);
   const [layerError, setLayerError] = useState<string | null>(null);
 
-  const baseTexture = useBaseTexture(`${data.baseUrl}earth.jpg`, lite, setBaseError);
+  const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
+  const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
+  const baseTexture = useImageTexture(
+    baseUrl,
+    `The planet image (${baseUrl}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
+    setBaseError,
+  );
+  const regionUrl = `${data.baseUrl}${REGION_BASE_IMAGE}`;
+  const regionBaseTexture = useImageTexture(
+    regionUrl,
+    `The detailed Amazon image (${regionUrl}) could not be loaded, so the Amazon is drawn from the planet image. Everything else still works.`,
+    setRegionError,
+  );
 
   const layer = useMemo(() => {
     try {
@@ -169,21 +185,21 @@ function SceneContents(props: SceneContentsProps) {
     return () => disposeLayerTextures(layer.textures);
   }, [layer]);
 
-  // One banner for both sources: a good layer clears itself without hiding a
-  // base-image failure, and vice versa.
+  // One banner for every source: a good layer or image clears itself without
+  // hiding a failure somewhere else.
   useEffect(() => {
-    onSceneError(layerError ?? baseError ?? null);
-  }, [layerError, baseError, onSceneError]);
+    onSceneError(layerError ?? baseError ?? regionError ?? null);
+  }, [layerError, baseError, regionError, onSceneError]);
 
   const setMode = (next: ViewMode) => {
     modeRef.current = next;
     setModeState(next);
     onModeChange(next);
     if (next === "to-map" || next === "to-globe") {
-      // The listening point is null during the whole transition.
-      lastHit.current = null;
-      setListeningPoint(null);
+      // The indicator hides during the transition, but the listening point stays
+      // where it was so the sound does not cut out (FR5.2).
       onProbe(null);
+      lastProbeRef.current = null;
     }
   };
 
@@ -248,20 +264,29 @@ function SceneContents(props: SceneContentsProps) {
     const hit = pendingHover.current;
     pendingHover.current = undefined;
     if (hit === undefined) return;
-    if (!hit || modeRef.current === "to-map" || modeRef.current === "to-globe") {
-      lastHit.current = null;
+    // While the view changes, keep the last point (and the sound) as it is.
+    if (modeRef.current === "to-map" || modeRef.current === "to-globe") return;
+    lastHitRef.current = hit;
+    if (!hit) {
+      lastProbeRef.current = null;
       setListeningPoint(null);
       onProbe(null);
       return;
     }
-    lastHit.current = hit;
     const rect = gl.domElement.getBoundingClientRect();
     setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
-    onProbe(probeFor(hit));
+    const probe = probeFor(hit);
+    // The cursor may rest while the point is looked up again; do not repaint for the same reading.
+    const last = lastProbeRef.current;
+    if (last && last.lon === probe.lon && last.lat === probe.lat && last.value === probe.value) return;
+    lastProbeRef.current = probe;
+    onProbe(probe);
   }, [gl, setListeningPoint, onProbe, probeFor]);
 
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
+      // While the view changes, keep the last point (and the sound) as it is.
+      if (modeRef.current === "to-map" || modeRef.current === "to-globe") return;
       pendingHover.current = hit;
       if (hoverFrame.current === null) {
         hoverFrame.current = requestAnimationFrame(publishHover);
@@ -277,12 +302,12 @@ function SceneContents(props: SceneContentsProps) {
     [],
   );
 
-  // Switching layers does not move the pointer, so refresh the value on screen.
+  // A new layer changes the reading under a cursor that has not moved.
   useEffect(() => {
-    const hit = lastHit.current;
-    if (!hit || modeRef.current === "to-map" || modeRef.current === "to-globe") return;
-    onProbe(probeFor(hit));
-  }, [probeFor, onProbe]);
+    lastProbeRef.current = null;
+    const hit = lastHitRef.current;
+    if (hit) handleHover(hit);
+  }, [handleHover]);
 
   const handleGlobeClick = useCallback(
     (lon: number, lat: number) => {
@@ -295,6 +320,7 @@ function SceneContents(props: SceneContentsProps) {
     <>
       <EarthMesh
         baseTexture={baseTexture}
+        regionBaseTexture={regionBaseTexture}
         layerTextures={layer.textures}
         bbox={data.bbox}
         view={view}
