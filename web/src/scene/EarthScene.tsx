@@ -266,7 +266,7 @@ function SceneContents(props: SceneContentsProps) {
 
   // Sharp lightning dots: requested the first time lightning is shown, then kept
   // (same rule as the forest images), so start-up does not wait for them.
-  const lightningActive = activeLayer.manifest.id === DOT_IMAGE_LAYER;
+  const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER;
   const dotStyle = lightningActive ? dotImageFor(DOT_IMAGE_LAYER) : null;
   const [lightningWanted, setLightningWanted] = useState(lightningActive);
   useEffect(() => {
