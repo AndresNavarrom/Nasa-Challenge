@@ -43,7 +43,7 @@ import {
 } from "./FocusTransition";
 import { GLOBE_RADIUS, isInsideBbox, screenX01 } from "./geo";
 import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type LayerTextures } from "./layerTexture";
-import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
+import { useListeningPoint, useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 
 export type TargetView = "globe" | "map";
 
@@ -218,6 +218,8 @@ function SceneContents(props: SceneContentsProps) {
     focusedScene,
     setListeningPoint,
   } = props;
+  const selectedPoint = useListeningPoint();
+  const [hoverPoint, setHoverPoint] = useState<{ lon: number; lat: number } | null>(null);
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
@@ -347,8 +349,9 @@ function SceneContents(props: SceneContentsProps) {
     setModeState(next);
     onModeChange(next);
     if (next === "to-map" || next === "to-globe") {
-      // The indicator hides during the transition, but the listening point stays
-      // where it was so the sound does not cut out (FR5.2).
+      // The indicator and crosshair hide during the transition, but the selected
+      // point stays so the sound does not cut out (FR5.2).
+      setHoverPoint(null);
       onProbe(null);
       lastProbeRef.current = null;
     }
@@ -443,12 +446,11 @@ function SceneContents(props: SceneContentsProps) {
     lastHitRef.current = hit;
     if (!hit) {
       lastProbeRef.current = null;
-      setListeningPoint(null);
+      setHoverPoint(null);
       onProbe(null);
       return;
     }
-    const rect = gl.domElement.getBoundingClientRect();
-    setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
+    setHoverPoint({ lon: hit.lon, lat: hit.lat });
     const probe = probeFor(hit);
     // The cursor may rest while the point is looked up again; do not repaint for the same reading.
     const last = lastProbeRef.current;
@@ -484,10 +486,12 @@ function SceneContents(props: SceneContentsProps) {
   }, [handleHover]);
 
   const handleGlobeClick = useCallback(
-    (lon: number, lat: number) => {
+    (lon: number, lat: number, clientX: number) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      setListeningPoint({ lon, lat, screenX: screenX01(clientX, rect.left, rect.width) });
       if (isInsideBbox(lon, lat, data.bbox)) onRequestView("map");
     },
-    [data.bbox, onRequestView],
+    [data.bbox, gl, onRequestView, setListeningPoint],
   );
 
   return (
@@ -507,6 +511,8 @@ function SceneContents(props: SceneContentsProps) {
         scenes={scenes}
         onSceneSelect={onSceneSelect}
         onSceneHover={onSceneHover}
+        selectedPoint={selectedPoint}
+        hoverPoint={hoverPoint}
         onHover={handleHover}
         onGlobeClick={handleGlobeClick}
       />

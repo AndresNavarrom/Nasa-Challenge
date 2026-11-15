@@ -47,6 +47,7 @@ import {
 } from "three";
 import type { BoundingBox } from "../data/types";
 import type { SceneDefinition } from "../scenes/types";
+import { LocationMarkers } from "./LocationMarkers";
 import { SceneMarkers } from "./SceneMarkers";
 import type { ViewMode, ViewState } from "./FocusTransition";
 import {
@@ -61,6 +62,7 @@ import {
   spherePointToLonLat,
 } from "./geo";
 import { glowColor, type DotImageStyle } from "./dotImage";
+import type { ListeningPoint } from "./listeningPoint";
 import { spinStep } from "./spin";
 import type { ColorRamp, LayerTextures } from "./layerTexture";
 import {
@@ -130,8 +132,12 @@ export interface EarthMeshProps {
   scenes?: SceneDefinition[];
   onSceneSelect?: (scene: SceneDefinition) => void;
   onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
+  /** Point whose sound is selected (click); drawn on the globe and the map. */
+  selectedPoint?: ListeningPoint | null;
+  /** Point under the cursor; drawn as a crosshair. */
+  hoverPoint?: { lon: number; lat: number } | null;
   onHover: (hit: GlobeHit | null) => void;
-  onGlobeClick: (lon: number, lat: number) => void;
+  onGlobeClick: (lon: number, lat: number, clientX: number) => void;
 }
 
 export interface ReliefImages {
@@ -422,6 +428,8 @@ export function EarthMesh({
   scenes,
   onSceneSelect,
   onSceneHover,
+  selectedPoint,
+  hoverPoint,
   onHover,
   onGlobeClick,
 }: EarthMeshProps) {
@@ -674,12 +682,18 @@ export function EarthMesh({
   const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
-    if (point) onGlobeClick(point.lon, point.lat);
+    if (point) onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
   };
 
   const handlePlaneMove = (event: ThreeEvent<PointerEvent>) => {
     if (!event.uv) return;
     reportPlane(event.uv.x, event.uv.y, event.nativeEvent.clientX);
+  };
+
+  const handlePlaneClick = (event: ThreeEvent<MouseEvent>) => {
+    if (!event.uv) return;
+    const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
+    onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
   };
 
   const handleOut = () => {
@@ -706,15 +720,23 @@ export function EarthMesh({
             <sphereGeometry args={[GLOBE_RADIUS * 1.002, 64, 32]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
+          <LocationMarkers mode="globe" selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
         </group>
       )}
 
       {mode === "map" && (
         <>
-          <mesh ref={planeMesh} position={[-shift.x, -shift.y, GLOBE_RADIUS]} onPointerMove={handlePlaneMove} onPointerOut={handleOut}>
+          <mesh
+            ref={planeMesh}
+            position={[-shift.x, -shift.y, GLOBE_RADIUS]}
+            onPointerMove={handlePlaneMove}
+            onPointerOut={handleOut}
+            onClick={handlePlaneClick}
+          >
             <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
+          <LocationMarkers mode="map" bbox={bbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
           {scenes && scenes.length > 0 && onSceneSelect && (
             <SceneMarkers
               scenes={scenes}

@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
+import { useListeningPoint } from "../scene/listeningPoint";
 import { layerChoices, layerForChoice } from "./layerChoice";
 import { TOUR_BUTTON_TEST_ID } from "./tourSteps";
 
@@ -85,6 +86,7 @@ export function PlanetHud(props: PlanetHudProps) {
   } = props;
   // null on the plain Earth view.
   const activeLayer = layerForChoice(layers, activeLayerId);
+  const selectedPoint = useListeningPoint();
 
   return (
     <div
@@ -168,6 +170,7 @@ export function PlanetHud(props: PlanetHudProps) {
           className={`${panel} min-w-56 font-mono`}
           aria-live="off"
         >
+          <p className="text-slate-400">Hover</p>
           {probe ? (
             <>
               <p>
@@ -189,10 +192,14 @@ export function PlanetHud(props: PlanetHudProps) {
               )}
             </>
           ) : (
-            <p className="text-slate-400">
-              Move the cursor over the planet or the map.
-            </p>
+            <p className="text-slate-400">—</p>
           )}
+          <p className="mt-2 text-slate-400" data-testid="planet-hud-selected-coords">
+            Selected:{" "}
+            {selectedPoint
+              ? `${formatLongitude(selectedPoint.lon)}, ${formatLatitude(selectedPoint.lat)}`
+              : "click the planet or map"}
+          </p>
         </div>
 
         <div className={`${panel} flex flex-col items-end gap-2`}>
