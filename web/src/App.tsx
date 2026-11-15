@@ -9,6 +9,7 @@ import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
 import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
 import { PlanetHud } from "./ui/PlanetHud";
+import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
 
 type LoadState =
   | { status: "loading" }
@@ -20,29 +21,21 @@ function readLiteMode(search: string): boolean {
   return new URLSearchParams(search).get("lite") === "1";
 }
 
-/** Layer shown first: the first one with a whole-planet grid (forest today), else the first listed. */
-function defaultLayerId(data: JukeboxData): string {
-  const withGlobal = data.layers.find((layer) => layer.global !== null) ?? data.layers[0];
-  return withGlobal?.manifest.id ?? "";
-}
-
-/** The planet, the Amazon map and their controls, once the data is loaded. */
+/** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
 function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; audio?: ReactNode }) {
-  const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
+  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
 
-  const activeLayer = useMemo(
-    () => data.layers.find((layer) => layer.manifest.id === activeLayerId) ?? data.layers[0],
-    [data, activeLayerId],
-  );
+  // null: the plain Earth view, no layer drawn.
+  const activeLayer = useMemo(() => layerForChoice(data.layers, activeLayerId), [data, activeLayerId]);
   const showAmazon = useCallback(() => setTargetView("map"), []);
   const showEarth = useCallback(() => setTargetView("globe"), []);
 
-  if (!activeLayer) {
+  if (data.layers.length === 0) {
     return (
       <p role="alert" data-testid="data-error" className="m-8 rounded border border-red-400 p-4 text-red-200">
         The data file lists no layers.
@@ -67,7 +60,7 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
       </div>
       <PlanetHud
         layers={data.layers}
-        activeLayerId={activeLayer.manifest.id}
+        activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
         onSelectLayer={setActiveLayerId}
         mode={mode}
         onAmazon={showAmazon}
