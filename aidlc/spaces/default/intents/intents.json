@@ -22,5 +22,13 @@
     "scope": "poc",
     "status": "complete",
     "request": "73c9de17"
+  },
+  {
+    "uuid": "01a1dcb7-4ad4-7da4-80fc-647e950b9760",
+    "slug": "gedi-forest-layer",
+    "dirName": "261115-gedi-forest-layer",
+    "scope": "poc",
+    "status": "complete",
+    "request": "ae8c4843"
   }
 ]
