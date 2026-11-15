@@ -41,7 +41,9 @@ from scipy import ndimage
 Image.MAX_IMAGE_PIXELS = None
 
 BASE_IMAGE = Path("web/public/data/earth-4k.jpg")
-# Frame 00940 is centred on 49.90 W; the globe turns west by this much per frame.
+# Frame 00940 is centred on 49.90 W; the globe turns west by about this much per
+# frame. It is only the starting guess of the fit: the longitudes the fit settles
+# on give 0.2017 degrees per frame (the figure in fetch-frames.sh and SOURCES.md).
 REFERENCE_FRAME = 940
 REFERENCE_LON = -49.90
 DEGREES_PER_FRAME = -0.1947
