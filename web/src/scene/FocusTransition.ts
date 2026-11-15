@@ -25,6 +25,8 @@ export interface ViewState {
 export type ViewMode = "globe" | "to-map" | "map" | "to-globe";
 
 export const GLOBE_CAMERA_Z = 3.2 * GLOBE_RADIUS;
+/** Free space beside the planet on a narrow (portrait) screen, as a share of its radius. */
+const GLOBE_SIDE_MARGIN = 1.12;
 export const FOCUS_DURATION_S = 1.6;
 export const RETURN_DURATION_S = 1.4;
 /** Free space around the Amazon rectangle when the map fills the screen. */
@@ -33,6 +35,19 @@ const MAP_MARGIN = 1.08;
 export function createViewState(): ViewState {
   // Start with the Americas towards the camera.
   return { yaw: facingRotation(-60, 0).yaw, pitch: 0, flatten: 0, cameraZ: GLOBE_CAMERA_Z, spinning: true };
+}
+
+/**
+ * Camera distance (along +Z) for the planet view. On a wide screen it is
+ * GLOBE_CAMERA_Z; on a narrow one (a phone held upright) the camera moves back
+ * until the whole planet fits the screen's width, so it is never cut at the sides.
+ */
+export function globeCameraZ(fovDegrees: number, aspect: number): number {
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const halfWidth = Math.atan(Math.tan((fovDegrees * Math.PI) / 360) * safeAspect);
+  // A sphere of radius r seen from distance d spans asin(r / d) either side of its centre.
+  const fitWidth = (GLOBE_RADIUS * GLOBE_SIDE_MARGIN) / Math.sin(halfWidth);
+  return Math.max(GLOBE_CAMERA_Z, fitWidth);
 }
 
 /** Camera distance (along +Z) that fits the Amazon rectangle of the flattened map on screen. */
@@ -79,20 +94,20 @@ export function playFocus(
   };
 }
 
-/** Amazon map -> spinning planet. */
-export function playReturn(view: ViewState, options: TransitionOptions): CancelTransition {
+/** Amazon map -> spinning planet; `cameraZ` is where the camera ends (globeCameraZ for the screen). */
+export function playReturn(view: ViewState, options: TransitionOptions, cameraZ: number = GLOBE_CAMERA_Z): CancelTransition {
   const finish = () => {
     view.spinning = true;
     options.onComplete();
   };
   if (options.instant) {
-    Object.assign(view, { pitch: 0, flatten: 0, cameraZ: GLOBE_CAMERA_Z });
+    Object.assign(view, { pitch: 0, flatten: 0, cameraZ });
     finish();
     return () => {};
   }
   const timeline = gsap.timeline({ onComplete: finish });
   timeline.to(view, { flatten: 0, duration: 0.9, ease: "power2.inOut" }, 0);
-  timeline.to(view, { cameraZ: GLOBE_CAMERA_Z, duration: 1.0, ease: "power2.inOut" }, 0);
+  timeline.to(view, { cameraZ, duration: 1.0, ease: "power2.inOut" }, 0);
   timeline.to(view, { pitch: 0, duration: 0.5, ease: "power2.out" }, 0.9);
   return () => {
     timeline.kill();
