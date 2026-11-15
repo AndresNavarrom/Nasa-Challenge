@@ -18,7 +18,7 @@ import {
 } from "./data/loadManifest";
 import type { JukeboxData, LayerId, LayerManifest, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
-import { frameBlend, frameIndexAt } from "./lib/timeline";
+import { dateLabelAt, frameBlend, frameIndexAt } from "./lib/timeline";
 import { SpinAccumulator, playDelta, positionPerTurn } from "./lib/timelineTrack";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewOrientation } from "./scene/geo";
@@ -41,6 +41,15 @@ import { TimelineTrack } from "./ui/TimelineTrack";
 import { Starfield } from "./ui/Starfield";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen, type TourAction } from "./ui/tourSteps";
+import {
+  HELP_PHRASE,
+  layerChangePhrase,
+  modePhrase,
+  scenePhrase,
+  whereAmIPhrase,
+} from "./ui/narration";
+import { isTypingTarget } from "./ui/narrator";
+import { useNarrator, type NarratorHandle } from "./ui/useNarrator";
 
 type LoadState =
   | { status: "loading" }
@@ -65,6 +74,9 @@ function layerGridBytes(layer: LayerManifest): number {
 /** Data voices fade to this level while a scene popup is open, over 0.6 s. */
 const SCENE_DATA_DUCK = 0.12;
 const SCENE_DATA_FADE_SECONDS = 0.6;
+/** Data voices fade to this level while the narrator speaks, so the words stay clear. */
+const NARRATION_DATA_DUCK = 0.3;
+const NARRATION_DATA_FADE_SECONDS = 0.3;
 
 /** Plan B switch: `?lite=1` in the address (half-resolution planet image, instant view changes). */
 function readLiteMode(search: string): boolean {
@@ -90,6 +102,8 @@ interface PlanetViewProps {
   onSceneSelect?: (scene: SceneDefinition) => void;
   onCloseScene?: () => void;
   focusedScene?: SceneDefinition | null;
+  /** The narrator that reads the app aloud (the V, I and H keys). */
+  voice?: NarratorHandle;
 }
 
 /** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
@@ -107,6 +121,7 @@ function PlanetView({
   onSceneSelect,
   onCloseScene,
   focusedScene,
+  voice,
 }: PlanetViewProps) {
   // The pair of instants on screen and the nearest one, tagged with their layer so
   // a stale pair is never used for another. How far the picture is between the
@@ -237,6 +252,27 @@ function PlanetView({
     [showEarth],
   );
 
+  const narrationRegionName = regionById(focusRegionId, regions ?? DEFAULT_REGIONS)?.name ?? "Amazon";
+  useNarration({
+    voice,
+    activeLayer,
+    mode,
+    regionName: narrationRegionName,
+    focusedScene: focusedScene ?? null,
+    whereAmI: () => {
+      const point = selectedPoint ?? probe;
+      return whereAmIPhrase({
+        mode,
+        regionName: narrationRegionName,
+        layer: activeLayer,
+        dateLabel: activeLayer ? dateLabelAt(activeLayer.manifest, positionRef.current) : "",
+        point,
+        value: selectedPoint ? selectedValue : (probe?.value ?? null),
+        playing: timelinePlaying,
+      });
+    },
+  });
+
   if (layerCatalog.length === 0) {
     return (
       <p
@@ -330,6 +366,8 @@ function PlanetView({
             : undefined
         }
         onShowTour={onShowTour}
+        narratorOn={voice?.supported ? voice.enabled : undefined}
+        onToggleNarrator={voice?.supported ? voice.toggle : undefined}
       />
       {sceneHover && !focusedScene && (
         <div
@@ -422,6 +460,73 @@ function TimelineControls(props: {
       color={color}
     />
   );
+}
+
+/**
+ * What the narrator says by itself (while it is on) and on request: the layer
+ * when the picker changes, the view when it changes, a scene when it opens,
+ * and the keys V (narrator on or off), I (where am I) and H (help).
+ * `whereAmI` is read only when I is pressed, so it may close over fresh state.
+ */
+function useNarration(props: {
+  voice?: NarratorHandle;
+  activeLayer: LoadedLayer | null;
+  mode: ViewMode;
+  regionName: string;
+  focusedScene: SceneDefinition | null;
+  whereAmI: () => string;
+}): void {
+  const { voice, activeLayer, mode, regionName, focusedScene, whereAmI } = props;
+  const narrator = voice?.narrator;
+  const whereAmIRef = useRef(whereAmI);
+  whereAmIRef.current = whereAmI;
+  const toggleRef = useRef(voice?.toggle);
+  toggleRef.current = voice?.toggle;
+
+  // Skip the first render: the starting view is not a change worth saying.
+  const layerId = activeLayer?.manifest.id ?? null;
+  const lastLayerRef = useRef(layerId);
+  useEffect(() => {
+    if (lastLayerRef.current === layerId) return;
+    lastLayerRef.current = layerId;
+    narrator?.speak(layerChangePhrase(activeLayer));
+  }, [narrator, layerId, activeLayer]);
+
+  const lastModeRef = useRef(mode);
+  useEffect(() => {
+    if (lastModeRef.current === mode) return;
+    lastModeRef.current = mode;
+    const phrase = modePhrase(mode, regionName);
+    if (phrase) narrator?.speak(phrase);
+  }, [narrator, mode, regionName]);
+
+  useEffect(() => {
+    if (focusedScene) narrator?.speak(scenePhrase(focusedScene));
+  }, [narrator, focusedScene]);
+
+  useEffect(() => {
+    if (!narrator) return undefined;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+      if (isTypingTarget(event.target)) return;
+      switch (event.key.toLowerCase()) {
+        case "v":
+          toggleRef.current?.();
+          break;
+        case "i":
+          narrator.speak(whereAmIRef.current(), { force: true });
+          break;
+        case "h":
+          narrator.speak(HELP_PHRASE, { force: true });
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [narrator]);
 }
 
 /** Delay before the first-visit tour, so the HUD is laid out when it measures it. */
@@ -558,6 +663,9 @@ function JukeboxView({
   const [openScene, setOpenScene] = useState<SceneDefinition | null>(null);
   const [sceneAudioError, setSceneAudioError] = useState<string | null>(null);
   const closeScene = useCallback(() => setOpenScene(null), []);
+  const voice = useNarrator();
+  const openSceneRef = useRef(openScene);
+  openSceneRef.current = openScene;
 
   useEffect(() => {
     let cancelled = false;
@@ -613,6 +721,17 @@ function JukeboxView({
     };
   }, [engine, openScene, scenes]);
 
+  // While the narrator speaks the data voices step back, then return to the
+  // level they had (lower while a scene is open).
+  const { speaking } = voice;
+  const spokeRef = useRef(false);
+  useEffect(() => {
+    if (!speaking && !spokeRef.current) return;
+    spokeRef.current = speaking;
+    const base = openSceneRef.current ? SCENE_DATA_DUCK : 1;
+    engine.setDataVoiceDuck(speaking ? Math.min(base, NARRATION_DATA_DUCK) : base, NARRATION_DATA_FADE_SECONDS);
+  }, [engine, speaking]);
+
   // The layers never mix: only the picked layer sounds (plain Earth: none).
   useEffect(() => {
     const voices = layerVoices(catalog.manifest.layers.map((layer) => layer.id), activeLayerId);
@@ -637,6 +756,7 @@ function JukeboxView({
         onSceneSelect={setOpenScene}
         onCloseScene={closeScene}
         focusedScene={openScene}
+        voice={voice}
       />
       {openScene && (
         <ScenePopup scene={openScene} onClose={closeScene} audioError={sceneAudioError} />

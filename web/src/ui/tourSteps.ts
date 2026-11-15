@@ -107,6 +107,14 @@ export const TOUR_STEPS: readonly TourStep[] = [
     align: "end",
   },
   {
+    testId: "planet-hud-narrator-button",
+    title: "Hear it read aloud",
+    description:
+      "Press Voice, or the V key, and the narrator reads aloud the layer, the view and the scenes. I tells you where you are; H lists the keys.",
+    side: "bottom",
+    align: "start",
+  },
+  {
     testId: TOUR_BUTTON_TEST_ID,
     title: "See this again",
     description: "Press ? at any time to repeat this tour.",
