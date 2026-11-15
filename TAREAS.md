@@ -120,8 +120,8 @@ docker compose run --rm fetch             # descargar las fuentes de datos
 
 ## Tres cosas que hay que saber
 
-- **Cobertura:** las cuatro capas son globales. El CO2 es un mosaico: sobre las Américas y el Atlántico se mueve con la línea de tiempo (23 a 25 de febrero de 2020); en el resto del planeta cada región tiene la fecha de la vista que la cubre, entre el 14 de enero y el 3 de marzo de 2020, y queda fija (donde dos vistas se solapan, por ejemplo cerca de 23° E, sus fechas se mezclan, con hasta nueve días de diferencia).
-- **Escalas:** el bosque es altura GEDI de 0 a 50 m y el humo es PM2.5 de GEOS-CF de 0 a 150 µg/m³; **el CO2 y los rayos son valores relativos** leídos de visualizaciones de la NASA (intensidad y frecuencia, no mediciones). Está en `data/SOURCES.md`.
+- **Cobertura:** las cuatro capas son globales y las tres que cambian en el tiempo se mueven en todo el planeta: humo cada 3 horas (1 de agosto a 30 de septiembre de 2026), CO2 cada día de 2020 y rayos cada mes (2017 a 2023).
+- **Escalas:** el bosque es altura GEDI de 0 a 50 m y el humo es la profundidad óptica del carbono orgánico y negro de MERRA-2 (solo humo, sin polvo del desierto) en escala de raíz cuadrada de 0 a 2, y el CO2 es XCO2 de OCO-2 GEOS de 404 a 420 ppm; **los rayos son un valor relativo** leído de una visualización de la NASA (frecuencia, no medición). Está en `data/SOURCES.md`.
 - **El CO2 se presenta como contexto global**, no como efecto medido de lo que pasa en la Amazonía.
 
 ## Quién hace qué

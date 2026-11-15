@@ -31,7 +31,7 @@ the play/pause clock of `playback.ts`, which the app no longer uses.
 
 | Layer | Instants | Cadence | Period |
 |---|---|---|---|
-| Wildfire smoke (GEOS-CF) | 168 | `PT1H` | 1–7 Sep 2026 |
+| Wildfire smoke (MERRA-2 carbon optical depth) | 488 | `PT3H` | 1 Aug – 30 Sep 2026 |
 | Atmospheric CO2 (OCO-2 GEOS L3) | 366 | `P1D` | every day of 2020 |
 | Lightning (SVS 5011) | 79 | `P1M` | Jan 2017 – Jul 2023 |
 | Forest height (GEDI L3) | 1 | — | Apr 2019 – Jul 2025 |

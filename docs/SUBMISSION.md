@@ -40,13 +40,14 @@ TODO (Danna): final wording, about 100–150 words.
 TODO: confirm against the final app.
 
 - A 3D planet with four NASA layers: forest height (GEDI), wildfire smoke
-  (GEOS-CF), carbon dioxide (DYAMOND) and lightning (LIS on the ISS).
+  (MERRA-2), carbon dioxide (OCO-2 GEOS) and lightning (LIS on the ISS).
 - Each layer sounds in real time where the cursor is. The layers never mix:
   only the layer picked in the layer picker is heard.
 - A short welcome tour explains the controls the first time the app opens.
 - Focusing on the Amazon turns the planet and flattens it into a regional map.
-- A static timeline: the person picks the moment with the Time slider; a
-  story mode walks through the three ideas in under a minute.
+- A timeline under the planet that plays while the planet turns (one turn is
+  a day of smoke, 30 days of CO2 or a year of lightning, 1× to 8×); a story
+  mode walks through the three ideas in under a minute.
 - Keyboard-only use and screen-reader descriptions (layer, place, low / medium
   / high value).
 
@@ -56,13 +57,13 @@ TODO: confirm against the final app.
   of values from 0 to 1:
   - **forest height** is the canopy height measured by GEDI, on a fixed scale
     of 0 to 50 m (NASA SVS 4950 fills the gaps where GEDI has no measurement);
-  - **wildfire smoke** is surface PM2.5 from the GEOS-CF model, on a fixed
-    scale of 0 to 150 µg/m³;
-  - **CO2** and **lightning** are relative values read from the colours of
-    NASA visualizations (an intensity and a frequency), not physical
-    measurements.
-- The browser interpolates those grids in space (and in time for smoke and
-  CO2) and maps each value to sound with the Web Audio API: pitch within a
+  - **wildfire smoke** is the optical depth of organic and black carbon (smoke
+    only, no desert dust) from MERRA-2, on a fixed square-root scale of 0 to 2;
+  - **CO2** is column CO2 from OCO-2 GEOS, on a fixed scale of 404 to 420 ppm;
+  - **lightning** is a relative value read from the colours of a NASA
+    visualization (a frequency), not a physical measurement.
+- The browser interpolates those grids in space (and in time for smoke, CO2
+  and lightning) and maps each value to sound with the Web Audio API: pitch within a
   five-note scale, roughness and filter, breathing rate, percussion for
   lightning, stereo position and volume.
 - The interface is React with three.js for the planet and GSAP for the
@@ -115,7 +116,7 @@ The repository states the same in its README (FR10.4).
 | Layer | Source | Link |
 |---|---|---|
 | Forest height | GEDI L3 Gridded Land Surface Metrics V3, mean canopy height (NASA GEDI, ORNL DAAC), April 2019 – July 2025; gaps filled with GEDI Forest Height, NASA SVS 4950 | https://doi.org/10.3334/ORNLDAAC/2525 · https://svs.gsfc.nasa.gov/4950 |
-| Wildfire smoke | GEOS-CF v2 analysis, surface PM2.5 (NASA GMAO), 1 – 7 September 2026, 168 hourly means | https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/ |
+| Wildfire smoke | MERRA-2 tavg1_2d_aer_Nx, organic + black carbon optical depth (NASA GMAO, GES DISC), 1 August – 30 September 2026, every 3 hours | https://disc.gsfc.nasa.gov/datasets/M2T1NXAER_5.12.4/summary |
 | Carbon dioxide | OCO-2 GEOS Level 3 daily, 0.5x0.625 assimilated CO2 V10r (NASA GES DISC), every day of 2020 | https://disc.gsfc.nasa.gov/datasets/OCO2_GEOS_L3CO2_DAY_10r/summary |
 | Lightning | Lightning Events Detected from the ISS 2017-2023, NASA SVS 5011, monthly | https://svs.gsfc.nasa.gov/5011 |
 | Base image of the planet | Natural Earth I with Shaded Relief and Water (public domain; backdrop only, no data values) | https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/ |

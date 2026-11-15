@@ -109,12 +109,13 @@ smoke** and **Lightning** (no more Global CO2). Lines above that name
       rivers and coasts of the base image, not shifted.
 - [ ] **No forest gaps (FR6.1).** On the planet, forest height shows on every
       continent with no empty band of longitude between the views.
-- [ ] **Smoke, 168 instants (FR4.1).** With **Wildfire smoke** active, the
-      timeline line starts at `Sep 1, 2026 00:30 UTC`, shows a labelled mark
-      for each day `Sep 1` to `Sep 7`, and the smoke shows over the whole
-      planet. While the planet turns, the picture fades hour by hour with the
-      line's date, one day per turn, to `Sep 7, 2026 23:30 UTC`, then starts
-      again. The forest keeps its single date.
+- [ ] **Smoke, 488 instants (FR4.1).** With **Wildfire smoke** active, the
+      timeline line starts at `Aug 1, 2026 00:30 UTC`, is labelled `Aug 2026`
+      and `Sep` with a mark per day, and only smoke shows (plumes over the
+      Amazon, central Africa and drifting over the Atlantic; no tint over the
+      Sahara). While the planet turns, the picture fades every three hours with
+      the line's date, one day per turn, to `Sep 30, 2026 21:30 UTC`, then
+      starts again. The forest keeps its single date.
 - [ ] **Lightning (FR5).** **Lightning** is in the layer picker, brightest
       over central Africa, north-west South America and South-East Asia, and
       reads 0 % or close to it far out at sea and near the poles.
