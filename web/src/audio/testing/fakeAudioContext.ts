@@ -143,6 +143,7 @@ export class FakeAudioContext {
   readonly filters: FakeBiquad[] = [];
   readonly panners: FakePanner[] = [];
   readonly analysers: FakeAnalyser[] = [];
+  readonly convolvers: FakeConvolver[] = [];
   readonly buffers: FakeAudioBuffer[] = [];
   readonly bufferSources: FakeBufferSource[] = [];
   /** When set, resume() rejects with it (autoplay policy or a closed context). */
@@ -196,7 +197,9 @@ export class FakeAudioContext {
   }
 
   createConvolver(): FakeConvolver {
-    return new FakeConvolver();
+    const convolver = new FakeConvolver();
+    this.convolvers.push(convolver);
+    return convolver;
   }
 
   createDynamicsCompressor(): FakeCompressor {

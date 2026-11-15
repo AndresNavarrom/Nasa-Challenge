@@ -156,6 +156,15 @@ const SCENE_LOOP_MAX_GAIN = 2;
 const SCENE_FADE_IN_SECONDS = 0.5;
 const SCENE_FADE_OUT_SECONDS = 0.3;
 const OVERVIEW_BUS_GAIN = 0.75;
+/**
+ * A little shared room around the overview: the bare oscillators of the 144
+ * cells sound dry and synthetic by themselves. A small part of the field goes
+ * through the reverb and comes back darker (low-pass), so it sits behind the
+ * notes as space and adds no brightness. It follows the field's own fades.
+ */
+const OVERVIEW_ROOM_SEND = 0.22;
+const OVERVIEW_ROOM_LEVEL = 0.6;
+const OVERVIEW_ROOM_TONE_HZ = 2600;
 const OVERVIEW_COLUMN_HEADROOM = 0.9;
 /** Existing forest recording used as a sparse bird ambience. */
 export const FOREST_BIRD_SAMPLE_URL = "./audio/samples/oajaros-suaves.ogg";
@@ -231,6 +240,8 @@ interface OverviewColumnVoice {
 interface OverviewGraph {
   columns: OverviewColumnVoice[];
   bus: GainNode;
+  /** The shared room around the whole field: send, reverb, its tone filter and its level. */
+  room: [GainNode, ConvolverNode, BiquadFilterNode, GainNode];
 }
 
 interface OverviewState {
@@ -1126,6 +1137,9 @@ export class WebAudioSoundEngine implements SoundEngine {
         }
       }
       overview.bus.disconnect();
+      for (const node of overview.room) {
+        node.disconnect();
+      }
     }
     if (this.regionalVoice) {
       const voice = this.regionalVoice;
@@ -1194,7 +1208,22 @@ export class WebAudioSoundEngine implements SoundEngine {
     for (let index = 0; index < OVERVIEW_COLUMNS; index += 1) {
       columns.push(this.buildOverviewColumn(context, bus));
     }
-    this.overviewGraph = { columns, bus };
+    const roomSend = context.createGain();
+    roomSend.gain.value = OVERVIEW_ROOM_SEND;
+    const room = context.createConvolver();
+    room.buffer = this.buildReverbImpulse(context);
+    const roomTone = context.createBiquadFilter();
+    roomTone.type = "lowpass";
+    roomTone.frequency.value = OVERVIEW_ROOM_TONE_HZ;
+    roomTone.Q.value = 0.5;
+    const roomLevel = context.createGain();
+    roomLevel.gain.value = OVERVIEW_ROOM_LEVEL;
+    bus.connect(roomSend);
+    roomSend.connect(room);
+    room.connect(roomTone);
+    roomTone.connect(roomLevel);
+    roomLevel.connect(graph.bus);
+    this.overviewGraph = { columns, bus, room: [roomSend, room, roomTone, roomLevel] };
     return this.overviewGraph;
   }
 

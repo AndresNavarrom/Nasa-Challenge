@@ -41,10 +41,33 @@ describe("overview sound engine", () => {
     await engine.start();
 
     expect(context.oscillators).toHaveLength(6 + OVERVIEW_COLUMNS * OVERVIEW_ROWS);
-    expect(context.filters).toHaveLength(3 + OVERVIEW_COLUMNS);
+    // 3 point-mode filters, one per column and the tone filter of the shared room.
+    expect(context.filters).toHaveLength(3 + OVERVIEW_COLUMNS + 1);
     const firstOverviewFilter = context.filters[3]!;
     const overviewRowGains = context.gains.filter((gain) => gain.connections.includes(firstOverviewFilter));
     expect(overviewRowGains.some((gain) => scheduled(gain.gain) > 0)).toBe(true);
+    engine.dispose();
+  });
+
+  it("puts a little shared room around the field, darker than the notes", async () => {
+    const context = new FakeAudioContext();
+    const engine = createSoundEngine({ context: context.asAudioContext(), lightningSampleUrl: null });
+    await engine.start();
+    engine.setOverview("forest", columns());
+    engine.setOverviewEnabled(true);
+
+    const room = context.convolvers.at(-1)!;
+    expect(room.buffer).not.toBeNull();
+    // Fed by a quiet send from the field's bus, so it fades with the field.
+    const send = context.gains.find((gain) => gain.connections.includes(room))!;
+    expect(send.gain.value).toBeGreaterThan(0);
+    expect(send.gain.value).toBeLessThan(0.5);
+    expect(context.gains.some((gain) => gain.connections.includes(send))).toBe(true);
+    // It comes back through a low-pass filter: space, not brightness.
+    const tone = context.filters.at(-1)!;
+    expect(room.connections).toContain(tone);
+    expect(tone.type).toBe("lowpass");
+    expect(tone.frequency.value).toBeLessThan(4000);
     engine.dispose();
   });
 
