@@ -82,7 +82,7 @@
     {
       "id": "co2",
       "title": "Atmospheric CO2",
-      "description": "Carbon dioxide moving through the atmosphere from NASA's DYAMOND simulation with the GEOS model. Over the Americas and the Atlantic it moves from 23 to 25 February 2020, every six hours; the rest of the planet is a fixed picture with each region on the date of the view that covers it, between 14 January and 3 March 2020 (where two views overlap their dates are blended). It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier.",
+      "description": "Carbon dioxide moving through the atmosphere from NASA's DYAMOND simulation with the GEOS model, over the whole planet. The timeline moves every region in 12 steps of six hours. NASA shows it as a turning globe, so no frame shows the whole planet at one moment: each side comes from its own stretch of the animation (Asia and Australia 14-17 January 2020, India 24-27 January, Africa and the Middle East 3-5 February, Europe and West Africa 12-15 February, the Americas and the Atlantic 23-25 February, western North America and the eastern Pacific 1-3 March); the Americas side decides alone around the Amazon, and elsewhere, where two sides meet, their dates are blended. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier.",
       "source": {
         "title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)",
         "url": "https://svs.gsfc.nasa.gov/5196"
@@ -90,18 +90,18 @@
       "static": false,
       "sample": false,
       "dates": [
-        "Feb 23, 2020 00:00 UTC",
-        "Feb 23, 2020 06:00 UTC",
-        "Feb 23, 2020 12:00 UTC",
-        "Feb 23, 2020 18:00 UTC",
-        "Feb 24, 2020 00:00 UTC",
-        "Feb 24, 2020 06:00 UTC",
-        "Feb 24, 2020 12:00 UTC",
-        "Feb 24, 2020 18:00 UTC",
-        "Feb 25, 2020 00:00 UTC",
-        "Feb 25, 2020 06:00 UTC",
-        "Feb 25, 2020 12:00 UTC",
-        "Feb 25, 2020 18:00 UTC"
+        "Step 1 of 12 (Americas Feb 23, 2020 00:00 UTC)",
+        "Step 2 of 12 (Americas Feb 23, 2020 06:00 UTC)",
+        "Step 3 of 12 (Americas Feb 23, 2020 12:00 UTC)",
+        "Step 4 of 12 (Americas Feb 23, 2020 18:00 UTC)",
+        "Step 5 of 12 (Americas Feb 24, 2020 00:00 UTC)",
+        "Step 6 of 12 (Americas Feb 24, 2020 06:00 UTC)",
+        "Step 7 of 12 (Americas Feb 24, 2020 12:00 UTC)",
+        "Step 8 of 12 (Americas Feb 24, 2020 18:00 UTC)",
+        "Step 9 of 12 (Americas Feb 25, 2020 00:00 UTC)",
+        "Step 10 of 12 (Americas Feb 25, 2020 06:00 UTC)",
+        "Step 11 of 12 (Americas Feb 25, 2020 12:00 UTC)",
+        "Step 12 of 12 (Americas Feb 25, 2020 18:00 UTC)"
       ],
       "global": {
         "width": 1440,
@@ -116,6 +116,44 @@
         "frames": 12,
         "file": "co2_region.bin",
         "texture": "co2_region.png"
+      },
+      "sharp": {
+        "global": {
+          "width": 4096,
+          "height": 2048,
+          "files": [
+            "co2_sharp_global_00.png",
+            "co2_sharp_global_01.png",
+            "co2_sharp_global_02.png",
+            "co2_sharp_global_03.png",
+            "co2_sharp_global_04.png",
+            "co2_sharp_global_05.png",
+            "co2_sharp_global_06.png",
+            "co2_sharp_global_07.png",
+            "co2_sharp_global_08.png",
+            "co2_sharp_global_09.png",
+            "co2_sharp_global_10.png",
+            "co2_sharp_global_11.png"
+          ]
+        },
+        "region": {
+          "width": 1152,
+          "height": 896,
+          "files": [
+            "co2_sharp_region_00.png",
+            "co2_sharp_region_01.png",
+            "co2_sharp_region_02.png",
+            "co2_sharp_region_03.png",
+            "co2_sharp_region_04.png",
+            "co2_sharp_region_05.png",
+            "co2_sharp_region_06.png",
+            "co2_sharp_region_07.png",
+            "co2_sharp_region_08.png",
+            "co2_sharp_region_09.png",
+            "co2_sharp_region_10.png",
+            "co2_sharp_region_11.png"
+          ]
+        }
       }
     },
     {
