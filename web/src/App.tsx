@@ -38,13 +38,6 @@ function readLiteMode(search: string): boolean {
   return new URLSearchParams(search).get("lite") === "1";
 }
 
-/** Layer shown first: the first one with a whole-planet grid (forest today), else the first listed. */
-function defaultLayerId(data: JukeboxData): string {
-  const withGlobal =
-    data.layers.find((layer) => layer.global !== null) ?? data.layers[0];
-  return withGlobal?.manifest.id ?? "";
-}
-
 interface PlanetViewProps {
   data: JukeboxData;
   lite: boolean;
@@ -55,7 +48,7 @@ interface PlanetViewProps {
   onShowTour?: () => void;
 }
 
-/** The planet, the Amazon map and their controls, once the data is loaded. */
+/** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
 function PlanetView({
   data,
   lite,
@@ -65,9 +58,7 @@ function PlanetView({
   onToggleHeard,
   onShowTour,
 }: PlanetViewProps) {
-  const [activeLayerId, setActiveLayerId] = useState(() =>
-    defaultLayerId(data),
-  );
+  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
