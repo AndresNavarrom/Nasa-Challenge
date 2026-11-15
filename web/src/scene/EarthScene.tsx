@@ -299,6 +299,9 @@ function SceneContents(props: SceneContentsProps) {
   // The dots image holds the whole period at once, so it is only drawn while the
   // lightning data has a single instant. With one instant per quarter, the timeline
   // draws each quarter from its grids instead (one quarter at a time, never accumulated).
+  // Kept on purpose, although the shipped data has 27 instants and never takes this
+  // path: if the lightning layer is ever published with a single instant again, the
+  // sharp dots (lightning-4k.png, dotImage.ts, `lightning_dots.py render`) apply.
   const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER && activeLayer.region.frames <= 1;
   const dotStyle = lightningActive ? dotImageFor(DOT_IMAGE_LAYER) : null;
   const [lightningWanted, setLightningWanted] = useState(lightningActive);
