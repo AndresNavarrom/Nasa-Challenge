@@ -2,7 +2,7 @@
 name = "jukebox-server"
 version = "0.1.0"
 edition = "2021"
-description = "Local static file server for the Earth Jukebox demo (binds to 127.0.0.1 only)"
+description = "Local static file server for the Earth Jukebox demo (binds to 127.0.0.1 by default)"
 license = "MIT"
 publish = false
 
@@ -10,3 +10,7 @@ publish = false
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 tower-http = { version = "0.6", features = ["fs"] }
+
+[dev-dependencies]
+# `oneshot` to call the router in tests without opening a socket.
+tower = { version = "0.5", features = ["util"] }

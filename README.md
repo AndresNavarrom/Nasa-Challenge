@@ -21,10 +21,10 @@ This repository is the **shared base** of the build. What is in place:
 | Interpolation and timeline | `web/src/lib/` | Done, tested |
 | Value → sound mapping (pure functions) | `web/src/audio/mapping.ts` | Done, tested |
 | Sound engine (Web Audio) | `web/src/audio/engine.ts` | To build |
-| Local server (Axum) | `server/` | Skeleton only |
+| Local server (Axum) | `server/` | Done, tested |
 | Planet, Amazon map, transition, panels, story mode, accessibility | `web/src/scene/`, `web/src/ui/` | To build (`App.tsx` is a starting shell that lists the loaded layers) |
 | Docker containers to run, test and prepare the data | `docker-compose.yml`, `web/Dockerfile`, `tools/prep/Dockerfile` | Done |
-| Final app container (built interface + local server) | — | To build, with the local server and `run-demo.sh` |
+| Final app container (built interface + local server) | `Dockerfile`, service `app` | Done |
 | `run-demo.sh`, demo checklist, submission drafts | — | To build |
 
 ## Project layout
@@ -33,7 +33,8 @@ This repository is the **shared base** of the build. What is in place:
 web/              React + Tailwind + GSAP + three.js interface, Web Audio, Vitest tests
 tools/prep/       Rust program: NASA frames -> intensity grids + textures + manifest
 tools/fetch-frames.sh  downloads the NASA frames into data/raw/
-server/           Rust (Axum) static server for 127.0.0.1 (skeleton)
+server/           Rust (Axum) static server for 127.0.0.1: serves web/dist
+Dockerfile        final app image: built interface + release server binary
 data/             prep-config.json, SOURCES.md, raw/ (downloaded frames, not versioned)
 web/public/data/  prepared data shipped with the app
 docker-compose.yml  services to run, test and prepare the data in containers
@@ -53,35 +54,59 @@ docker compose --profile "*" build
 **The demo runs without internet, so build the images beforehand** on the
 machine that will run it. Once they are built, starting the interface, running
 the tests and preparing the data download nothing. Build again after pulling a
-change to `web/package.json`, `web/package-lock.json`, `tools/prep/Cargo.toml`
-or `tools/prep/Cargo.lock`.
+change to `web/package.json`, `web/package-lock.json`, `tools/prep/Cargo.toml`,
+`tools/prep/Cargo.lock`, `server/Cargo.toml` or `server/Cargo.lock`.
 
-A plain `docker compose build` builds the interface image only, because the
-test and data jobs sit behind profiles (so that `docker compose up` never
-starts them by accident).
+A plain `docker compose build` builds the final app image only, because every
+other service sits behind a profile (so that `docker compose up` never starts
+them by accident).
 
-### 2. Run the interface
+### 2. Run the app (the demo)
 
 ```bash
-docker compose up web           # http://127.0.0.1:5173, Ctrl+C to stop
-docker compose up -d web        # same, in the background
+docker compose build app        # needs internet; again after any change to web/ or server/
+docker compose up               # http://127.0.0.1:8080, Ctrl+C to stop
+docker compose up -d            # same, in the background
 docker compose down             # stop and remove the containers
 ```
 
-`web/` is mounted into the container, so saving a file on your machine reloads
-the page. The port is published on `127.0.0.1` only.
+The `app` image holds the built interface, the prepared data and the release
+server binary, so once it is built the app starts in about a second and needs
+no internet. It does not read your working tree: rebuild it to see new code.
 
-### 3. Run the tests
+### 3. Develop the interface
+
+```bash
+docker compose up web           # http://127.0.0.1:5173, live reload, Ctrl+C to stop
+docker compose up -d web        # same, in the background
+```
+
+`web/` is mounted into the container, so saving a file on your machine reloads
+the page. Every port is published on `127.0.0.1` only.
+
+To try the server code without rebuilding the app image, build the interface
+into `web/dist` and serve it from the mounted `server/` source:
+
+```bash
+docker compose run --rm web npm run build
+docker compose up server        # http://127.0.0.1:8081
+```
+
+Build `web/dist` first: without it the server stops and says which command to
+run.
+
+### 4. Run the tests
 
 ```bash
 docker compose run --rm web-test     # Vitest: every web/src/**/*.test.ts
 docker compose run --rm prep-test    # cargo test for tools/prep
+docker compose run --rm server-test  # cargo test for server/
 ```
 
-Both read the source from your working tree; no rebuild is needed after a code
+All three read the source from your working tree; no rebuild is needed after a code
 change.
 
-### 4. Other jobs
+### 5. Other jobs
 
 ```bash
 docker compose run --rm web npm run typecheck   # TypeScript check
@@ -104,10 +129,10 @@ frames in `data/raw/`; see [Preparing the data](#preparing-the-data).
   then commit `web/package.json` and `web/package-lock.json`.
 - **Start clean**: `docker compose down -v` also deletes the dependency volume;
   the next start fills it again from the image.
-- **The final app container** (built interface served by the Rust local server
-  in `server/`) is not in `docker-compose.yml` yet. It arrives with the local
-  server and `run-demo.sh`. `web/Dockerfile` already has a `build` target that
-  produces the static site in `/app/dist` for it.
+- **The local server** listens on `127.0.0.1:8080` by default; `JUKEBOX_HOST`
+  and `JUKEBOX_PORT` change it (inside the containers it listens on `0.0.0.0`
+  and Docker publishes the port on `127.0.0.1` only). If `index.html` or
+  `data/manifest.json` is missing it stops and says which command to run.
 - There is no database.
 
 ## Run without Docker (secondary)
@@ -118,6 +143,7 @@ Requirements: Node.js 20.19 or newer (npm), stable Rust (cargo).
 npm --prefix web ci
 npm --prefix web run dev        # http://127.0.0.1:5173
 npm --prefix web run build      # type-check and build into web/dist
+cargo run --release --manifest-path server/Cargo.toml   # serves web/dist on http://127.0.0.1:8080
 ```
 
 Tests:
@@ -125,6 +151,7 @@ Tests:
 ```bash
 npm --prefix web exec -- vitest run
 cargo test --manifest-path tools/prep/Cargo.toml
+cargo test --manifest-path server/Cargo.toml
 ```
 
 Nothing is loaded from the internet at runtime: fonts are system fonts and all

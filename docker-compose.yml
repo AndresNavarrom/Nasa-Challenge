@@ -1,16 +1,18 @@
 # Earth Jukebox: run, test and prepare the data with Docker only.
 #
 #   docker compose --profile '*' build     build every image (needs internet, do it before the demo)
+#   docker compose up                      the full app (built interface + local server) on http://127.0.0.1:8080
 #   docker compose up web                  interface with live reload on http://127.0.0.1:5173
 #   docker compose run --rm web-test       Vitest suite (web/src/**/*.test.ts)
 #   docker compose run --rm prep-test      cargo test for tools/prep
+#   docker compose run --rm server-test    cargo test for server/
 #   docker compose run --rm prep           regenerate web/public/data/ from data/prep-config.json
+#   docker compose run --rm web npm run build && docker compose up server
+#                                          dev server over web/dist on http://127.0.0.1:8081
 #
-# There is no database. `web-test`, `prep-test` and `prep` are one-off jobs
-# behind profiles, so a plain `docker compose up` starts the interface only.
-#
-# The final app container (built interface + the Rust local server in server/)
-# is added with Steps 11 and 15 of the plan; it is not defined here yet.
+# There is no database. Only `app` has no profile, so a plain `docker compose up`
+# starts the full app and nothing else. Naming a service (`up web`, `run --rm
+# web-test`) starts it whatever its profile.
 
 name: earth-jukebox
 
@@ -34,9 +36,36 @@ x-prep: &prep
   init: true
   working_dir: /work
 
+x-server: &server
+  build:
+    context: ./server
+  image: earth-jukebox-server:dev
+  init: true
+  working_dir: /work
+
 services:
+  # The demo: one image with the built interface, its data and the release
+  # server binary (Dockerfile at the repository root). Once built it needs no
+  # internet. Rebuild it (`docker compose build app`) after any change to web/
+  # or server/ so the image carries the latest code.
+  app:
+    build:
+      context: .
+      target: app
+    image: earth-jukebox-app:latest
+    init: true
+    environment:
+      # Listen on every interface inside the container so the published port
+      # reaches it. The image itself defaults to 127.0.0.1 (see Dockerfile).
+      JUKEBOX_HOST: "0.0.0.0"
+    ports:
+      # Published on the loopback interface only.
+      - "127.0.0.1:8080:8080"
+    restart: "no"
+
   web:
     <<: *web
+    profiles: ["dev"]
     ports:
       # Published on the loopback interface only.
       - "127.0.0.1:5173:5173"
@@ -57,6 +86,35 @@ services:
     volumes:
       - ./tools/prep:/work/tools/prep:ro
     command: ["cargo", "test", "--locked", "--manifest-path", "tools/prep/Cargo.toml"]
+
+  server-test:
+    <<: *server
+    profiles: ["test"]
+    volumes:
+      - ./server:/work/server:ro
+    command: ["cargo", "test", "--locked", "--manifest-path", "server/Cargo.toml"]
+
+  # Development run of the server: compiles the mounted server/ source and
+  # serves web/dist from the host, built with `docker compose run --rm web npm
+  # run build`. Port 8081 so it can run next to `app`.
+  server:
+    <<: *server
+    profiles: ["dev"]
+    volumes:
+      - ./server:/work/server:ro
+      # The whole web/ folder, read-only, so Docker never has to create
+      # web/dist on the host (an empty, root-owned folder there would get in
+      # the way of `npm run build`). If web/dist is missing, the server says so
+      # and stops. Build it first with `docker compose run --rm web npm run build`.
+      - ./web:/work/web:ro
+    environment:
+      # Listen on every interface inside the container so the published port
+      # reaches it; the port is published on the host's loopback only.
+      JUKEBOX_HOST: "0.0.0.0"
+      JUKEBOX_PORT: "8080"
+    ports:
+      - "127.0.0.1:8081:8080"
+    command: ["cargo", "run", "--locked", "--manifest-path", "server/Cargo.toml"]
 
   prep:
     <<: *prep
