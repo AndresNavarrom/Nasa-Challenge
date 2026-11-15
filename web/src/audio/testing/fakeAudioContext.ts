@@ -137,8 +137,9 @@ export class FakeAudioContext {
     }
     this.state = "running";
   });
+  decodedDuration = 16.6;
   readonly decodeAudioData = vi.fn(async (_data: ArrayBuffer): Promise<AudioBuffer> => {
-    return { duration: 16.6 } as AudioBuffer;
+    return { duration: this.decodedDuration } as AudioBuffer;
   });
   readonly addEventListener = vi.fn();
   readonly removeEventListener = vi.fn();
