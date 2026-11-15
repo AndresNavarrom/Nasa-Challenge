@@ -129,10 +129,13 @@ mapping in `mapping.ts` is exact and linear, with no perception curve:
 - Each hit plays an excerpt of **`audio/samples/tormenta-albert.ogg`** (prepared
   from the team's `TORMENTA ALBERT.wav` by `tools/audio/prepare.py`). The hit rate
   is the audible “frequency of lightning”.
-- Grain length is `clamp(1.2 s / rate, 0.45 s, 1.2 s)`, so faster rhythms do not
-  turn into mud. Excerpt starts cycle through 0.25, 4.25, 6.25 and 8.25 s so
-  repeated hits do not sound identical; a short attack and exponential release
-  make each one percussive.
+- Every hit plays a **2.4 s tail** and is left to ring: new hits stack under it
+  instead of cutting it, so fast lightning keeps the thunder trails. The per-hit
+  gain is scaled by `1 / sqrt(hits per second)` so overlapping tails do not pile
+  up in loudness.
+- Excerpt starts cycle through 0.15, 4.25, 6.25 and 8.25 s so repeated hits do
+  not sound identical; a short attack and a 250 ms fade at the end keep the
+  onset percussive and the stop click-free.
 - If the sample cannot be fetched or decoded, the engine logs a warning and
   falls back to the earlier synthesized hit (band-passed noise + triangle body,
   pitch 90–330 Hz, `lightningToPercussion`). The rhythm and rate mapping are the

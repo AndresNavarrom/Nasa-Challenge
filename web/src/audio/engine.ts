@@ -60,6 +60,10 @@ export const DEFAULT_LIGHTNING_SAMPLE_URL = "./audio/samples/tormenta-albert.ogg
 const LIGHTNING_SAMPLE_OFFSETS = [0.15, 4.25, 6.25, 8.25];
 const LIGHTNING_SAMPLE_GAIN = 0.9;
 const LIGHTNING_SAMPLE_ATTACK = 0.008;
+/** How long one thunder hit rings; new hits stack under it instead of cutting it. */
+export const LIGHTNING_SAMPLE_TAIL_SECONDS = 2.4;
+/** Fade the very end of the excerpt so stopping it does not click. */
+const LIGHTNING_SAMPLE_FADE_OUT = 0.25;
 const FOREST_HARMONY_MIX = 0.35;
 const FOREST_LOWPASS_HZ = 4000;
 const SMOKE_TONE_HZ = 180;
@@ -864,23 +868,22 @@ export class WebAudioSoundEngine implements SoundEngine {
     await this.lightningSampleLoad;
   }
 
-  /** Grain length shrinks as the hit rate rises, so fast hits do not turn to mud. */
-  private lightningGrainSeconds(): number {
-    const rate = Math.max(0.1, this.lightningRateHz);
-    return Math.min(1.2, Math.max(0.45, 1.2 / rate));
-  }
-
   /** One hit built from an excerpt of the thunder sample. */
   private playLightningSampleHit(sample: AudioBuffer): void {
     const context = this.context;
     const graph = this.graph;
     if (!context || !graph || this.currentState !== "running") return;
     const now = context.currentTime;
-    const grain = this.lightningGrainSeconds();
-    const duration = Number.isFinite(sample.duration) && sample.duration > 0 ? sample.duration : grain;
+    const duration = Number.isFinite(sample.duration) && sample.duration > 0 ? sample.duration : LIGHTNING_SAMPLE_TAIL_SECONDS;
+    const tail = Math.min(LIGHTNING_SAMPLE_TAIL_SECONDS, duration);
+    // Keep total loudness roughly constant as hits overlap: each one is quieter,
+    // but its tail is still underneath the next one.
+    const rate = Math.max(0.1, this.lightningRateHz);
+    const hitGain = LIGHTNING_SAMPLE_GAIN * Math.min(1, 1 / Math.sqrt(rate));
+    const fadeStart = Math.max(LIGHTNING_SAMPLE_ATTACK, Math.min(tail, tail - LIGHTNING_SAMPLE_FADE_OUT));
     const baseOffset = LIGHTNING_SAMPLE_OFFSETS[this.lightningHitIndex % LIGHTNING_SAMPLE_OFFSETS.length] ?? 0;
     this.lightningHitIndex += 1;
-    const offset = Math.min(Math.max(0, duration - grain), baseOffset);
+    const offset = Math.min(Math.max(0, duration - tail), baseOffset);
 
     const source = context.createBufferSource();
     source.buffer = sample;
@@ -888,11 +891,11 @@ export class WebAudioSoundEngine implements SoundEngine {
     source.connect(gain);
     gain.connect(graph.lightning.gain);
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(LIGHTNING_SAMPLE_GAIN, now + LIGHTNING_SAMPLE_ATTACK);
-    gain.gain.setValueAtTime(LIGHTNING_SAMPLE_GAIN, now + Math.min(grain * 0.6, 0.4));
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + grain);
-    source.start(now, offset, grain);
-    source.stop(now + grain + 0.02);
+    gain.gain.linearRampToValueAtTime(hitGain, now + LIGHTNING_SAMPLE_ATTACK);
+    gain.gain.setValueAtTime(hitGain, now + fadeStart);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + tail);
+    source.start(now, offset, tail);
+    source.stop(now + tail + 0.02);
 
     let cleaned = false;
     const cleanup = (): void => {

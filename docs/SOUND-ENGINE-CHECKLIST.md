@@ -59,6 +59,7 @@ hit is only a fallback when the sample cannot be loaded.
 | Sound | The hits are thunder from the sample, not a synth blip |
 | Count over 10 s at 0.5 / 1 | About 30 / 60 hits, evenly spaced |
 | Variation | Repeated hits do not sound identical (four excerpt starts) |
+| High rate (0.8–1) | Trails overlap and are not cut when the next hit starts; loudness stays controlled |
 | Pan | The hits move with the pan control |
 | Disable the layer / tick "no data" | The rhythm stops within one hit; the other voices are unchanged |
 | CO2 with lightning | The CO2 breathing does not change when the lightning slider moves |
