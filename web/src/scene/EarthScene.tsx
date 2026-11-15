@@ -16,10 +16,12 @@ import {
   DataTexture,
   LinearFilter,
   LinearMipmapLinearFilter,
+  NearestFilter,
   NoColorSpace,
   RedFormat,
   RepeatWrapping,
   TextureLoader,
+  UnsignedByteType,
   type Texture,
   type WebGLRenderer,
 } from "three";
@@ -38,9 +40,18 @@ import {
   type ViewMode,
   type ViewState,
 } from "./FocusTransition";
-import { isInsideBbox, screenX01 } from "./geo";
+import { screenX01 } from "./geo";
 import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type LayerTextures } from "./layerTexture";
 import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
+import {
+  AMAZON_REGION_ID,
+  buildRegionMap,
+  focusBboxFor,
+  regionById,
+  regionMapIndexAt,
+  type Region,
+  type RegionMap,
+} from "./regions";
 
 export type TargetView = "globe" | "map";
 
@@ -58,6 +69,14 @@ export interface EarthSceneProps {
   targetView: TargetView;
   lite: boolean;
   onRequestView: (view: TargetView) => void;
+  /** Regions of the world, the Amazon first (regions.ts); they are outlined and can be visited. */
+  regions: readonly Region[];
+  /** Region visited by the map view (an id of `regions`); the Amazon uses the data file's rectangle. */
+  focusRegionId: string;
+  /** A region was double-clicked on the planet: visit it. */
+  onFocusRegion: (regionId: string) => void;
+  /** Region under the cursor on the planet (an id of `regions`), or null. */
+  onHoverRegion: (regionId: string | null) => void;
   onModeChange: (mode: ViewMode) => void;
   onProbe: (probe: Probe | null) => void;
   onFps: (fps: number) => void;
@@ -80,6 +99,31 @@ function emptyLayerTextures(): LayerTextures {
   const region = new DataTexture(new Uint8Array(4), 1, 1);
   region.needsUpdate = true;
   return { global: null, region, heightGlobal: null, heightRegion: null, opacity: 0.8, baseDim: 0 };
+}
+
+/** Size of the region map: about 0.09 degrees per cell, so the outline stays smooth on the zoomed map. */
+const REGION_MASK_SIZE = { width: 4096, height: 2048 };
+
+/** The layer whose heights shape the regions (the forest inside each search area). */
+const REGION_SHAPE_LAYER = "forest";
+
+/**
+ * The region map (regions.ts), shaped by the forest height grid when the data has
+ * one, and its one-channel texture, read cell by cell (no filtering between regions).
+ */
+function buildRegionMask(data: JukeboxData, regions: readonly Region[]): { map: RegionMap; texture: DataTexture } {
+  const { width, height } = REGION_MASK_SIZE;
+  const forest = data.layers.find((layer) => layer.manifest.id === REGION_SHAPE_LAYER)?.global ?? null;
+  const map = buildRegionMap(width, height, forest, regions);
+  const texture = new DataTexture(map.cells, width, height, RedFormat, UnsignedByteType);
+  texture.unpackAlignment = 1;
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return { map, texture };
 }
 
 /** WebGL's largest texture side, or null when the renderer does not report it. */
@@ -190,13 +234,50 @@ interface SceneContentsProps extends EarthSceneProps {
 }
 
 function SceneContents(props: SceneContentsProps) {
-  const { data, activeLayer, targetView, lite, onRequestView, onModeChange, onProbe, onFps, onSceneError, setListeningPoint } =
+  const {
+    data,
+    activeLayer,
+    targetView,
+    lite,
+    regions,
+    focusRegionId,
+    onRequestView,
+    onFocusRegion,
+    onHoverRegion,
+    onModeChange,
+    onProbe,
+    onFps,
+    onSceneError,
+    setListeningPoint,
+  } =
     props;
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const size = useThree((state) => state.size);
 
   const view = useRef<ViewState>(createViewState());
+
+  // Regions: the map of every region for the shader (built once), the one under
+  // the cursor, and the rectangle of the one being visited.
+  const mask = useMemo(() => buildRegionMask(data, regions), [data, regions]);
+  useEffect(() => () => mask.texture.dispose(), [mask]);
+  const regionAt = useCallback((lon: number, lat: number) => regionMapIndexAt(mask.map, lon, lat), [mask]);
+  const [hoverRegion, setHoverRegion] = useState<number | null>(null);
+  const focusBbox = useMemo(() => {
+    const region = regionById(focusRegionId, regions) ?? regionById(AMAZON_REGION_ID, regions);
+    return region ? focusBboxFor(region, data.bbox) : data.bbox;
+  }, [focusRegionId, data.bbox, regions]);
+  const showHoverRegion = useCallback(
+    (index: number | null) => {
+      setHoverRegion(index);
+      onHoverRegion(index === null ? null : (regions[index]?.id ?? null));
+    },
+    [onHoverRegion, regions],
+  );
+  // New regions (the world regions arriving) renumber the map: forget the old highlight.
+  useEffect(() => {
+    setHoverRegion(null);
+  }, [mask]);
   const [mode, setModeState] = useState<ViewMode>("globe");
   const modeRef = useRef<ViewMode>("globe");
   const targetRef = useRef<TargetView>(targetView);
@@ -324,6 +405,7 @@ function SceneContents(props: SceneContentsProps) {
       // where it was so the sound does not cut out (FR5.2).
       onProbe(null);
       lastProbeRef.current = null;
+      showHoverRegion(null);
     }
   };
 
@@ -336,8 +418,8 @@ function SceneContents(props: SceneContentsProps) {
     const instant = lite;
     if (target === "map" && current === "globe") {
       setMode("to-map");
-      const cameraZ = mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height);
-      cancelRef.current = playFocus(view.current, { bbox: data.bbox, cameraZ }, {
+      const cameraZ = mapCameraZ(focusBbox, CAMERA_FOV, size.width / size.height);
+      cancelRef.current = playFocus(view.current, { bbox: focusBbox, cameraZ }, {
         instant,
         onComplete: () => {
           setMode("map");
@@ -364,7 +446,7 @@ function SceneContents(props: SceneContentsProps) {
     const state = view.current;
     if (modeRef.current === "map") {
       // Keep the Amazon framed if the window is resized while on the map.
-      state.cameraZ = mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height);
+      state.cameraZ = mapCameraZ(focusBbox, CAMERA_FOV, size.width / size.height);
     }
     camera.position.set(0, 0, state.cameraZ);
     camera.lookAt(0, 0, 0);
@@ -395,8 +477,11 @@ function SceneContents(props: SceneContentsProps) {
       lastProbeRef.current = null;
       setListeningPoint(null);
       onProbe(null);
+      showHoverRegion(null);
       return;
     }
+    // Regions are only picked on the planet; on the map there is no outline.
+    showHoverRegion(modeRef.current === "globe" ? regionAt(hit.lon, hit.lat) : null);
     const rect = gl.domElement.getBoundingClientRect();
     setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
     const probe = probeFor(hit);
@@ -405,7 +490,7 @@ function SceneContents(props: SceneContentsProps) {
     if (last && last.lon === probe.lon && last.lat === probe.lat && last.value === probe.value) return;
     lastProbeRef.current = probe;
     onProbe(probe);
-  }, [gl, setListeningPoint, onProbe, probeFor]);
+  }, [gl, setListeningPoint, onProbe, probeFor, showHoverRegion, regionAt]);
 
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
@@ -433,11 +518,15 @@ function SceneContents(props: SceneContentsProps) {
     if (hit) handleHover(hit);
   }, [handleHover]);
 
-  const handleGlobeClick = useCallback(
+  const handleMapDoubleClick = useCallback(() => onRequestView("globe"), [onRequestView]);
+
+  const handleGlobeDoubleClick = useCallback(
     (lon: number, lat: number) => {
-      if (isInsideBbox(lon, lat, data.bbox)) onRequestView("map");
+      const index = regionAt(lon, lat);
+      const region = index === null ? undefined : regions[index];
+      if (region) onFocusRegion(region.id);
     },
-    [data.bbox, onRequestView],
+    [onFocusRegion, regionAt, regions],
   );
 
   return (
@@ -447,6 +536,10 @@ function SceneContents(props: SceneContentsProps) {
         regionBaseTexture={regionBaseTexture}
         layerTextures={layer.textures}
         bbox={data.bbox}
+        focusBbox={focusBbox}
+        regionMask={mask.texture}
+        regionAt={regionAt}
+        hoverRegion={hoverRegion}
         view={view}
         mode={mode}
         segments={lite ? LITE_SEGMENTS : FULL_SEGMENTS}
@@ -454,7 +547,8 @@ function SceneContents(props: SceneContentsProps) {
         reliefImages={reliefImages}
         dotImage={dotImage}
         onHover={handleHover}
-        onGlobeClick={handleGlobeClick}
+        onGlobeDoubleClick={handleGlobeDoubleClick}
+        onMapDoubleClick={handleMapDoubleClick}
       />
       <FpsProbe onFps={onFps} />
     </>

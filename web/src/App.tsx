@@ -16,6 +16,7 @@ import { sampleLayerAt } from "./lib/interpolate";
 import { framePosition } from "./lib/timeline";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
+import { AMAZON_REGION_ID, DEFAULT_REGIONS, loadWorldRegions, regionById, type Region } from "./scene/regions";
 import {
   ListeningPointProvider,
   useListeningPoint,
@@ -70,7 +71,29 @@ function PlanetView({
     () => layerForChoice(data.layers, activeLayerId),
     [data, activeLayerId],
   );
-  const showAmazon = useCallback(() => setTargetView("map"), []);
+  // The regions of the world (the Amazon alone until regions.json arrives, or if it
+  // cannot be read), the one the map view visits and the one under the cursor.
+  const [regions, setRegions] = useState<readonly Region[]>(DEFAULT_REGIONS);
+  useEffect(() => {
+    let cancelled = false;
+    loadWorldRegions(data.baseUrl)
+      .then((loaded) => {
+        if (!cancelled) setRegions(loaded);
+      })
+      .catch((cause: unknown) => {
+        console.error("Earth Jukebox could not load the world regions; only the Amazon is outlined:", cause);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.baseUrl]);
+  const [focusRegionId, setFocusRegionId] = useState(AMAZON_REGION_ID);
+  const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+  const visitRegion = useCallback((regionId: string) => {
+    setFocusRegionId(regionId);
+    setTargetView("map");
+  }, []);
+  const showAmazon = useCallback(() => visitRegion(AMAZON_REGION_ID), [visitRegion]);
   const showEarth = useCallback(() => setTargetView("globe"), []);
 
   if (data.layers.length === 0) {
@@ -94,6 +117,10 @@ function PlanetView({
           targetView={targetView}
           lite={lite}
           onRequestView={setTargetView}
+          regions={regions}
+          focusRegionId={focusRegionId}
+          onFocusRegion={visitRegion}
+          onHoverRegion={setHoveredRegionId}
           onModeChange={setMode}
           onProbe={setProbe}
           onFps={setFps}
@@ -107,6 +134,8 @@ function PlanetView({
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
+        regionName={regionById(focusRegionId, regions)?.name ?? "Amazon"}
+        hoveredRegionName={hoveredRegionId ? (regionById(hoveredRegionId, regions)?.name ?? null) : null}
         probe={probe}
         fps={fps}
         lite={lite}
