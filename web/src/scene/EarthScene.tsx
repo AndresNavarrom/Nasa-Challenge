@@ -17,10 +17,12 @@ import {
   DataTexture,
   LinearFilter,
   LinearMipmapLinearFilter,
+  NearestFilter,
   NoColorSpace,
   RedFormat,
   RepeatWrapping,
   TextureLoader,
+  UnsignedByteType,
   type Texture,
   type WebGLRenderer,
 } from "three";
@@ -41,9 +43,19 @@ import {
   type ViewMode,
   type ViewState,
 } from "./FocusTransition";
-import { GLOBE_RADIUS, isInsideBbox, screenX01 } from "./geo";
+import { GLOBE_RADIUS, screenX01 } from "./geo";
 import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type LayerTextures } from "./layerTexture";
 import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
+import {
+  AMAZON_REGION_ID,
+  DEFAULT_REGIONS,
+  buildRegionMap,
+  focusBboxFor,
+  regionById,
+  regionMapIndexAt,
+  type Region,
+  type RegionMap,
+} from "./regions";
 
 export type TargetView = "globe" | "map";
 
@@ -63,6 +75,18 @@ export interface EarthSceneProps {
   /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
   autoRotate: boolean;
   onRequestView: (view: TargetView) => void;
+  /**
+   * Regions of the world, the Amazon first (regions.ts); they are outlined and can be
+   * visited. null while they load: nothing is outlined yet, and the region map is
+   * built once, when they arrive.
+   */
+  regions: readonly Region[] | null;
+  /** Region visited by the map view (an id of `regions`); the Amazon uses the data file's rectangle. */
+  focusRegionId: string;
+  /** A region was double-clicked on the planet: visit it. */
+  onFocusRegion: (regionId: string) => void;
+  /** Region under the cursor on the planet (an id of `regions`), or null. */
+  onHoverRegion: (regionId: string | null) => void;
   onModeChange: (mode: ViewMode) => void;
   onProbe: (probe: Probe | null) => void;
   onFps: (fps: number) => void;
@@ -91,6 +115,40 @@ function emptyLayerTextures(): LayerTextures {
   const region = new DataTexture(new Uint8Array(4), 1, 1);
   region.needsUpdate = true;
   return { global: null, region, heightGlobal: null, heightRegion: null, opacity: 0.8, baseDim: 0 };
+}
+
+/** Size of the region map: about 0.09 degrees per cell, so the outline stays smooth on the zoomed map. */
+const REGION_MASK_SIZE = { width: 4096, height: 2048 };
+/** Touch screens: longest time between the two taps that return from a region's map. */
+const DOUBLE_TAP_MS = 400;
+/** Lite mode (plan B): a quarter of the cells, built faster and four times lighter on the GPU. */
+const LITE_REGION_MASK_SIZE = { width: 2048, height: 1024 };
+
+/** The layer whose heights shape the regions (the forest inside each search area). */
+const REGION_SHAPE_LAYER = "forest";
+
+/**
+ * The region map (regions.ts), shaped by the forest height grid when the data has
+ * one, and its one-channel texture, read cell by cell (no filtering between regions).
+ */
+interface RegionMask {
+  map: RegionMap;
+  texture: DataTexture;
+}
+
+function buildRegionMask(data: JukeboxData, regions: readonly Region[], lite: boolean): RegionMask {
+  const { width, height } = lite ? LITE_REGION_MASK_SIZE : REGION_MASK_SIZE;
+  const forest = data.layers.find((layer) => layer.manifest.id === REGION_SHAPE_LAYER)?.global ?? null;
+  const map = buildRegionMap(width, height, forest, regions);
+  const texture = new DataTexture(map.cells, width, height, RedFormat, UnsignedByteType);
+  texture.unpackAlignment = 1;
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return { map, texture };
 }
 
 /** WebGL's largest texture side, or null when the renderer does not report it. */
@@ -207,7 +265,11 @@ function SceneContents(props: SceneContentsProps) {
     targetView,
     lite,
     autoRotate,
+    regions,
+    focusRegionId,
     onRequestView,
+    onFocusRegion,
+    onHoverRegion,
     onModeChange,
     onProbe,
     onFps,
@@ -223,6 +285,54 @@ function SceneContents(props: SceneContentsProps) {
   const size = useThree((state) => state.size);
 
   const view = useRef<ViewState>(createViewState());
+
+  // Regions: the map of every region for the shader (built once), the one under
+  // the cursor, and the rectangle of the one being visited.
+  // Built once the regions are known, after the frame is drawn (never during a
+  // render), and again only if the data, the regions or lite mode change.
+  const [mask, setMask] = useState<RegionMask | null>(null);
+  useEffect(() => {
+    if (regions === null) return undefined;
+    let built: RegionMask | null = null;
+    const timer = window.setTimeout(() => {
+      try {
+        built = buildRegionMask(data, regions, lite);
+        setMask(built);
+      } catch (cause) {
+        console.error("Earth Jukebox could not build the region outlines:", cause);
+      }
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      built?.texture.dispose();
+      setMask(null);
+    };
+  }, [data, regions, lite]);
+  const knownRegions = regions ?? DEFAULT_REGIONS;
+  const regionAt = useCallback(
+    (lon: number, lat: number) => (mask ? regionMapIndexAt(mask.map, lon, lat) : null),
+    [mask],
+  );
+  const [hoverRegion, setHoverRegion] = useState<number | null>(null);
+  // Region chosen with a tap on a touch screen (index), waiting for a second tap to visit it.
+  const touchSelected = useRef<number | null>(null);
+  const focusBbox = useMemo(() => {
+    const region = regionById(focusRegionId, knownRegions) ?? regionById(AMAZON_REGION_ID, knownRegions);
+    return region ? focusBboxFor(region, data.bbox) : data.bbox;
+  }, [focusRegionId, data.bbox, knownRegions]);
+  const showHoverRegion = useCallback(
+    (index: number | null) => {
+      setHoverRegion(index);
+      onHoverRegion(index === null ? null : (knownRegions[index]?.id ?? null));
+    },
+    [onHoverRegion, knownRegions],
+  );
+  // A new region map renumbers the regions: forget the old highlight, in the
+  // shader and in the status text alike.
+  useEffect(() => {
+    touchSelected.current = null;
+    showHoverRegion(null);
+  }, [mask, showHoverRegion]);
   const [mode, setModeState] = useState<ViewMode>("globe");
   const modeRef = useRef<ViewMode>("globe");
   const targetRef = useRef<TargetView>(targetView);
@@ -351,6 +461,8 @@ function SceneContents(props: SceneContentsProps) {
       // where it was so the sound does not cut out (FR5.2).
       onProbe(null);
       lastProbeRef.current = null;
+      touchSelected.current = null;
+      showHoverRegion(null);
     }
   };
 
@@ -363,8 +475,8 @@ function SceneContents(props: SceneContentsProps) {
     const instant = lite;
     if (target === "map" && current === "globe") {
       setMode("to-map");
-      const cameraZ = mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height);
-      cancelRef.current = playFocus(view.current, { bbox: data.bbox, cameraZ }, {
+      const cameraZ = mapCameraZ(focusBbox, CAMERA_FOV, size.width / size.height);
+      cancelRef.current = playFocus(view.current, { bbox: focusBbox, cameraZ }, {
         instant,
         onComplete: () => {
           setMode("map");
@@ -410,8 +522,8 @@ function SceneContents(props: SceneContentsProps) {
     const state = view.current;
     const focus = focusRef.current;
     if (modeRef.current === "map") {
-      // Keep the Amazon framed if the window is resized while on the map.
-      state.cameraZ = mapCameraZ(data.bbox, CAMERA_FOV, size.width / size.height);
+      // Keep the region visited framed if the window is resized while on the map.
+      state.cameraZ = mapCameraZ(focusBbox, CAMERA_FOV, size.width / size.height);
       camera.position.set(focus.x, focus.y, state.cameraZ - focus.zoom);
       camera.lookAt(focus.x, focus.y, GLOBE_RADIUS);
     } else {
@@ -445,7 +557,15 @@ function SceneContents(props: SceneContentsProps) {
       lastProbeRef.current = null;
       setListeningPoint(null);
       onProbe(null);
+      // A region chosen with a tap stays chosen when the finger lifts.
+      if (touchSelected.current === null) showHoverRegion(null);
       return;
+    }
+    // Regions are only picked on the planet; on the map there is no outline. On touch
+    // screens taps choose the region (handleGlobeTap), not the moving finger.
+    if (!hit.touch) {
+      touchSelected.current = null;
+      showHoverRegion(modeRef.current === "globe" ? regionAt(hit.lon, hit.lat) : null);
     }
     const rect = gl.domElement.getBoundingClientRect();
     setListeningPoint({ lon: hit.lon, lat: hit.lat, screenX: screenX01(hit.clientX, rect.left, rect.width) });
@@ -455,7 +575,7 @@ function SceneContents(props: SceneContentsProps) {
     if (last && last.lon === probe.lon && last.lat === probe.lat && last.value === probe.value) return;
     lastProbeRef.current = probe;
     onProbe(probe);
-  }, [gl, setListeningPoint, onProbe, probeFor]);
+  }, [gl, setListeningPoint, onProbe, probeFor, showHoverRegion, regionAt]);
 
   const handleHover = useCallback(
     (hit: GlobeHit | null) => {
@@ -483,11 +603,49 @@ function SceneContents(props: SceneContentsProps) {
     if (hit) handleHover(hit);
   }, [handleHover]);
 
-  const handleGlobeClick = useCallback(
+  const handleMapDoubleClick = useCallback(() => onRequestView("globe"), [onRequestView]);
+
+  // Touch screens: the first tap on a region chooses it (outline and name), a second
+  // tap on the same region flies there; a tap elsewhere chooses again or clears.
+  const handleGlobeTap = useCallback(
     (lon: number, lat: number) => {
-      if (isInsideBbox(lon, lat, data.bbox)) onRequestView("map");
+      const index = regionAt(lon, lat);
+      const region = index === null ? undefined : knownRegions[index];
+      if (index === null || !region) {
+        touchSelected.current = null;
+        showHoverRegion(null);
+        return;
+      }
+      if (touchSelected.current === index) {
+        touchSelected.current = null;
+        onFocusRegion(region.id);
+        return;
+      }
+      touchSelected.current = index;
+      showHoverRegion(index);
     },
-    [data.bbox, onRequestView],
+    [regionAt, knownRegions, showHoverRegion, onFocusRegion],
+  );
+
+  // Touch screens: two taps on the map within DOUBLE_TAP_MS go back to the planet.
+  const lastMapTap = useRef(0);
+  const handleMapTap = useCallback(() => {
+    const now = performance.now();
+    if (now - lastMapTap.current <= DOUBLE_TAP_MS) {
+      lastMapTap.current = 0;
+      onRequestView("globe");
+    } else {
+      lastMapTap.current = now;
+    }
+  }, [onRequestView]);
+
+  const handleGlobeDoubleClick = useCallback(
+    (lon: number, lat: number) => {
+      const index = regionAt(lon, lat);
+      const region = index === null ? undefined : knownRegions[index];
+      if (region) onFocusRegion(region.id);
+    },
+    [onFocusRegion, regionAt, knownRegions],
   );
 
   return (
@@ -497,6 +655,10 @@ function SceneContents(props: SceneContentsProps) {
         regionBaseTexture={regionBaseTexture}
         layerTextures={layer.textures}
         bbox={data.bbox}
+        focusBbox={focusBbox}
+        regionMask={mask?.texture ?? null}
+        regionAt={regionAt}
+        hoverRegion={hoverRegion}
         view={view}
         mode={mode}
         segments={lite ? LITE_SEGMENTS : FULL_SEGMENTS}
@@ -504,11 +666,15 @@ function SceneContents(props: SceneContentsProps) {
         autoRotate={autoRotate}
         reliefImages={reliefImages}
         dotImage={dotImage}
-        scenes={scenes}
+        // Scenes are points of the Amazon map: shown only when the Amazon is the region visited.
+        scenes={focusRegionId === AMAZON_REGION_ID ? scenes : undefined}
         onSceneSelect={onSceneSelect}
         onSceneHover={onSceneHover}
         onHover={handleHover}
-        onGlobeClick={handleGlobeClick}
+        onGlobeDoubleClick={handleGlobeDoubleClick}
+        onMapDoubleClick={handleMapDoubleClick}
+        onGlobeTap={handleGlobeTap}
+        onMapTap={handleMapTap}
       />
       <FpsProbe onFps={onFps} />
     </>
