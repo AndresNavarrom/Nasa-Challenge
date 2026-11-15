@@ -3,15 +3,15 @@
     {
       "id": "forest",
       "title": "Forest height",
-      "description": "How tall the forest canopy is, seen by NASA's GEDI laser instrument on the International Space Station (April 2019 to April 2020). Taller forest sounds as a higher, fuller note. This is the fixed base layer.",
+      "description": "Mean height of the forest canopy measured by NASA's GEDI laser instrument on the International Space Station, April 2019 to July 2025 (GEDI L3 Version 3). Fixed scale: 0 m is the bottom and 50 m or more is the top. Where GEDI has no measurement (mostly beyond about 52° N and S) the value comes from the NASA SVS 4950 visualization instead; the two are never blended. Taller forest sounds as a higher, fuller note. This is the fixed base layer.",
       "source": {
-        "title": "GEDI Forest Height (NASA SVS 4950)",
-        "url": "https://svs.gsfc.nasa.gov/4950"
+        "title": "GEDI L3 Gridded Land Surface Metrics V3 (NASA GEDI, ORNL DAAC), filled with NASA SVS 4950",
+        "url": "https://doi.org/10.3334/ORNLDAAC/2525"
       },
       "static": true,
       "sample": false,
       "dates": [
-        "Apr 2019 - Apr 2020"
+        "Apr 2019 - Jul 2025"
       ],
       "global": {
         "width": 1440,

@@ -10,8 +10,8 @@
     {
       "id": "forest",
       "title": "Forest height",
-      "description": "How tall the forest canopy is, seen by NASA's GEDI laser instrument on the International Space Station (April 2019 to April 2020). Taller forest sounds as a higher, fuller note. This is the fixed base layer.",
-      "source": { "title": "GEDI Forest Height (NASA SVS 4950)", "url": "https://svs.gsfc.nasa.gov/4950" },
+      "description": "Mean height of the forest canopy measured by NASA's GEDI laser instrument on the International Space Station, April 2019 to July 2025 (GEDI L3 Version 3). Fixed scale: 0 m is the bottom and 50 m or more is the top. Where GEDI has no measurement (mostly beyond about 52° N and S) the value comes from the NASA SVS 4950 visualization instead; the two are never blended. Taller forest sounds as a higher, fuller note. This is the fixed base layer.",
+      "source": { "title": "GEDI L3 Gridded Land Surface Metrics V3 (NASA GEDI, ORNL DAAC), filled with NASA SVS 4950", "url": "https://doi.org/10.3334/ORNLDAAC/2525" },
       "static": true,
       "global": true,
       "grid": { "region": [360, 280] },
@@ -22,22 +22,23 @@
       },
       "instants": [
         {
-          "date": "Apr 2019 - Apr 2020",
+          "date": "Apr 2019 - Jul 2025",
           "views": [
-            { "file": "4950/4k/GEDI_global.0199.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 119.82, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.0415.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 94.20, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.0631.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 68.57, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.0847.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 42.95, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.1063.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 17.32, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.1279.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -8.30, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.1495.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -33.93, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.1711.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -59.55, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.1927.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -85.17, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.2143.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -110.80, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.2359.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -136.42, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.2575.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -162.05, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.2791.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 172.33, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/4k/GEDI_global.2999.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 147.65, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } }
+            { "file": "gedi/gedi_l3_rh100_mean_0p1deg.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 }, "value": { "method": "brightness", "low": 0, "high": 1 } },
+            { "file": "4950/4k/GEDI_global.0199.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 119.82, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.0415.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 94.20, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.0631.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 68.57, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.0847.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 42.95, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1063.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 17.32, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1279.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -8.30, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1495.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -33.93, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1711.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -59.55, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1927.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -85.17, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2143.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -110.80, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2359.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -136.42, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2575.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -162.05, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2791.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 172.33, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2999.png", "fallback": true, "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 147.65, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } }
           ]
         }
       ]
