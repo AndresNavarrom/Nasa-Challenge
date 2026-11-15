@@ -19,14 +19,14 @@ function layer(id: LayerManifest["id"], title: string, global: boolean): LoadedL
   return { manifest, global: global ? grid : null, region: grid };
 }
 
-const layers = [layer("forest", "Forest height", true), layer("co2", "Global CO2", false)];
+const layers = [layer("forest", "Forest height", true), layer("co2", "Atmospheric CO2", false)];
 
 describe("layer picker with a plain Earth view", () => {
   it("offers Earth first, then every layer of the data file", () => {
     expect(layerChoices(layers)).toEqual([
       { id: EARTH_VIEW_ID, label: "Earth (no layer)" },
       { id: "forest", label: "Forest height" },
-      { id: "co2", label: "Global CO2 (Amazon only)" },
+      { id: "co2", label: "Atmospheric CO2 (Amazon only)" },
     ]);
   });
 

@@ -81,26 +81,110 @@
     },
     {
       "id": "co2",
-      "title": "Global CO2",
-      "description": "Carbon dioxide moving through the atmosphere, 23 to 25 February 2020, every six hours, from NASA's DYAMOND simulation with the GEOS model. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier. Shown over the Amazon only.",
-      "source": { "title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)", "url": "https://svs.gsfc.nasa.gov/5196" },
+      "title": "Atmospheric CO2",
+      "description": "Carbon dioxide moving through the atmosphere from NASA's DYAMOND simulation with the GEOS model. Over the Americas and the Atlantic it moves from 23 to 25 February 2020, every six hours; the rest of the planet is a fixed picture with each region on its own date between 14 January and 3 March 2020. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier.",
+      "source": {"title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)", "url": "https://svs.gsfc.nasa.gov/5196"},
       "static": false,
-      "global": false,
-      "grid": { "region": [144, 112] },
-      "value": { "method": "warmth", "low": 0.02, "high": 0.75 },
+      "global": true,
+      "grid": {"region": [360, 280]},
+      "value": {"method": "warmth", "low": 0.02, "high": 0.75},
       "instants": [
-        { "date": "Feb 23, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_31.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -49.90, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 23, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_31.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -51.07, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 23, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_31.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -52.24, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 23, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_31.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -53.40, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_32.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -54.57, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_32.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -55.74, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_32.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -56.91, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_32.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -58.08, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_32.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -59.24, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_33.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -60.41, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_33.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -61.58, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_33.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -62.75, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] }
+        { "date": "Feb 23, 2020 00:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00939.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -49.74, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 23, 2020 06:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00945.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -50.94, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 23, 2020 12:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00951.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -52.15, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 23, 2020 18:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00957.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -53.35, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 24, 2020 00:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00963.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -54.57, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 24, 2020 06:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00969.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -55.77, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 24, 2020 12:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00975.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -56.98, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 24, 2020 18:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00981.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -58.18, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 25, 2020 00:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00987.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -59.39, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 25, 2020 06:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00993.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -60.56, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 25, 2020 12:00 UTC", "views": [
+          {"file": "5196/co2_orbit.00999.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -61.81, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] },
+        { "date": "Feb 25, 2020 18:00 UTC", "views": [
+          {"file": "5196/co2_orbit.01005.png", "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -63.06, "center_lat": 0.4, "roll": -0.13, "distance": 4.58, "min_weight": 0.5}},
+          {"file": "5196/co2_orbit.00001.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 139.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00232.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 92.92, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00463.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": 46.32, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.00694.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -0.52, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}},
+          {"file": "5196/co2_orbit.01176.png", "fallback": true, "projection": {"type": "orthographic", "cx": 2865.75, "cy": 1606.75, "radius": 1407.0, "center_lon": -97.51, "center_lat": 0.4, "roll": -0.13, "distance": 4.58}}
+        ] }
       ]
     },
     {
