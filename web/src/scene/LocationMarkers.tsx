@@ -15,9 +15,9 @@ import {
 } from "./geo";
 import type { ListeningPoint } from "./listeningPoint";
 
-const SELECTED_SIZE = 0.045;
-const PULSE_SIZE = 0.05;
-const CROSSHAIR_SIZE = 0.04;
+const SELECTED_SIZE = 0.018;
+const PULSE_SIZE = 0.022;
+const CROSSHAIR_SIZE = 0.024;
 const PULSE_SECONDS = 1.6;
 
 type Position = [number, number, number];
@@ -38,12 +38,8 @@ function selectedTexture(): CanvasTexture {
   return canvasTexture((context) => {
     context.clearRect(0, 0, 64, 64);
     context.beginPath();
-    context.arc(32, 32, 26, 0, Math.PI * 2);
+    context.arc(32, 32, 25, 0, Math.PI * 2);
     context.fillStyle = "#ffffff";
-    context.fill();
-    context.beginPath();
-    context.arc(32, 32, 20, 0, Math.PI * 2);
-    context.fillStyle = "#22c55e";
     context.fill();
   });
 }
@@ -77,12 +73,12 @@ function crosshairTexture(): CanvasTexture {
   });
 }
 
-function materialFor(texture: CanvasTexture, opacity = 1): SpriteMaterial {
+function materialFor(texture: CanvasTexture, opacity = 1, depthTest = true): SpriteMaterial {
   return new SpriteMaterial({
     map: texture,
     transparent: true,
     opacity,
-    depthTest: true,
+    depthTest,
     depthWrite: false,
     toneMapped: false,
   });
@@ -102,7 +98,7 @@ export function LocationMarkers({ mode, bbox, selectedPoint, hoverPoint }: Locat
   const crosshairMap = useMemo(crosshairTexture, []);
   const selectedMaterial = useMemo(() => materialFor(selectedMap), [selectedMap]);
   const pulseMaterial = useMemo(() => materialFor(pulseMap, 0.7), [pulseMap]);
-  const crosshairMaterial = useMemo(() => materialFor(crosshairMap, 0.8), [crosshairMap]);
+  const crosshairMaterial = useMemo(() => materialFor(crosshairMap, 0.95, false), [crosshairMap]);
 
   useEffect(() => {
     return () => {

@@ -89,6 +89,18 @@ function PlanetView({
     () => layerForChoice(data.layers, activeLayerId),
     [data, activeLayerId],
   );
+  const selectedPoint = useListeningPoint();
+  const { position } = useTimeline();
+  const selectedValue =
+    selectedPoint && activeLayer
+      ? sampleLayerAt(
+          activeLayer,
+          data.bbox,
+          selectedPoint.lon,
+          selectedPoint.lat,
+          framePosition(position, activeLayer.region.frames),
+        )
+      : null;
   const showAmazon = useCallback(() => setTargetView("map"), []);
   const showEarth = useCallback(() => {
     setSceneHover(null);
@@ -162,6 +174,7 @@ function PlanetView({
         fps={fps}
         lite={lite}
         sceneError={sceneError}
+        selectedValue={selectedValue}
         audio={audio}
         timeline={timeline}
         onShowTour={onShowTour}
