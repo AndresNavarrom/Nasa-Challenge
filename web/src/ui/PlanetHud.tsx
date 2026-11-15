@@ -58,8 +58,8 @@ export function modeLabel(mode: ViewMode, regionName = "Amazon", hoveredRegionNa
   switch (mode) {
     case "globe":
       return hoveredRegionName
-        ? `${hoveredRegionName}: double-click (or tap again) to fly there.`
-        : "Planet view. Drag to turn it; double-click any region of the world or press Amazon.";
+        ? `${hoveredRegionName}: click (or tap again) to fly there.`
+        : "Planet view. Drag to turn it; click any region to fly there, or double-click a point to lock its sound.";
     case "to-map":
       return `Flying to ${regionName}…`;
     case "map":

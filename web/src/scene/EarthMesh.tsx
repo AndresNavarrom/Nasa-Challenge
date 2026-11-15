@@ -86,6 +86,8 @@ const DRAG_SPEED = 0.005;
 const MAX_PITCH = 1.2;
 /** A press that moves more than this is a drag, not a click. */
 const CLICK_TOLERANCE_PX = 5;
+/** Wait this long before treating a click as a single click. */
+const SINGLE_CLICK_MS = 350;
 /** How often the point under a resting cursor is looked up again, seconds. */
 const HOVER_REFRESH_SECONDS = 0.05;
 /**
@@ -153,10 +155,10 @@ export interface EarthMeshProps {
   /** Point under the cursor; drawn as a crosshair. */
   hoverPoint?: { lon: number; lat: number } | null;
   onHover: (hit: GlobeHit | null) => void;
-  /** Click/tap on the planet or the map: the point whose sound is selected. */
-  onGlobeClick: (lon: number, lat: number, clientX: number) => void;
-  /** Double-click on the planet (not after a drag). */
-  onGlobeDoubleClick: (lon: number, lat: number) => void;
+  /** Double-click on the planet (not after a drag): the point whose sound is selected. */
+  onGlobeSelectPoint: (lon: number, lat: number, clientX: number) => void;
+  /** Click on a region of the planet (not after a drag): visit it. */
+  onGlobeFocusRegion: (lon: number, lat: number) => void;
   /** Double-click on the map of a region (not after a drag): back to the planet. */
   onMapDoubleClick: () => void;
   /** Touch screens: a tap on the planet (not after a drag); double taps are not reported as double-clicks. */
@@ -495,8 +497,8 @@ export function EarthMesh({
   selectedPoint,
   hoverPoint,
   onHover,
-  onGlobeClick,
-  onGlobeDoubleClick,
+  onGlobeSelectPoint,
+  onGlobeFocusRegion,
   onMapDoubleClick,
   onGlobeTap,
   onMapTap,
@@ -506,6 +508,7 @@ export function EarthMesh({
   const sphereMesh = useRef<Mesh>(null);
   const planeMesh = useRef<Mesh>(null);
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const clickTimer = useRef<number | null>(null);
   // Where the cursor rests over the canvas, so the point under it can be found
   // again while the planet turns or a transition ends beneath a still cursor.
   const pointerRef = useRef<{ inside: boolean; clientX: number; touch: boolean }>({ inside: false, clientX: 0, touch: false });
@@ -778,18 +781,43 @@ export function EarthMesh({
     dragRef.current = { x: event.nativeEvent.clientX, y: event.nativeEvent.clientY, yaw: state.yaw, pitch: state.pitch };
   };
 
+  const clearClickTimer = () => {
+    if (clickTimer.current !== null) {
+      window.clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+  };
+
+  useEffect(() => clearClickTimer, []);
+
   const handleSphereDoubleClick = (event: ThreeEvent<MouseEvent>) => {
+    clearClickTimer();
     if (lastPressTouch.current || event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
-    if (point) onGlobeDoubleClick(point.lon, point.lat);
+    if (point) onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
   };
 
   const handleSphereClick = (event: ThreeEvent<MouseEvent>) => {
     if (event.delta > CLICK_TOLERANCE_PX) return;
     const point = sphereLonLat(event.point);
     if (!point) return;
-    onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
-    if (lastPressTouch.current) onGlobeTap(point.lon, point.lat);
+    // Touch screens have their own tap flow: keep selecting the sound point on a
+    // tap while the region flow (tap to choose, tap again to fly) stays as it is.
+    if (lastPressTouch.current) {
+      onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
+      onGlobeTap(point.lon, point.lat);
+      return;
+    }
+    // Wait: a second click cancels this timer and selects the point instead.
+    if (event.nativeEvent.detail > 1) {
+      clearClickTimer();
+      return;
+    }
+    clearClickTimer();
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = null;
+      onGlobeFocusRegion(point.lon, point.lat);
+    }, SINGLE_CLICK_MS);
   };
 
   const handlePlaneDown = (event: ThreeEvent<PointerEvent>) => {
@@ -800,7 +828,7 @@ export function EarthMesh({
     if (event.delta > CLICK_TOLERANCE_PX) return;
     if (event.uv) {
       const point = planeUvToLonLat(event.uv.x, 1 - event.uv.y);
-      onGlobeClick(point.lon, point.lat, event.nativeEvent.clientX);
+      onGlobeSelectPoint(point.lon, point.lat, event.nativeEvent.clientX);
     }
     if (lastPressTouch.current) onMapTap();
   };

@@ -633,7 +633,7 @@ function SceneContents(props: SceneContentsProps) {
     if (hit) handleHover(hit);
   }, [handleHover]);
 
-  const handleGlobeClick = useCallback(
+  const handleGlobeSelectPoint = useCallback(
     (lon: number, lat: number, clientX: number) => {
       const rect = gl.domElement.getBoundingClientRect();
       setListeningPoint({ lon, lat, screenX: screenX01(clientX, rect.left, rect.width) });
@@ -677,7 +677,7 @@ function SceneContents(props: SceneContentsProps) {
     }
   }, [onRequestView]);
 
-  const handleGlobeDoubleClick = useCallback(
+  const handleGlobeFocusRegion = useCallback(
     (lon: number, lat: number) => {
       const index = regionAt(lon, lat);
       const region = index === null ? undefined : knownRegions[index];
@@ -711,8 +711,8 @@ function SceneContents(props: SceneContentsProps) {
         selectedPoint={selectedPoint}
         hoverPoint={hoverPoint}
         onHover={handleHover}
-        onGlobeClick={handleGlobeClick}
-        onGlobeDoubleClick={handleGlobeDoubleClick}
+        onGlobeSelectPoint={handleGlobeSelectPoint}
+        onGlobeFocusRegion={handleGlobeFocusRegion}
         onMapDoubleClick={handleMapDoubleClick}
         onGlobeTap={handleGlobeTap}
         onMapTap={handleMapTap}
