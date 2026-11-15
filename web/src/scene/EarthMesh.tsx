@@ -1,12 +1,17 @@
 // The planet: one segmented mesh that blends between a sphere and the flat
 // world map according to `view.flatten` (0 = sphere, 1 = map), drawn with
-// earth.jpg and the active layer on top (FR1.1, FR1.2, FR3, NFR1).
+// the base image (earth-8k.jpg or earth-4k.jpg) and the active layer on top
+// (FR1.1, FR1.2, FR3, NFR1).
 //
 // Both shapes live in one geometry: `position` holds the sphere and `aPlane`
 // the flat map, and the vertex shader mixes them, so the blend costs nothing
 // on the CPU. The flat map is shifted so the Amazon centre sits where the
 // sphere's front point is once the planet faces the Amazon: the region stays
 // in place while the planet flattens around it.
+//
+// Inside the Amazon rectangle the base colour comes from a full-resolution
+// crop of the base image (earth-amazon.jpg), on the planet and on the map;
+// outside it, from the global image.
 //
 // Picking (FR4.1, FR4.2): an invisible sphere while on the planet and an
 // invisible plane while on the map; nothing is picked during the transition.
@@ -62,8 +67,10 @@ export interface GlobeHit {
 }
 
 export interface EarthMeshProps {
-  /** earth.jpg; null while loading or when it failed (a plain ocean colour is drawn). */
+  /** Global base image (earth-8k.jpg or earth-4k.jpg); null while loading or when it failed (a plain ocean colour is drawn). */
   baseTexture: Texture | null;
+  /** Amazon crop of the base image (earth-amazon.jpg); null while loading or when it failed (the global image is used). */
+  regionBaseTexture: Texture | null;
   layerTextures: LayerTextures;
   bbox: BoundingBox;
   view: RefObject<ViewState>;
@@ -94,6 +101,8 @@ const VERTEX_SHADER = /* glsl */ `
 const FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uBase;
   uniform bool uHasBase;
+  uniform sampler2D uRegionBase;
+  uniform bool uHasRegionBase;
   uniform sampler2D uLayerGlobal;
   uniform bool uHasGlobal;
   uniform sampler2D uLayerRegion;
@@ -103,11 +112,17 @@ const FRAGMENT_SHADER = /* glsl */ `
   varying float vShade;
 
   void main() {
-    vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
     float lon = -180.0 + 360.0 * vUv.x;
     float lat = -90.0 + 180.0 * vUv.y;
+    bool inRegion = lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w;
+    vec3 color = uHasBase ? texture2D(uBase, vUv).rgb : vec3(0.04, 0.11, 0.23);
+    if (inRegion && uHasRegionBase) {
+      // Same calculation as regionUv() in geo.ts: v grows northwards like an image texture.
+      vec2 cropUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (lat - uBbox.y) / (uBbox.w - uBbox.y));
+      color = texture2D(uRegionBase, cropUv).rgb;
+    }
     vec4 overlay = vec4(0.0);
-    if (lon >= uBbox.x && lon <= uBbox.z && lat >= uBbox.y && lat <= uBbox.w) {
+    if (inRegion) {
       // Inside the Amazon: the detailed regional grid (north row first).
       vec2 regionUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
       overlay = texture2D(uLayerRegion, regionUv);
@@ -166,6 +181,8 @@ interface Uniforms {
   uFlatten: IUniform<number>;
   uBase: IUniform<Texture | null>;
   uHasBase: IUniform<boolean>;
+  uRegionBase: IUniform<Texture | null>;
+  uHasRegionBase: IUniform<boolean>;
   uLayerGlobal: IUniform<Texture | null>;
   uHasGlobal: IUniform<boolean>;
   uLayerRegion: IUniform<Texture | null>;
@@ -173,7 +190,17 @@ interface Uniforms {
   uLayerOpacity: IUniform<number>;
 }
 
-export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segments, onHover, onGlobeClick }: EarthMeshProps) {
+export function EarthMesh({
+  baseTexture,
+  regionBaseTexture,
+  layerTextures,
+  bbox,
+  view,
+  mode,
+  segments,
+  onHover,
+  onGlobeClick,
+}: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
   const sphereMesh = useRef<Mesh>(null);
@@ -192,6 +219,8 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
       uFlatten: { value: 0 },
       uBase: { value: null },
       uHasBase: { value: false },
+      uRegionBase: { value: null },
+      uHasRegionBase: { value: false },
       uLayerGlobal: { value: null },
       uHasGlobal: { value: false },
       uLayerRegion: { value: null },
@@ -215,11 +244,13 @@ export function EarthMesh({ baseTexture, layerTextures, bbox, view, mode, segmen
   useEffect(() => {
     uniforms.uBase.value = baseTexture;
     uniforms.uHasBase.value = baseTexture !== null;
+    uniforms.uRegionBase.value = regionBaseTexture;
+    uniforms.uHasRegionBase.value = regionBaseTexture !== null;
     uniforms.uLayerGlobal.value = layerTextures.global;
     uniforms.uHasGlobal.value = layerTextures.global !== null;
     uniforms.uLayerRegion.value = layerTextures.region;
     uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
-  }, [uniforms, baseTexture, layerTextures, bbox]);
+  }, [uniforms, baseTexture, regionBaseTexture, layerTextures, bbox]);
 
   // Dragging follows the pointer anywhere on the page once it started on the planet.
   useEffect(() => {

@@ -41,6 +41,24 @@ describe("timeline", () => {
     expect(framePosition(0.5, 0)).toBe(0);
   });
 
+  it("walks through the 24 hourly smoke instants while a static layer keeps its only date (FR4.1)", () => {
+    const hourlySmoke: Dated = {
+      static: false,
+      dates: Array.from({ length: 24 }, (_, hour) => `Sep 1, 2026 ${String(hour).padStart(2, "0")}:30 UTC`),
+    };
+    const lightning: Dated = { static: true, dates: ["2017 - 2023 (accumulated)"] };
+
+    expect(dateLabelAt(hourlySmoke, 0)).toBe("Sep 1, 2026 00:30 UTC");
+    expect(dateLabelAt(hourlySmoke, 1)).toBe("Sep 1, 2026 23:30 UTC"); // the 24th date
+    expect(framePosition(1, 24)).toBe(23);
+    expect(framePosition(0.5, 24)).toBe(11.5);
+    expect(dateLabelAt(hourlySmoke, 12 / 23)).toBe("Sep 1, 2026 12:30 UTC");
+
+    for (const position of [0, 0.5, 1]) {
+      expect(dateLabelAt(lightning, position)).toBe("2017 - 2023 (accumulated)");
+    }
+  });
+
   it("advances with playback and loops back to the start", () => {
     expect(advancePosition(0, 5, 20)).toBeCloseTo(0.25, 6);
     expect(advancePosition(0.9, 4, 20)).toBeCloseTo(0.1, 6); // wrapped around

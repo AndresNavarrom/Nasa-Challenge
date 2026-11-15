@@ -16,9 +16,9 @@ function gridOf(frames: number[][][]): Grid {
 
 const AMAZON: BoundingBox = { west: -80, south: -20, east: -44, north: 8 };
 
-function layerOf(region: Grid, isStatic: boolean, global: Grid | null = null): LoadedLayer {
+function layerOf(region: Grid, isStatic: boolean, global: Grid | null = null, id: LayerManifest["id"] = "smoke"): LoadedLayer {
   const manifest: LayerManifest = {
-    id: "smoke",
+    id,
     title: "Wildfire smoke",
     description: "Test layer",
     source: { title: "Test", url: "https://svs.gsfc.nasa.gov/5533" },
@@ -87,5 +87,22 @@ describe("interpolate", () => {
     // With a whole-planet grid, the same place has a value.
     const withGlobal = layerOf(corners, false, corners);
     expect(sampleLayerAt(withGlobal, AMAZON, 20, 0, 0)).not.toBeNull();
+  });
+
+  it("reads the lightning layer like any other layer, inside and outside the Amazon (FR5.2)", () => {
+    // Whole planet, 36 x 18 cells of 10 degrees: lightning only in the cell over
+    // the Congo basin (20..30 E, 0..10 S: column 20, row 9).
+    const globalRows = Array.from({ length: 18 }, () => Array.from({ length: 36 }, () => 0));
+    globalRows[9]![20] = 200;
+    // Amazon, 4 x 4 cells of 9 x 7 degrees: lightning only in the north-west cell (80..71 W, 1..8 N).
+    const regionRows = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+    regionRows[0]![0] = 200;
+    const lightning = layerOf(gridOf([regionRows]), true, gridOf([globalRows]), "lightning");
+
+    // Cell centres: no blending with the neighbours.
+    expect(sampleLayerAt(lightning, AMAZON, -75.5, 4.5, 0)).toBeCloseTo(200 / 255, 6); // inside, with lightning
+    expect(sampleLayerAt(lightning, AMAZON, -48.5, -16.5, 0)).toBe(0); // inside, without lightning
+    expect(sampleLayerAt(lightning, AMAZON, 25, -5, 0)).toBeCloseTo(200 / 255, 6); // outside, with lightning
+    expect(sampleLayerAt(lightning, AMAZON, 135, 45, 0)).toBe(0); // outside, without lightning
   });
 });

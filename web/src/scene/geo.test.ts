@@ -9,6 +9,7 @@ import {
   lonLatToSpherePoint,
   nearestEquivalentAngle,
   planeUvToLonLat,
+  regionUv,
   screenX01,
   spherePointToLonLat,
 } from "./geo";
@@ -90,6 +91,21 @@ describe("Amazon rectangle (FR2.1)", () => {
     expect(isInsideBbox(-60, 20, AMAZON)).toBe(false); // Caribbean, north of the box
     expect(isInsideBbox(AMAZON.west, AMAZON.north, AMAZON)).toBe(true); // edges count
     expect(isInsideBbox(300, -3, AMAZON)).toBe(true); // 300 = -60 after normalizing
+  });
+});
+
+describe("Amazon crop of the base image (FR1.3)", () => {
+  it("gives (0, 0) at the south-west corner, (1, 1) at the north-east corner and null outside", () => {
+    expect(regionUv(AMAZON.west, AMAZON.south, AMAZON)).toEqual({ u: 0, v: 0 });
+    expect(regionUv(AMAZON.east, AMAZON.north, AMAZON)).toEqual({ u: 1, v: 1 });
+    // The centre of the rectangle is the centre of the crop.
+    const center = regionUv(-62, -6, AMAZON);
+    expect(center?.u).toBeCloseTo(0.5, 10);
+    expect(center?.v).toBeCloseTo(0.5, 10);
+
+    expect(regionUv(-30, -10, AMAZON)).toBeNull(); // Atlantic Ocean, east of the box
+    expect(regionUv(-60, 20, AMAZON)).toBeNull(); // north of the box
+    expect(regionUv(-81, -5, AMAZON)).toBeNull(); // just west of the box
   });
 });
 

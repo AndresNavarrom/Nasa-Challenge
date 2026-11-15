@@ -1,13 +1,16 @@
 // The 3D view: canvas, camera, the planet mesh, the click on the Amazon
 // (FR2.1), the listening point under the cursor (FR4.3) and the active layer's
-// value there (FR4.4). Lite mode (`?lite=1`, plan B) uses a half-resolution
-// base image, fewer segments, no antialiasing and switches views at once.
+// value there (FR4.4). The base image is earth-8k.jpg when the graphics card
+// accepts 8192-pixel textures and earth-4k.jpg otherwise, plus the Amazon crop
+// earth-amazon.jpg (FR1.2, FR1.3). Lite mode (`?lite=1`, plan B) always uses
+// earth-4k.jpg, fewer segments, no antialiasing and switches views at once.
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CanvasTexture, DataTexture, TextureLoader, type Texture } from "three";
+import { DataTexture, TextureLoader, type Texture, type WebGLRenderer } from "three";
 import type { JukeboxData, LoadedLayer } from "../data/types";
 import { sampleLayerAt } from "../lib/interpolate";
+import { REGION_BASE_IMAGE, pickBaseImage } from "./baseImage";
 import { EarthMesh, type GlobeHit } from "./EarthMesh";
 import {
   GLOBE_CAMERA_Z,
@@ -41,7 +44,7 @@ export interface EarthSceneProps {
   onModeChange: (mode: ViewMode) => void;
   onProbe: (probe: Probe | null) => void;
   onFps: (fps: number) => void;
-  /** A problem that leaves the view usable (for example earth.jpg missing). */
+  /** A problem that leaves the view usable (for example a base image missing). */
   onSceneError: (message: string) => void;
 }
 
@@ -55,27 +58,27 @@ function emptyLayerTextures(): LayerTextures {
   return { global: null, region };
 }
 
-function halfResolution(texture: Texture): Texture {
-  const image = texture.image as HTMLImageElement | undefined;
-  if (!image || !image.width || !image.height) return texture;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.floor(image.width / 2));
-  canvas.height = Math.max(1, Math.floor(image.height / 2));
-  const context = canvas.getContext("2d");
-  if (!context) {
-    console.warn("Lite mode: no 2D canvas available, keeping the full-resolution planet image.");
-    return texture;
+/** WebGL's largest texture side, or null when the renderer does not report it. */
+function readMaxTextureSize(gl: WebGLRenderer): number | null {
+  try {
+    const size = gl.capabilities.maxTextureSize;
+    return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : null;
+  } catch (cause) {
+    console.warn("Earth Jukebox could not read the largest texture size; using the 4096 planet image.", cause);
+    return null;
   }
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  texture.dispose();
-  return new CanvasTexture(canvas);
 }
 
-/** Loads earth.jpg; on failure reports a message and leaves the texture null. */
-function useBaseTexture(url: string, lite: boolean, onError: (message: string) => void): Texture | null {
+/**
+ * Loads an image as a texture. On failure it logs the cause, reports
+ * `failureMessage` and leaves the texture null, so the caller draws without it.
+ */
+function useImageTexture(url: string, failureMessage: string, onError: (message: string) => void): Texture | null {
   const [texture, setTexture] = useState<Texture | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const messageRef = useRef(failureMessage);
+  messageRef.current = failureMessage;
 
   useEffect(() => {
     let cancelled = false;
@@ -87,16 +90,14 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string) =
           result.dispose();
           return;
         }
-        loaded = lite ? halfResolution(result) : result;
+        loaded = result;
         setTexture(loaded);
       },
       undefined,
       (cause) => {
         if (cancelled) return;
         console.error(`Earth Jukebox could not load ${url}:`, cause);
-        onErrorRef.current(
-          `The planet image (${url}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
-        );
+        onErrorRef.current(messageRef.current);
       },
     );
     return () => {
@@ -104,7 +105,7 @@ function useBaseTexture(url: string, lite: boolean, onError: (message: string) =
       loaded?.dispose();
       setTexture(null);
     };
-  }, [url, lite]);
+  }, [url]);
 
   return texture;
 }
@@ -146,7 +147,19 @@ function SceneContents(props: SceneContentsProps) {
   const lastHitRef = useRef<GlobeHit | null>(null);
   const lastProbeRef = useRef<Probe | null>(null);
 
-  const baseTexture = useBaseTexture(`${data.baseUrl}earth.jpg`, lite, onSceneError);
+  const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
+  const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
+  const baseTexture = useImageTexture(
+    baseUrl,
+    `The planet image (${baseUrl}) could not be loaded, so the planet is drawn without it. The layers, the map and the controls still work.`,
+    onSceneError,
+  );
+  const regionUrl = `${data.baseUrl}${REGION_BASE_IMAGE}`;
+  const regionBaseTexture = useImageTexture(
+    regionUrl,
+    `The detailed Amazon image (${regionUrl}) could not be loaded, so the Amazon is drawn from the planet image. Everything else still works.`,
+    onSceneError,
+  );
 
   const layer = useMemo(() => {
     try {
@@ -261,6 +274,7 @@ function SceneContents(props: SceneContentsProps) {
     <>
       <EarthMesh
         baseTexture={baseTexture}
+        regionBaseTexture={regionBaseTexture}
         layerTextures={layer.textures}
         bbox={data.bbox}
         view={view}
