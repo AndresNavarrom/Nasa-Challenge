@@ -167,17 +167,21 @@ docker compose up web     # then open http://127.0.0.1:5173/
   (poles low, equator high), and the layer value sets the volume. Data time and
   the field are independent, so Auto-rotate off freezes the frame but the field
   keeps sounding. The forest overview adds sparse bird excerpts from
-  `audio/samples/oajaros-suaves.ogg`. Drag to turn the planet; double-click a
-  region to fly there. The active layer is drawn over `earth.jpg`.
+  `audio/samples/oajaros-suaves.ogg` when the visible forest is dense enough.
+  Drag to turn the planet; double-click a region to fly there. On a touch screen
+  a finger drag turns the planet and a double tap flies to a region. Point
+  locking belongs to the regional map; the globe uses the visible-area overview.
+  The active layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked
   layer, at its real time (three hours of smoke, a day of CO2, a month of
-  lightning). It plays while the planet turns by itself: one turn is one day of
+  lightning). It plays by itself at the pace of the planet's turn: one turn is one day of
   smoke, 30 days of CO2 and one year of lightning, and the picture and the sound fade from one
   instant to the next. The 4× and 8× buttons (4× to start) make each turn cover more time
-  (the line shows `1 turn = …`); the planet keeps its pace. A drag,
-  Auto-rotate off or the map view pause it; click
+  (the line shows `1 turn = …`); the planet keeps its pace. It keeps playing on the map
+  view, during a drag and with Auto-rotate off; only the **❚❚ Pause** button
+  on the line stops it (**▶ Play** goes on). Click
   or drag along the line (or use the arrow keys, Page Up/Down for a whole
   turn) to pick a moment. The forest shows a dimmed line with its one period.
 - **Amazon only layers** (`global: null`; none today): drawn inside

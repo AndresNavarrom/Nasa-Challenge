@@ -7,16 +7,18 @@ Status: implemented on `sound-overview` (first pass).
 The planet view sonifies the **visible area** of the selected layer instead of a
 single locked point. Every screen column sounds at once:
 
-- **Data time** is the shared timeline position. It advances only while the
-  planet turns by itself and selects the frame heard.
+- **Data time** is the shared timeline position. Since #26 it has its own clock
+  and only the pause button stops it; a drag, Auto-rotate off and the map view
+  do not pause it.
 - The 12 visible columns are panned across the stereo field and sound
   simultaneously; there is no scan clock or ping-pong.
-- Auto-rotate off freezes the data frame, but the field keeps sounding.
+- Auto-rotate off stops the planet; the timeline and the field keep running.
 - The region map keeps point selection (click locks, drag moves, double click
   returns), but it uses the same instrument table as the overview: the selected
   point's left-right screen position sets pan, and the layer value sets a
-  discrete pitch over one octave of the visible value range. The planet has no
-  point selection, but the selected marker remains visible there.
+  discrete pitch over one octave of the visible value range. The globe has no
+  point selection; a marker selected earlier in the regional map remains
+  visible there.
 
 ## Field and mapping
 
@@ -90,15 +92,16 @@ still apply.
 - Smoke and CO2 add looped air textures from the existing sample library; the
   forest bird ambience already plays in both views.
 - The selected marker uses the focused region bounds on the map and is also
-  drawn on the globe.
+  drawn on the globe when a point was selected earlier in the regional map.
 - Forest birds play in both views only when the visible field average (globe)
   or selected value (regional map) is at least `0.25`; sparse forest stops the
   bird ambience. The selected marker is drawn on both the globe and the
   regional map.
-- Auto-rotate, drag, and the map still control data time as before.
+- Auto-rotate, drag, and the map control the planet/field, not data time.
 - The globe uses drag-to-rotate and double-click-to-zoom; point selection is
   hidden from the globe HUD.
-- `TimelineTrack` and the planet-driven `step` playback remain unchanged.
+- `TimelineTrack` has its own clock and pause button (#26); it is not driven by
+  the planet turn.
 
 ## Verification
 
@@ -108,5 +111,7 @@ still apply.
   waveform, disable/fade.
 - Existing web tests and the production build cover the rest.
 - Manual: left/right spread, poles low / equator high, value dynamics,
-  Auto-rotate off still sounding the field, forest bird spacing, lightning
-  release, globe/map transition, no clipping or clicks.
+  Auto-rotate off still sounding the field, timeline pause, forest bird
+  spacing, lightning release, globe/map transition, no clipping or clicks.
+- Manual CPU check of the 144-oscillator overview with and without `?lite=1`
+  remains pending (review note).

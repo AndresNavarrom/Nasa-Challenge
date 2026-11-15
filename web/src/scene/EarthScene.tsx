@@ -82,8 +82,6 @@ export interface EarthSceneProps {
   lite: boolean;
   /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
   autoRotate: boolean;
-  /** The planet turned by itself by this angle (radians) this frame; drives the timeline. */
-  onSpin?: (radians: number) => void;
   onRequestView: (view: TargetView) => void;
   /**
    * Regions of the world, the Amazon first (regions.ts); they are outlined and can be
@@ -291,7 +289,6 @@ function SceneContents(props: SceneContentsProps) {
     targetView,
     lite,
     autoRotate,
-    onSpin,
     regions,
     focusRegionId,
     onRequestView,
@@ -771,7 +768,6 @@ function SceneContents(props: SceneContentsProps) {
         segments={lite ? LITE_SEGMENTS : FULL_SEGMENTS}
         raiseRelief={!lite}
         autoRotate={autoRotate}
-        onSpin={onSpin}
         frameMix={frameMix}
         reliefImages={reliefImages}
         dotImage={dotImage}
