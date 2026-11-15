@@ -23,7 +23,7 @@ NAME="GEDI03_rh100_mean_2019108_2025190_003_01.tif"
 URL="https://data.ornldaac.earthdata.nasa.gov/protected/gedi/GEDI_L3_LandSurface_Metrics_V3/data/$NAME"
 PNG="$RAW/gedi_l3_rh100_mean_0p1deg.png"
 NETRC="/root/.netrc"
-UA="Mozilla/5.0 (compatible; data-fetch-script)"
+UA="earth-jukebox-fetch/1.0 (NASA Space Apps 2026)"
 FORCE="${FORCE:-0}"
 
 fail() {
