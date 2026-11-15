@@ -10,6 +10,7 @@
 
 import { LAYER_IDS, type LayerId } from "../data/types";
 import { clampUnit, co2ToBreath, forestToVoice, intensityToGain, lightningToPercussion, positionToPan, smokeToTimbre } from "./mapping";
+import { OVERVIEW_BASE_HZ, OVERVIEW_COLUMNS, OVERVIEW_INSTRUMENTS, OVERVIEW_ROWS, type OverviewColumn } from "./overview";
 import { DEFAULT_SMOOTHING_SECONDS, OnePoleSmoother } from "./smoothing";
 
 export type SoundEngineState = "idle" | "running" | "suspended";
@@ -24,6 +25,10 @@ export interface SoundEngine {
   setLayerEnabled(layer: LayerId, enabled: boolean): void;
   /** Horizontal position across the listened area, 0 (left) .. 1 (right). */
   setPan(horizontal: number): void;
+  /** Replaces the overview field; the scan reads it while enabled. */
+  setOverview(layer: LayerId | null, columns: readonly OverviewColumn[] | null): void;
+  /** Starts or stops the visible-area scan (it keeps its own clock). */
+  setOverviewEnabled(enabled: boolean): void;
   setMasterVolume(value: number): void;
   /** Current output level in 0..1, for a meter. */
   getOutputLevel(): number;
@@ -85,6 +90,8 @@ const SCENE_LOOP_GAIN_MULTIPLIER = 2;
 const SCENE_LOOP_MAX_GAIN = 2;
 const SCENE_FADE_IN_SECONDS = 0.5;
 const SCENE_FADE_OUT_SECONDS = 0.3;
+const OVERVIEW_BUS_GAIN = 0.75;
+const OVERVIEW_COLUMN_HEADROOM = 0.9;
 
 /**
  * Per-layer output trim. The smoke voice is mostly filtered noise and a low
@@ -134,6 +141,24 @@ interface Co2Voice {
 interface LightningVoice {
   gain: GainNode;
   panner: StereoPannerNode;
+}
+
+interface OverviewColumnVoice {
+  oscillators: OscillatorNode[];
+  gains: GainNode[];
+  filter: BiquadFilterNode;
+  panner: StereoPannerNode;
+}
+
+interface OverviewGraph {
+  columns: OverviewColumnVoice[];
+  bus: GainNode;
+}
+
+interface OverviewState {
+  layer: LayerId | null;
+  columns: readonly OverviewColumn[];
+  enabled: boolean;
 }
 
 interface EngineGraph {
@@ -208,6 +233,12 @@ export class WebAudioSoundEngine implements SoundEngine {
   private readonly fetchSample: (url: string) => Promise<ArrayBuffer>;
   private lightningSample: AudioBuffer | null;
   private lightningSampleLoad: Promise<void> | null = null;
+  private overviewGraph: OverviewGraph | undefined;
+  private readonly overview: OverviewState = {
+    layer: null,
+    columns: [],
+    enabled: false,
+  };
 
   /** Keeps `state` honest when the browser or the OS suspends the context. */
   private readonly handleContextStateChange = (): void => {
@@ -216,9 +247,11 @@ export class WebAudioSoundEngine implements SoundEngine {
     const state = context.state as string;
     if (state === "running") {
       if (this.currentState !== "idle") this.currentState = "running";
+      this.startOverview();
     } else if (this.currentState === "running") {
       this.currentState = "suspended";
       this.clearLightning();
+      this.fadeOverview(0);
       this.stopSceneAudio();
     }
   };
@@ -284,6 +317,7 @@ export class WebAudioSoundEngine implements SoundEngine {
       this.applyLayer(layer, true);
     }
     this.applyPan(now);
+    this.startOverview();
   }
 
   stop(): void {
@@ -297,6 +331,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.currentState = "suspended";
     this.clearSettleTimers();
     this.clearLightning();
+    this.fadeOverview(0);
     this.stopSceneAudio();
     this.setDataVoiceDuck(1, 0.1);
 
@@ -331,6 +366,36 @@ export class WebAudioSoundEngine implements SoundEngine {
     }
   }
 
+  setOverview(layer: LayerId | null, columns: readonly OverviewColumn[] | null): void {
+    const nextColumns = columns ?? [];
+    const layerChanged = layer !== this.overview.layer;
+    this.overview.layer = layer;
+    this.overview.columns = nextColumns;
+    if (layer === null || nextColumns.length === 0) {
+      this.fadeOverview(0);
+      return;
+    }
+    if (!this.overview.enabled || this.currentState !== "running") return;
+    if (layerChanged) this.applyOverviewInstrument();
+    this.startOverview();
+  }
+
+  setOverviewEnabled(enabled: boolean): void {
+    this.overview.enabled = enabled;
+    if (!enabled) {
+      this.fadeOverview(0);
+      return;
+    }
+    if (
+      !this.overview.layer ||
+      this.overview.columns.length === 0 ||
+      this.currentState !== "running"
+    ) {
+      return;
+    }
+    this.startOverview();
+  }
+
   setMasterVolume(value: number): void {
     this.volume = clampUnit(value);
     if (this.currentState === "running" && this.context && this.graph) {
@@ -363,6 +428,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.clearSuspendTimer();
     this.clearSettleTimers();
     this.clearLightning();
+    this.fadeOverview(0);
     this.stopSceneAudio();
     this.currentState = "idle";
     this.dataDuck = 1;
@@ -425,6 +491,23 @@ export class WebAudioSoundEngine implements SoundEngine {
         node.disconnect();
       }
     }
+    const overview = this.overviewGraph;
+    if (overview) {
+      for (const column of overview.columns) {
+        for (const oscillator of column.oscillators) {
+          try {
+            oscillator.stop();
+          } catch {
+            // Already stopped.
+          }
+        }
+        for (const node of [...column.oscillators, ...column.gains, column.filter, column.panner]) {
+          node.disconnect();
+        }
+      }
+      overview.bus.disconnect();
+    }
+    this.overviewGraph = undefined;
     this.graph = undefined;
     this.levelBuffer = undefined;
 
@@ -436,6 +519,117 @@ export class WebAudioSoundEngine implements SoundEngine {
         void context.close();
       }
     }
+  }
+
+  private ensureOverviewGraph(): OverviewGraph | undefined {
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph) return undefined;
+    if (this.overviewGraph) return this.overviewGraph;
+    const bus = context.createGain();
+    bus.gain.value = 0;
+    bus.connect(graph.bus);
+    const columns: OverviewColumnVoice[] = [];
+    for (let index = 0; index < OVERVIEW_COLUMNS; index += 1) {
+      columns.push(this.buildOverviewColumn(context, bus));
+    }
+    this.overviewGraph = { columns, bus };
+    return this.overviewGraph;
+  }
+
+  private buildOverviewColumn(context: AudioContext, bus: GainNode): OverviewColumnVoice {
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1600;
+    filter.Q.value = 0.9;
+    const panner = context.createStereoPanner();
+    filter.connect(panner);
+    panner.connect(bus);
+
+    const oscillators: OscillatorNode[] = [];
+    const gains: GainNode[] = [];
+    for (let row = 0; row < OVERVIEW_ROWS; row += 1) {
+      const oscillator = context.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.value = OVERVIEW_BASE_HZ;
+      const rowGain = context.createGain();
+      rowGain.gain.value = 0;
+      oscillator.connect(rowGain);
+      rowGain.connect(filter);
+      oscillator.start();
+      oscillators.push(oscillator);
+      gains.push(rowGain);
+    }
+    return { oscillators, gains, filter, panner };
+  }
+
+  private applyOverviewInstrument(): void {
+    const graph = this.overviewGraph;
+    const layer = this.overview.layer;
+    const context = this.context;
+    if (!graph || !layer || !context) return;
+    const instrument = OVERVIEW_INSTRUMENTS[layer];
+    const now = context.currentTime;
+    for (const column of graph.columns) {
+      rampParameter(column.filter.frequency, instrument.filterHz, now, this.rampSeconds);
+      rampParameter(column.filter.Q, instrument.filterQ, now, this.rampSeconds);
+      for (const oscillator of column.oscillators) {
+        oscillator.type = instrument.wave;
+      }
+    }
+  }
+
+  private startOverview(): void {
+    if (
+      !this.overview.enabled ||
+      this.currentState !== "running" ||
+      !this.overview.layer ||
+      this.overview.columns.length === 0
+    ) {
+      this.fadeOverview(0);
+      return;
+    }
+    const graph = this.ensureOverviewGraph();
+    if (!graph) return;
+    this.fadeOverview(OVERVIEW_BUS_GAIN);
+    this.applyOverviewInstrument();
+    this.applyOverviewField();
+  }
+
+  private applyOverviewField(): void {
+    const context = this.context;
+    const graph = this.overviewGraph;
+    const layer = this.overview.layer;
+    if (!context || !graph || !layer) return;
+    const instrument = OVERVIEW_INSTRUMENTS[layer];
+    const activeCells = this.overview.columns.reduce(
+      (count, column) =>
+        count + (column?.cells.reduce((rows, cell) => rows + (cell.gain > 0 ? 1 : 0), 0) ?? 0),
+      0,
+    );
+    const gainScale = OVERVIEW_COLUMN_HEADROOM / Math.sqrt(Math.max(1, activeCells));
+    const detune = 2 ** (instrument.detuneCents / 1200);
+    const now = context.currentTime;
+
+    for (let index = 0; index < OVERVIEW_COLUMNS; index += 1) {
+      const voice = graph.columns[index]!;
+      const column = this.overview.columns[index];
+      rampParameter(voice.panner.pan, column?.pan ?? 0, now, this.rampSeconds);
+      for (let row = 0; row < OVERVIEW_ROWS; row += 1) {
+        const cell = column?.cells[row];
+        const pitch = cell && Number.isFinite(cell.pitchHz) ? cell.pitchHz : OVERVIEW_BASE_HZ;
+        const gain = cell ? clampUnit(cell.gain) * instrument.gain * gainScale : 0;
+        rampParameter(voice.oscillators[row]!.frequency, pitch * detune * 2 ** instrument.octave, now, this.rampSeconds);
+        rampParameter(voice.gains[row]!.gain, gain, now, this.rampSeconds);
+      }
+    }
+  }
+
+  private fadeOverview(target: number): void {
+    const graph = this.overviewGraph;
+    const context = this.context;
+    if (!graph || !context) return;
+    rampParameter(graph.bus.gain, target, context.currentTime, this.rampSeconds);
   }
 
   private applyLayer(layer: LayerId, snap: boolean): void {

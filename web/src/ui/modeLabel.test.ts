@@ -9,7 +9,7 @@ describe("modeLabel (regions)", () => {
   });
 
   it("falls back to the general hint and the Amazon", () => {
-    expect(modeLabel("globe")).toMatch(/Click a point/);
+    expect(modeLabel("globe")).toMatch(/Overview of the visible planet/);
     expect(modeLabel("globe")).toMatch(/double-click a region/);
     expect(modeLabel("map")).toMatch(/^Amazon map\. Click a point/);
     expect(modeLabel("to-globe", "Siberian taiga", "Siberian taiga")).toBe("Back to the planet…");

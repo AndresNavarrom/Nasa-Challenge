@@ -162,10 +162,12 @@ The interface opens on the 3D planet (code in `web/src/scene/` and
 docker compose up web     # then open http://127.0.0.1:5173/
 ```
 
-- **Planet**: it turns slowly by itself. Click a point to lock its sound; then
-  drag to move that point and hear the change. Hold **Shift** and drag to turn
-  the planet, or leave the auto-rotate switch on. The active layer is drawn over
-  `earth.jpg`.
+- **Planet**: it turns slowly by itself. The overview plays the visible globe
+  all at once: screen position sets the stereo side, latitude sets the pitch
+  (poles low, equator high), and the layer value sets the volume. Data time and
+  the field are independent, so Auto-rotate off freezes the frame but the field
+  keeps sounding. Drag to turn the planet; double-click a region to fly there.
+  The active layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked
@@ -186,13 +188,13 @@ docker compose up web     # then open http://127.0.0.1:5173/
   moves close (1.6 s). Double-click the map or press **Back to Earth** to
   return (1.4 s) and the planet turns again.
 - **Indicator** (bottom left): longitude, latitude and the active layer's
-  value (0 to 100 %) for the point under the cursor and for the locked point,
-  or "no data here".
-- **Listening point** for the sound engine:
+  value (0 to 100 %) for the point under the cursor; the region map also shows
+  the locked point, or "no data here".
+- **Listening point** for the region map:
   `useListeningPoint()` from `web/src/scene/listeningPoint.tsx` returns the
   locked point as `{ lon, lat, screenX }` (`screenX` 0 at the left edge of the
-  canvas, 1 at the right), or `null` until a point is selected. Clicking or
-  dragging the planet/map updates it; hovering no longer changes the sound.
+  canvas, 1 at the right), or `null` until a point is selected. Only the region
+  map selects a point now; the globe uses the visible-area overview.
 - **Frames per second** (top right): the average over the last second; green
   at 30 or more (the target), red below. The browser's own performance monitor
   (Chrome DevTools, "Performance monitor") gives the same figure as a backup.
