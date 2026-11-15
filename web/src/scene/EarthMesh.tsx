@@ -161,6 +161,8 @@ export interface EarthMeshProps {
   selectedPoint?: ListeningPoint | null;
   /** Point under the cursor; drawn as a crosshair. */
   hoverPoint?: { lon: number; lat: number } | null;
+  /** Colour of the listening point (its guide lines stay light). */
+  markerColor?: string;
   onHover: (hit: GlobeHit | null) => void;
   /** Double-click on the planet (not after a drag): the point whose sound is selected. */
   onGlobeSelectPoint: (lon: number, lat: number, clientX: number) => void;
@@ -534,6 +536,7 @@ export function EarthMesh({
   onGlobeTap,
   onMapTap,
   onOverviewField,
+  markerColor,
 }: EarthMeshProps) {
   const gl = useThree((state) => state.gl);
   const pickGroup = useRef<Group>(null);
@@ -970,7 +973,7 @@ export function EarthMesh({
             <sphereGeometry args={[GLOBE_RADIUS * 1.002, 64, 32]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="globe" selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="globe" selectedPoint={selectedPoint} hoverPoint={hoverPoint} color={markerColor} />
         </group>
       )}
 
@@ -988,7 +991,7 @@ export function EarthMesh({
             <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          <LocationMarkers mode="map" bbox={focusBbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} />
+          <LocationMarkers mode="map" bbox={focusBbox} selectedPoint={selectedPoint} hoverPoint={hoverPoint} color={markerColor} />
           {scenes && scenes.length > 0 && onSceneSelect && (
             <SceneMarkers
               scenes={scenes}
