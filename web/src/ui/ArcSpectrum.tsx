@@ -1,6 +1,6 @@
 // The sound spectrum, curved along the lower part of the right arc: one bar per
-// frequency band, low notes at the bottom, growing outwards from the arc in the
-// picked layer's colour. While the sound is off the bars rest as short marks.
+// frequency band, low notes at the bottom, growing from the arc towards the planet
+// (the panels are on the other side) in the picked layer's colour. While the sound is off the bars rest as short marks.
 //
 // It is drawn on a canvas on every other animation frame, straight from the
 // engine's analyser; it is decoration for the eyes (the level meter next to the
@@ -40,7 +40,7 @@ export function ArcSpectrum({ engine, arc, color, fromDegrees, toDegrees }: ArcS
   // The canvas covers only the corner of the view the bars can reach.
   const ends = [fromDegrees, toDegrees].flatMap((degrees) => [
     arcPoint(arc, "right", degrees, 0),
-    arcPoint(arc, "right", degrees, BAR_GAP + BAR_MAX + BAR_WIDTH),
+    arcPoint(arc, "right", degrees, -(BAR_GAP + BAR_MAX + BAR_WIDTH)),
   ]);
   const left = Math.floor(Math.min(...ends.map((point) => point.x)) - BAR_WIDTH);
   const top = Math.floor(Math.min(...ends.map((point) => point.y)) - BAR_WIDTH);
@@ -80,8 +80,8 @@ export function ArcSpectrum({ engine, arc, color, fromDegrees, toDegrees }: ArcS
         const length = BAR_REST + (BAR_MAX - BAR_REST) * (shown[band] ?? 0);
         // Low notes at the bottom end of the arc.
         const degrees = toDegrees - ((toDegrees - fromDegrees) * (band + 0.5)) / BANDS;
-        const foot = arcPoint(arc, "right", degrees, BAR_GAP);
-        const tip = arcPoint(arc, "right", degrees, BAR_GAP + length);
+        const foot = arcPoint(arc, "right", degrees, -BAR_GAP);
+        const tip = arcPoint(arc, "right", degrees, -(BAR_GAP + length));
         context.globalAlpha = running ? 0.45 + 0.55 * (shown[band] ?? 0) : 0.3;
         context.beginPath();
         context.moveTo(foot.x - left, foot.y - top);
