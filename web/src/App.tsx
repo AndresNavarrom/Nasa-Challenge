@@ -38,6 +38,7 @@ import { ScenePopup } from "./ui/ScenePopup";
 import { EARTH_VIEW_ID, layerForChoice, type WithManifest } from "./ui/layerChoice";
 import { layerVoices } from "./ui/soloLayer";
 import { TimelineTrack } from "./ui/TimelineTrack";
+import { Starfield } from "./ui/Starfield";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen, type TourAction } from "./ui/tourSteps";
 
@@ -258,6 +259,7 @@ function PlanetView({
         mixRef={frameMixRef}
         onFrames={setTracked}
       />
+      <Starfield />
       <div className="absolute inset-0">
         <EarthScene
           data={data}
