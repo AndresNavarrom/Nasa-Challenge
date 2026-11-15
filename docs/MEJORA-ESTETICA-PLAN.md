@@ -94,7 +94,21 @@ Cada paso deja `docker compose` compilando con las pruebas en verde (`tsc`, `vit
 
 Se empieza por la interfaz del jukebox (pasos 1 a 8).
 
-## 6. Decisiones y pendientes
+## 6. Estado (15 de noviembre de 2026)
+
+Los 11 pasos están hechos en la rama, con `tsc`, las pruebas (`docker compose run --rm web-test`) y `vite build` en verde. Diferencias con lo planeado arriba:
+
+- **Espectro**: las barras crecen desde el arco derecho hacia el planeta (no hacia fuera), para no chocar con los paneles.
+- **Brújula**: el norte queda siempre arriba porque el planeta gira sobre su eje; lo que gira es el anillo de longitudes, y debajo se lee el centro de la vista.
+- **Etiquetas de la capa**: el panel derecho muestra la capa, qué significa su sonido y latitud, longitud y valor (del cursor en el planeta, del punto escuchado en un mapa). La caja “Hover” sigue abajo a la izquierda.
+- **Líneas guía**: son claras, no del color de la capa, porque ese color no contrasta sobre su propio mapa; el punto sí toma el color de la capa.
+- **Auto levels**: se miden en el navegador al cargar la imagen del planeta y los aplica el shader; no se regeneraron los datos.
+- **Polos**: la capa se desvanece entre 78° y 84° de latitud; el sonido no cambia.
+- **Sonido**: se añadió una reverberación suave y oscura a la vista del planeta. Los timbres de cada capa no se tocaron. Falta escucharlo y ajustar `OVERVIEW_ROOM_SEND` en `web/src/audio/engine.ts` si hace falta.
+- **Pantallas pequeñas** (menos de 900 px de ancho o 640 de alto, o tabletas donde los arcos no caben): paneles compactos sin arcos, brújula ni espectro.
+- **Vídeo**: la sección está lista pero no se muestra hasta que haya archivo; se activa en `web/src/ui/landingMedia.ts` (`LANDING_VIDEO`).
+
+## 7. Decisiones y pendientes
 
 - Línea y punto de referencia: marca en el mapa (decidido).
 - Vídeo: sección en la landing (decidido); falta el enlace o archivo del vídeo.
