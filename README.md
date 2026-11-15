@@ -3,8 +3,8 @@
 Proof of concept for the NASA Space Apps Challenge 2026 challenge
 "The Earth Information Jukebox" (team Sagitta).
 
-The goal is a local web app that opens on a 3D planet with three NASA Earth
-Information Center layers (forest height, wildfire smoke, CO2). Each layer gets
+The goal is a local web app that opens on a 3D planet with four NASA Earth
+science layers (forest height, wildfire smoke, CO2, lightning). Each layer gets
 its own voice, generated in real time in the browser, and focusing the Amazon
 flattens the planet into a detailed regional map. The story: the Amazon as the
 lungs of the world — how it works, why it matters, what affects it.
@@ -15,14 +15,15 @@ This repository is the **shared base** of the build. What is in place:
 
 | Part | Where | State |
 |---|---|---|
-| Data preparation (NASA frames → grids, textures, manifest) | `tools/prep/`, `tools/fetch-frames.sh`, `data/prep-config.json` | Done, tested |
-| Prepared data from real NASA frames | `web/public/data/` | Done (1.2 MB) |
+| Data download and conversion (GEDI, GEOS-CF, SVS frames) | `tools/fetch/`, `tools/fetch-frames.sh` | Done, tested |
+| Data preparation (sources → grids, textures, manifest) | `tools/prep/`, `data/prep-config.json` | Done, tested |
+| Prepared data (four layers and the planet images) | `web/public/data/` | Done (about 49 MB) |
 | Data types and loader | `web/src/data/` | Done, tested |
 | Interpolation and timeline | `web/src/lib/` | Done, tested |
-| Value → sound mapping (pure functions) | `web/src/audio/mapping.ts` | Done, tested |
-| Sound engine (Web Audio) | `web/src/audio/engine.ts` | To build |
+| Value → sound mapping and sound engine (Web Audio) | `web/src/audio/` | Done, tested |
 | Local server (Axum) | `server/` | Done, tested |
-| Planet, Amazon map, transition, panels, story mode, accessibility | `web/src/scene/`, `web/src/ui/` | To build (`App.tsx` is a starting shell that lists the loaded layers) |
+| Planet, Amazon map and transition | `web/src/scene/` | Done, tested |
+| Side panel, timeline bar, story mode, accessibility | `web/src/ui/` | In progress |
 | Docker containers to run, test and prepare the data | `docker-compose.yml`, `web/Dockerfile`, `tools/prep/Dockerfile` | Done |
 | Final app container (built interface + local server) | `Dockerfile`, service `app` | Done |
 | Demo launcher | `run-demo.sh`, `run-demo.ps1` | Done |
@@ -166,7 +167,7 @@ docker compose up web     # then open http://127.0.0.1:5173/
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change. Until
   the timeline exists every layer shows its **first instant**.
-- **Amazon only layers** (smoke and CO2 today, `global: null`): drawn inside
+- **Amazon only layers** (CO2 today, `global: null`): drawn inside
   the Amazon rectangle (`region.bbox`) from their regional grid, on the planet
   and on the map, and nothing elsewhere. Layers with a global grid use it
   outside the rectangle and their regional grid inside it.
@@ -269,20 +270,25 @@ by instant, then row (north first), then column (west first).
 
 See [`data/SOURCES.md`](data/SOURCES.md) for every file and link.
 
-- Forest height: GEDI Forest Height, [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950)
-- Wildfire smoke: Air Quality Model Runs (GEOS-CF), [NASA SVS 5533](https://svs.gsfc.nasa.gov/5533)
-- CO2: DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196)
-- Backdrop of the planet: [NASA SVS 3615](https://svs.gsfc.nasa.gov/3615)
+| Layer | Source | Coverage | What the value is |
+|---|---|---|---|
+| Forest height | [GEDI L3 Gridded Land Surface Metrics V3](https://doi.org/10.3334/ORNLDAAC/2525) (NASA GEDI, ORNL DAAC), filled with [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950) where GEDI has no data | Global, April 2019 - July 2025 | **Measurement** on a fixed scale: 0 to 50 m canopy height |
+| Wildfire smoke | [GEOS-CF v2](https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/) surface PM2.5 (NASA GMAO model analysis) | Global, 1 September 2026, 24 hourly means | **Model value** on a fixed scale: 0 to 150 µg/m³ |
+| CO2 | DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196) | Amazon only, 23 - 25 February 2020, every 6 h | **Relative intensity** read from the colours of the visualization, not ppm |
+| Lightning | Lightning Events Detected from the ISS 2017-2023, [NASA SVS 5011](https://svs.gsfc.nasa.gov/5011) | About 55° N to 55° S, 2017 - 2023 accumulated | **Relative frequency** read from the visualization, not a flash count |
 
-**The values are relative intensities read from the colours of rendered
-visualization frames, not physical measurements.** Globe views were placed on
-the map by hand and are accurate to roughly 1 to 2 degrees. Smoke and CO2 cover
-the Amazon rectangle only, because their visualizations have no flat global
-view of a single variable.
+Backdrop of the planet: [Natural Earth I](https://www.naturalearthdata.com/downloads/10m-raster-data/10m-natural-earth-1/)
+(public domain); it carries no data values.
+
+**Forest height and smoke are measured or modelled values on fixed scales.
+CO2 and lightning are relative values read from rendered NASA visualizations,
+not physical measurements.** CO2 covers the Amazon rectangle only, because its
+visualization has no flat global view, and it is presented as global context,
+not as a measured effect of what happens in the Amazon.
 
 ## Use of AI
 
 An AI coding assistant (Claude Code) generated code, data-preparation scripts
 and documentation drafts in this repository under the team's direction. The
 team reviews and is responsible for the result. No AI-generated images, video
-or audio are included; the data comes from the NASA visualizations listed above.
+or audio are included; the data comes from the NASA sources listed above.
