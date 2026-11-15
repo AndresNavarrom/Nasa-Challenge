@@ -1,6 +1,7 @@
 import {
   LAYER_IDS,
   type BoundingBox,
+  type Cadence,
   type Grid,
   type GridInfo,
   type JukeboxData,
@@ -61,6 +62,33 @@ function parseGridInfo(value: unknown, where: string): GridInfo {
   };
 }
 
+/** `PT<n>H`, `P<n>D` or `P<n>M`, the only cadences jukebox-prep writes. */
+export function parseCadence(text: string): Cadence | null {
+  const match = /^(?:PT(\d+)H|P(\d+)([DM]))$/.exec(text);
+  if (!match) return null;
+  const count = Number(match[1] ?? match[2]);
+  if (!Number.isInteger(count) || count <= 0) return null;
+  if (match[1] !== undefined) return { unit: "hour", count };
+  return { unit: match[3] === "D" ? "day" : "month", count };
+}
+
+/** Instant times (ISO 8601 UTC texts) as milliseconds, checked to be one per date and in order. */
+function parseTimes(value: unknown, dates: number, where: string): number[] | undefined {
+  if (value == null) return undefined;
+  if (!Array.isArray(value) || value.length !== dates) {
+    throw new DataLoadError(`manifest.json: "${where}.times" must list one time per date (${dates}). ${PREP_HINT}`);
+  }
+  const times = value.map((text) => (typeof text === "string" ? Date.parse(text) : Number.NaN));
+  times.forEach((time, index) => {
+    if (!Number.isFinite(time) || (index > 0 && time <= times[index - 1]!)) {
+      throw new DataLoadError(
+        `manifest.json: "${where}.times[${index}]" must be a UTC time later than the one before it. ${PREP_HINT}`,
+      );
+    }
+  });
+  return times;
+}
+
 function parseLayer(value: unknown, index: number): LayerManifest {
   const where = `layers[${index}]`;
   if (!isRecord(value)) {
@@ -91,6 +119,16 @@ function parseLayer(value: unknown, index: number): LayerManifest {
       `manifest.json: "${where}" has ${global.frames} global frames but ${region.frames} region frames. ${PREP_HINT}`,
     );
   }
+  const times = parseTimes(value.times, dates.length, where);
+  let cadence: Cadence | undefined;
+  if (value.cadence != null) {
+    cadence = parseCadence(requireString(value.cadence, `${where}.cadence`)) ?? undefined;
+    if (!cadence) {
+      throw new DataLoadError(
+        `manifest.json: "${where}.cadence" must look like "PT1H", "P1D" or "P1M". ${PREP_HINT}`,
+      );
+    }
+  }
   return {
     id: id as LayerId,
     title: requireString(value.title, `${where}.title`),
@@ -102,6 +140,8 @@ function parseLayer(value: unknown, index: number): LayerManifest {
     static: value.static === true,
     sample: value.sample === true,
     dates,
+    ...(times ? { times } : {}),
+    ...(cadence ? { cadence } : {}),
     global,
     region,
   };
@@ -155,10 +195,32 @@ async function fetchChecked(fetcher: FetchLike, url: string): Promise<Response> 
   return response;
 }
 
+/** True when the bytes start with the gzip signature (1f 8b). */
+function isGzip(bytes: Uint8Array): boolean {
+  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+/**
+ * The bytes of a grid file. `.bin.gz` grids (what jukebox-prep writes) are
+ * inflated here; a server that already sent them decompressed
+ * (`Content-Encoding: gzip`) hands over plain bytes, which are used as they are.
+ */
+export async function gridBytes(raw: ArrayBuffer, url: string): Promise<Uint8Array> {
+  const bytes = new Uint8Array(raw);
+  if (!isGzip(bytes)) return bytes;
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new DataLoadError(`${url} is not a valid gzip file (${detail}). ${PREP_HINT}`);
+  }
+}
+
 async function loadGrid(fetcher: FetchLike, baseUrl: string, info: GridInfo): Promise<Grid> {
   const url = baseUrl + info.file;
   const response = await fetchChecked(fetcher, url);
-  const data = new Uint8Array(await response.arrayBuffer());
+  const data = await gridBytes(await response.arrayBuffer(), url);
   const expected = info.width * info.height * info.frames;
   if (data.length !== expected) {
     throw new DataLoadError(

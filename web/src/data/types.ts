@@ -22,6 +22,12 @@ export interface LayerSource {
   url: string;
 }
 
+/** Spacing of a layer's instants, from its ISO 8601 `cadence` (`PT1H`, `P1D`, `P1M`). */
+export interface Cadence {
+  unit: "hour" | "day" | "month";
+  count: number;
+}
+
 export interface LayerManifest {
   id: LayerId;
   title: string;
@@ -33,6 +39,14 @@ export interface LayerManifest {
   sample: boolean;
   /** Date label of each instant; one entry per frame. */
   dates: string[];
+  /**
+   * Start of each instant in UTC, in milliseconds since 1970; one entry per frame,
+   * in order. Absent for static layers and for sample data (then the instants are
+   * evenly spaced).
+   */
+  times?: number[];
+  /** Spacing of the instants; absent for static layers and sample data. */
+  cadence?: Cadence;
   /** Whole-planet grid; null when the visualization has no usable global flat view. */
   global: GridInfo | null;
   /** Detailed Amazon grid. */

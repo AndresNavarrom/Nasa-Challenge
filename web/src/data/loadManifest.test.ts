@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DataLoadError, loadJukeboxData } from "./loadManifest";
+import { DataLoadError, gridBytes, loadJukeboxData, parseCadence } from "./loadManifest";
 import type { LayerManifest, Manifest } from "./types";
 
 const manifest: Manifest = {
@@ -29,6 +29,12 @@ const manifest: Manifest = {
   ],
   region: { bbox: { west: -80, south: -20, east: -44, north: 8 } },
 };
+
+/** Gzip bytes the way jukebox-prep writes .bin.gz grids. */
+async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
 
 /** A stand-in for `fetch` that serves the given files and answers 404 for anything else. */
 function fakeFetch(files: Record<string, BodyInit>) {
@@ -113,5 +119,56 @@ describe("loadJukeboxData", () => {
     // co2 is still a known id, even though the data file no longer lists it.
     const withCo2 = { ...manifest, layers: [{ ...manifest.layers[1], id: "co2" }] };
     await expect(loadJukeboxData("./data/", fakeFetch(filesFor(withCo2)))).resolves.toBeDefined();
+  });
+
+  it("inflates .bin.gz grids and keeps grids a server already sent decompressed", async () => {
+    const gz = structuredClone(manifest);
+    gz.layers[1]!.region.file = "smoke_region.bin.gz";
+    const files = filesFor(gz);
+    files["./data/smoke_region.bin.gz"] = await gzip(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]));
+
+    const data = await loadJukeboxData("./data/", fakeFetch(files));
+    expect(Array.from(data.layers[1]!.region.data)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+
+    // Same file name, plain bytes (Content-Encoding: gzip already undone by the browser).
+    files["./data/smoke_region.bin.gz"] = new Uint8Array(8).fill(9);
+    const plain = await loadJukeboxData("./data/", fakeFetch(files));
+    expect(plain.layers[1]!.region.data[0]).toBe(9);
+
+    await expect(gridBytes(new Uint8Array([0x1f, 0x8b, 0, 0]).buffer, "bad.bin.gz")).rejects.toThrow(/bad\.bin\.gz/);
+  });
+
+  it("reads the instant times and the cadence of a timed layer", async () => {
+    const timed = structuredClone(manifest) as unknown as { layers: Record<string, unknown>[] };
+    timed.layers[1]!.times = ["2026-09-01T00:30:00Z", "2026-09-01T01:30:00Z"];
+    timed.layers[1]!.cadence = "PT1H";
+
+    const data = await loadJukeboxData("./data/", fakeFetch(filesFor(timed)));
+    const smoke = data.layers[1]!.manifest;
+    expect(smoke.times).toEqual([Date.UTC(2026, 8, 1, 0, 30), Date.UTC(2026, 8, 1, 1, 30)]);
+    expect(smoke.cadence).toEqual({ unit: "hour", count: 1 });
+    // Layers without them (static, sample data) simply have none.
+    expect(data.layers[0]!.manifest.times).toBeUndefined();
+    expect(data.layers[0]!.manifest.cadence).toBeUndefined();
+
+    timed.layers[1]!.times = ["2026-09-01T01:30:00Z", "2026-09-01T00:30:00Z"];
+    await expect(loadJukeboxData("./data/", fakeFetch(filesFor(timed)))).rejects.toThrow(/times\[1\]/);
+    timed.layers[1]!.times = ["2026-09-01T00:30:00Z"];
+    await expect(loadJukeboxData("./data/", fakeFetch(filesFor(timed)))).rejects.toThrow(/one time per date/);
+    timed.layers[1]!.times = undefined;
+    timed.layers[1]!.cadence = "hourly";
+    await expect(loadJukeboxData("./data/", fakeFetch(filesFor(timed)))).rejects.toThrow(/cadence/);
+  });
+});
+
+describe("parseCadence", () => {
+  it("reads hours, days and months and rejects anything else", () => {
+    expect(parseCadence("PT1H")).toEqual({ unit: "hour", count: 1 });
+    expect(parseCadence("PT6H")).toEqual({ unit: "hour", count: 6 });
+    expect(parseCadence("P1D")).toEqual({ unit: "day", count: 1 });
+    expect(parseCadence("P3M")).toEqual({ unit: "month", count: 3 });
+    expect(parseCadence("P0M")).toBeNull();
+    expect(parseCadence("1H")).toBeNull();
+    expect(parseCadence("P1Y")).toBeNull();
   });
 });
