@@ -32,8 +32,9 @@ describe("overview mapping", () => {
     expect(overviewGain(null)).toBe(0);
     expect(overviewGain(Number.NaN)).toBe(0);
     expect(overviewGain(0)).toBe(0);
-    expect(overviewGain(1)).toBeGreaterThan(overviewGain(0.5));
-    expect(overviewGain(0.5)).toBeGreaterThan(0);
+    expect(overviewGain(1)).toBeCloseTo(1, 6);
+    expect(overviewGain(0.5)).toBeCloseTo(0.125, 6);
+    expect(overviewGain(0.25)).toBeCloseTo(0.015625, 6);
   });
 
   it("uses the visible average as the trigger threshold", () => {

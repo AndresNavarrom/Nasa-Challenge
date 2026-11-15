@@ -142,14 +142,16 @@ export function overviewPitchHz(
 }
 
 /**
- * Value 0..1 to a row gain. `threshold` is relative to the visible field: values
- * below it are silent. Null, NaN and non-positive values are always silent.
+ * Value 0..1 to a row gain with a cubic curve, so low values stay quiet and the
+ * higher end of the layer has useful level control. `threshold` is relative to
+ * the visible field: values below it are silent. Null, NaN and non-positive
+ * values are always silent.
  */
 export function overviewGain(value: number | null, threshold = 0): number {
   if (value === null || !Number.isFinite(value) || value <= 0) return 0;
   const amount = clampUnit(value);
   if (amount < clampUnit(threshold)) return 0;
-  return amount ** 0.7;
+  return amount ** 3;
 }
 
 /** Average of the valid cells in the visible field; 0 when nothing is visible. */

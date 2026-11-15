@@ -24,7 +24,7 @@ single locked point. Every screen column sounds at once:
 - **Screen X -> pan.** Visually right cells sound on the right.
 - **|Latitude| -> pitch**, quantised to a pentatonic scale: poles low, equator
   high.
-- **Layer value -> gain** with a `value^0.7` curve; a cell sounds only when its
+- **Layer value -> gain** with a `value^3` cubic curve; a cell sounds only when its
   value reaches the **average intensity of the visible field** (a relative
   threshold, never a fixed absolute level); no-data cells are silent.
 - **Data time -> frame** through `framePosition`, the same blend the picture and
