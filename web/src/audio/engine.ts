@@ -25,6 +25,38 @@ import { DEFAULT_SMOOTHING_SECONDS, OnePoleSmoother } from "./smoothing";
 
 export type SoundEngineState = "idle" | "running" | "suspended";
 
+/** Highest frequency the spectrum display shows; the voices have little above it. */
+export const SPECTRUM_TOP_HZ = 6000;
+
+/**
+ * Groups the analyser's frequency bins (0..255 each, evenly spaced up to half
+ * the sample rate) into `bands.length` display bands up to SPECTRUM_TOP_HZ. The
+ * bands widen towards the high end, as pitch does, and each takes the loudest
+ * of its bins, as a level in 0..1. The first bin (the constant part) is left out.
+ */
+export function spectrumBands(bins: Uint8Array, sampleRate: number, bands: Float32Array): void {
+  const count = bands.length;
+  if (count === 0) return;
+  const binHz = sampleRate > 0 && bins.length > 0 ? sampleRate / 2 / bins.length : 0;
+  if (binHz === 0) {
+    bands.fill(0);
+    return;
+  }
+  const topBin = Math.min(bins.length, Math.max(2, Math.ceil(SPECTRUM_TOP_HZ / binHz)));
+  for (let band = 0; band < count; band += 1) {
+    // Edges on a curve between linear and logarithmic: detail in the low end
+    // without leaving the first bands on a single bin each.
+    const from = 1 + (topBin - 1) * (band / count) ** 1.6;
+    const to = 1 + (topBin - 1) * ((band + 1) / count) ** 1.6;
+    const first = Math.min(topBin - 1, Math.floor(from));
+    // Each bin belongs to one band; a band narrower than a bin still reads one.
+    const last = Math.min(topBin - 1, Math.max(first, Math.floor(to) - 1));
+    let peak = 0;
+    for (let bin = first; bin <= last; bin += 1) peak = Math.max(peak, bins[bin] ?? 0);
+    bands[band] = peak / 255;
+  }
+}
+
 export interface SoundEngine {
   readonly state: SoundEngineState;
   /** Resolves once the AudioContext is running. Must be called from a user gesture. */
@@ -53,6 +85,12 @@ export interface SoundEngine {
   setMasterVolume(value: number): void;
   /** Current output level in 0..1, for a meter. */
   getOutputLevel(): number;
+  /**
+   * The output spectrum, for a display: one level (0..1) per band, from the
+   * lowest frequencies to `SPECTRUM_TOP_HZ`, written into `bands`. Returns
+   * false, leaving `bands` at 0, while the sound is not running.
+   */
+  getSpectrum(bands: Float32Array): boolean;
   /** Device latency reported by the context, in milliseconds (base + output). */
   getLatencyMs(): number;
   /** Plays the scene transition one-shot (ARPA). */
@@ -288,6 +326,7 @@ export class WebAudioSoundEngine implements SoundEngine {
     lightning: makeLayerRuntime(),
   };
   private levelBuffer: Float32Array | undefined;
+  private spectrumBuffer: Uint8Array<ArrayBuffer> | undefined;
   private suspendTimer: ReturnType<typeof setTimeout> | undefined;
   private dataDuck = 1;
   private transitionSource: AudioBufferSourceNode | null = null;
@@ -984,6 +1023,20 @@ export class WebAudioSoundEngine implements SoundEngine {
     return Math.min(1, Math.sqrt(sum / this.levelBuffer.length));
   }
 
+  getSpectrum(bands: Float32Array): boolean {
+    if (!this.context || !this.graph || this.currentState !== "running") {
+      bands.fill(0);
+      return false;
+    }
+    const analyser = this.graph.analyser;
+    if (!this.spectrumBuffer || this.spectrumBuffer.length !== analyser.frequencyBinCount) {
+      this.spectrumBuffer = new Uint8Array(analyser.frequencyBinCount);
+    }
+    analyser.getByteFrequencyData(this.spectrumBuffer);
+    spectrumBands(this.spectrumBuffer, this.context.sampleRate, bands);
+    return true;
+  }
+
   getLatencyMs(): number {
     if (!this.context) return 0;
     const base = Number.isFinite(this.context.baseLatency) ? this.context.baseLatency : 0;
@@ -1526,7 +1579,9 @@ export class WebAudioSoundEngine implements SoundEngine {
     master.gain.value = 0;
 
     const analyser = context.createAnalyser();
-    analyser.fftSize = 256;
+    // 1024 samples: about 47 Hz per bin at 48 kHz, fine enough for the spectrum
+    // display to tell the low notes apart, and a 21 ms window for the level meter.
+    analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.6;
 
     bus.connect(limiter);

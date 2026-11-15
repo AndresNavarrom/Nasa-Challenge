@@ -94,8 +94,17 @@ export class FakeCompressor extends FakeNode {
 export class FakeAnalyser extends FakeNode {
   fftSize = 2048;
   smoothingTimeConstant = 0.8;
+  get frequencyBinCount(): number {
+    return this.fftSize / 2;
+  }
   readonly getFloatTimeDomainData = vi.fn((data: Float32Array): void => {
     data.fill(0.25);
+  });
+  readonly getByteFrequencyData = vi.fn((data: Uint8Array): void => {
+    data.fill(0);
+    // One loud bin low in the spectrum and a quieter one higher up.
+    data[2] = 255;
+    data[20] = 102;
   });
 }
 
