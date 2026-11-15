@@ -12,7 +12,7 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 - **Vista Earth**, bosque con relieve de GEDI y rayos como puntos de SVS 5011 (PR #6, #7 y #9).
 - **Bienvenida, selector de capa y casillas “Listen to”** (PR #8): recorrido con driver.js y control de qué capas suenan.
 - **Motor de sonido** (paso 10, PR #4): bosque, humo, CO2 y rayos; limitador y medidor.
-- **Línea de tiempo** (PR #5 y #10): reloj compartido, audio que sigue la posición, barra con play/pausa, scrub, 0.1×–8× y fechas por capa. Desde la reunión del 2026-11-15 la línea de tiempo es estática: solo queda el deslizador Time y las fechas.
+- **Línea de tiempo** (PR #5 y #10): reloj compartido, audio que sigue la posición, barra con el deslizador Time y la fecha de la capa elegida. Desde el 2026-11-15 es estática: el equipo descartó play/pausa y velocidad porque los conjuntos de datos no tienen resolución temporal suficiente para que los cambios suenen interesantes; solo se mueve a mano.
 - **Servidor local y contenedor final** (paso 11, PR #3): `docker compose up` sirve la app en http://127.0.0.1:8080.
 - **Datos en alta resolución**, cuatro capas (bosque, humo, CO2 y rayos) e imagen base Natural Earth de 8192 o 4096 píxeles.
 
@@ -45,7 +45,7 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 - [ ] **Modo historia** (planeta → Amazonía, tres pasos, menos de 60 s); el recorrido de bienvenida no es el modo historia.
 - [ ] **Pantalla de inicio dedicada**, si se quiere además del recorrido de bienvenida.
 - [ ] **Panel lateral completo**: hoy hay selector de capa, no un panel lateral.
-- [ ] **Paso 14**: teclado (capas, reproducir/pausar, flechas para el punto), `web/src/ui/a11y.ts` con su prueba y texto para lector de pantalla (capa, lugar y valor bajo/medio/alto).
+- [ ] **Paso 14**: teclado (capas, flechas para mover el tiempo y el punto), `web/src/ui/a11y.ts` con su prueba y texto para lector de pantalla (capa, lugar y valor bajo/medio/alto).
 - [ ] **30 fps** con audio y en el portátil de la demo.
 - [x] Título **“Atmospheric CO2”**, capa CO2 global, en alta resolución y con contraste (PR #13).
 - [x] Barra de tiempo, fechas, selector de capa y `data-testid` de esos controles.
@@ -53,7 +53,7 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 
 ### Sonido (Fernando)
 
-- [x] B1 (bosque), B2 (humo + CO2 + mezcla) y voz de rayos.
+- [x] B1 (bosque), B2 (humo + CO2) y voz de rayos; la mezcla de capas se retiró después por decisión del equipo.
 - [x] **B3 probado a mano**: 43 ms de latencia de dispositivo en Firefox, sin latencia perceptible, 10 minutos limpios y reproducción confirmada en Chromium. Las capas se distinguen al escucharlas.
 - [ ] Cerrar del todo la tabla de `docs/SOUND-ENGINE-CHECKLIST.md`: repetir las mediciones en Chromium y, si se quiere el protocolo completo, la prueba a ciegas con dos personas ajenas.
 - [ ] Abrir PR y unir **`audio-samples`**; después, comprobar en la app que los rayos suenan con `tormenta-albert.ogg` y que las colas se superponen a 6 golpes/s.
@@ -114,7 +114,7 @@ docker compose run --rm fetch             # descargar las fuentes de datos
 - `loadJukeboxData()` en `web/src/data/loadManifest.ts`: capas y rectángulo de la Amazonía.
 - `sampleLayerAt(…)` en `web/src/lib/interpolate.ts`: valor 0..1 de una capa en longitud, latitud y posición temporal; `null` donde no hay datos.
 - `web/src/lib/timeline.ts`: posición común 0..1, `framePosition`, `frameBlend` y fecha por capa.
-- `web/src/lib/playback.ts` y `web/src/timeline/TimelineProvider.tsx`: reloj compartido, `useTimeline()`, velocidad 0.1×–8× y lazo.
+- `web/src/lib/playback.ts` y `web/src/timeline/TimelineProvider.tsx`: reloj compartido y `useTimeline()`. La app ya no usa reproducción ni velocidad (decisión del 2026-11-15); solo usa `seek` desde la barra estática.
 - `web/src/audio/`: motor con voces por capa, mapeo valor → sonido y `start()` que desbloquea el audio.
 - `web/public/data/`: datos preparados e imágenes base; `web/public/audio/` llegará con la PR de `audio-samples`.
 

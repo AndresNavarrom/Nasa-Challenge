@@ -1,0 +1,44 @@
+Links y referencias de sonidos 
+1.	3,2,1,0.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+2.	AIRE 2 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+3.	AIRE DENSO .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+4.	AIRE DENSO 2 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+5.	AIRE LARGO .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+6.	AIRE.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+7.	ALARMA Y TAMBORES.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+8.	ARPA.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+9.	bichos 1.wav https://freesound.org/people/nicotep/sounds/619554/ 
+10.	EXPLOSION PEQUEÑA .wav  https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+11.	FUI 1 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+12.	FUI 1 OPCION 3 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+13.	FUIII 1 OPCION 2.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+14.	grillos suves .wav https://freesound.org/people/Chuchita/sounds/528578/ 
+15.	GROAR SEGUIDO.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+16.	GROAR SENCILLO .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+17.	GRUAR MEJOR .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+18.	GUGUGURO ECO.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+19.	GUITRRA.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+20.	GUUGUG.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+21.	Hubble.wav ELIMINAR
+22.	MELODIA RELA.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+23.	mi mi mi miiiii suave .wav https://svs.gsfc.nasa.gov/3354/
+24.	MIII MIMI .wav https://svs.gsfc.nasa.gov/3354/ 
+25.	MIMIMIMIM.wav https://svs.gsfc.nasa.gov/3354/ 
+26.	MOVIL.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+27.	mumu .wav ELIMINAR
+28.	oajaros suaves .wav https://freesound.org/people/UrbanSoundBcn/sounds/395898/?utm_source=chatgpt.com 
+29.	PI PI P I PROGRESIVO .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+30.	PI PI PI 2 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+31.	PIMPUM SUAVE .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+32.	QUEMADO.wav
+33.	Rayo_1.wav https://svs.gsfc.nasa.gov/14369/ 
+34.	RFA PEQUEÑA AIRE.wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+35.	rio.wav https://freesound.org/people/universildo/sounds/151776/ 
+36.	RO.wav https://svs.gsfc.nasa.gov/3354/
+37.	RUN RUN RUN .wav   ELIMINAR
+38.	TORMETA ALBERT .wav https://freesound.org/people/PNMCarrieRailfan/sounds/682355/?utm_source=chatgpt.com 
+39.	Viento_1.wav  https://svs.gsfc.nasa.gov/14369/ 
+40.	Vineto_2.wav https://svs.gsfc.nasa.gov/10958/ 
+41.	WUA 1 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4      
+42.	WUAW 1 OPCION 2 .wav https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4 
+43.	WUWUW 1 .wav  https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014983/CosmicEchoes.mp4

@@ -120,22 +120,31 @@ The lightning grid is a **relative frequency** of strikes (0..1, static), not a
 continuous signal. It drives percussion instead of a sustained voice. The
 mapping in `mapping.ts` is exact and linear, with no perception curve:
 
-| Value | Hits per second | Body pitch | Ring time |
-|---|---|---|---|
-| 0 | 0 (silence) | — | — |
-| 0.5 | 3 | 210 Hz | 0.22 s |
-| 1 | 6 | 330 Hz | 0.28 s |
+| Value | Hits per second |
+|---|---|
+| 0 | 0 (silence) |
+| 0.5 | 3 |
+| 1 | 6 |
 
-- `lightningToPercussion(value)` returns `{ rateHz, pitchHz, decaySeconds }`;
-  the hit rate is the audible “frequency of lightning”, and the pitch makes the
-  intensity audible within one hit.
-- Each hit is a short band-passed noise crack (shared noise buffer) plus a
-  triangle body, both with a 4–6 ms attack and an exponential decay.
+- Each hit plays an excerpt of **`audio/samples/tormenta-albert.ogg`** (prepared
+  from the team's `TORMENTA ALBERT.wav` by `tools/audio/prepare.py`). The hit rate
+  is the audible “frequency of lightning”.
+- Every hit plays a **2.4 s tail** and is left to ring: new hits stack under it
+  instead of cutting it, so fast lightning keeps the thunder trails. The per-hit
+  gain is scaled by `1 / sqrt(hits per second)` so overlapping tails do not pile
+  up in loudness.
+- Excerpt starts cycle through 0.15, 4.25, 6.25 and 8.25 s so repeated hits do
+  not sound identical; a short attack and a 250 ms fade at the end keep the
+  onset percussive and the stop click-free.
+- If the sample cannot be fetched or decoded, the engine logs a warning and
+  falls back to the earlier synthesized hit (band-passed noise + triangle body,
+  pitch 90–330 Hz, `lightningToPercussion`). The rhythm and rate mapping are the
+  same in both cases.
 - A single `setTimeout` chain schedules the hits; it is cleared when the layer
   has no data or is disabled, and it is pulled forward when the rate rises so a
   faster rhythm does not wait for an old, long interval.
 - Hit nodes are created per hit and released on `ended`; the per-frame path
-  only updates the rate, pitch and gain.
+  only updates the rate and gain. The sample is loaded once in `start()`.
 
 ### Master chain
 
