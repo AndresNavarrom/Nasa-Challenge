@@ -149,7 +149,7 @@ docker compose up web     # then open http://127.0.0.1:5173/
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change. Until
   the timeline exists every layer shows its **first instant**.
-- **Amazon only layers** (smoke and CO2 today, `global: null`): drawn inside
+- **Amazon only layers** (`global: null`; none today): drawn inside
   the Amazon rectangle (`region.bbox`) from their regional grid, on the planet
   and on the map, and nothing elsewhere. Layers with a global grid use it
   outside the rectangle and their regional grid inside it.
@@ -254,14 +254,16 @@ See [`data/SOURCES.md`](data/SOURCES.md) for every file and link.
 
 - Forest height: GEDI Forest Height, [NASA SVS 4950](https://svs.gsfc.nasa.gov/4950)
 - Wildfire smoke: Air Quality Model Runs (GEOS-CF), [NASA SVS 5533](https://svs.gsfc.nasa.gov/5533)
-- CO2: DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196)
+- CO2: DYAMOND Global Carbon Dioxide, [NASA SVS 5196](https://svs.gsfc.nasa.gov/5196), 5760 x 3240 frames of the orbit animation
 - Backdrop of the planet: [NASA SVS 3615](https://svs.gsfc.nasa.gov/3615)
 
 **The values are relative intensities read from the colours of rendered
 visualization frames, not physical measurements.** Globe views were placed on
-the map by hand and are accurate to roughly 1 to 2 degrees. Smoke and CO2 cover
-the Amazon rectangle only, because their visualizations have no flat global
-view of a single variable.
+the map by hand and are accurate to roughly 1 to 2 degrees; the CO2 globe views
+were fitted to real coastlines (`tools/fetch/co2_calibrate.py`). CO2 is global
+but a mosaic: SVS 5196 is only published as a turning globe, so over the
+Americas and the Atlantic it moves with the timeline (23 to 25 February 2020)
+and elsewhere each region shows its own fixed date (14 January to 3 March 2020).
 
 ## Use of AI
 
