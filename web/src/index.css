@@ -1,12 +1,24 @@
 @import "tailwindcss";
 
-/* System fonts only: the demo must not load anything from the internet. */
+/* Nothing is loaded from the internet: the jukebox uses system fonts and the
+   landing page bundles its own. */
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --color-forest: #6fcf6b;
   --color-smoke: #f08a3c;
   --color-co2: #7fb4ff;
+
+  /* Landing page (ui/Landing.tsx). Its fonts are bundled, not downloaded. */
+  --font-display: "Sora Variable", var(--font-sans);
+  --font-text: "Inter Variable", var(--font-sans);
+  --font-label: "JetBrains Mono Variable", ui-monospace, monospace;
+  --color-landing-deep: #05070d;
+  --color-landing-ink: #e8edf5;
+  --color-landing-mist: #9aa8be;
+  --color-landing-label: #8fa0b8;
+  --color-landing-accent: #5ee9b5;
+  --color-landing-line: #16202f;
 }
 
 html,
