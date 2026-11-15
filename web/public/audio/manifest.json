@@ -13,7 +13,6 @@
       "durationSeconds": 3.818,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.2,
       "rmsDbfs": -20.3,
       "clipped": false,
@@ -24,7 +23,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "aire",
@@ -34,7 +35,6 @@
       "durationSeconds": 2.093,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -9.5,
       "rmsDbfs": -21.2,
       "clipped": false,
@@ -45,7 +45,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "aire-2",
@@ -55,7 +57,6 @@
       "durationSeconds": 4.145,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -14.8,
       "rmsDbfs": -30.3,
       "clipped": false,
@@ -66,7 +67,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "aire-denso",
@@ -76,7 +79,6 @@
       "durationSeconds": 3.917,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -7.3,
       "rmsDbfs": -21.6,
       "clipped": false,
@@ -87,7 +89,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "aire-denso-2",
@@ -97,7 +101,6 @@
       "durationSeconds": 3.484,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.4,
       "rmsDbfs": -14.0,
       "clipped": false,
@@ -108,7 +111,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "aire-largo",
@@ -118,7 +123,6 @@
       "durationSeconds": 9.119,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -5.8,
       "rmsDbfs": -18.2,
       "clipped": false,
@@ -129,7 +133,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "alarma-y-tambores",
@@ -139,7 +145,6 @@
       "durationSeconds": 2.308,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -7.2,
       "rmsDbfs": -24.2,
       "clipped": false,
@@ -150,7 +155,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "arpa",
@@ -160,7 +167,6 @@
       "durationSeconds": 1.583,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.2,
       "rmsDbfs": -20.4,
       "clipped": false,
@@ -171,7 +177,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "bichos-1",
@@ -179,9 +187,8 @@
       "original": "bichos 1.wav",
       "bytes": 1158085,
       "durationSeconds": 60.779,
-      "sampleRate": 96000,
+      "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -18.1,
       "rmsDbfs": -33.2,
       "clipped": false,
@@ -192,7 +199,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 96000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "explosion-pequena",
@@ -202,7 +211,6 @@
       "durationSeconds": 0.793,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.1,
       "rmsDbfs": -26.3,
       "clipped": false,
@@ -213,7 +221,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "fui-1",
@@ -223,7 +233,6 @@
       "durationSeconds": 1.687,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.2,
       "rmsDbfs": -19.7,
       "clipped": false,
@@ -234,7 +243,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "fui-1-opcion-3",
@@ -244,7 +255,6 @@
       "durationSeconds": 0.603,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -19.4,
       "rmsDbfs": -33.1,
       "clipped": false,
@@ -255,7 +265,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "fuiii-1-opcion-2",
@@ -265,7 +277,6 @@
       "durationSeconds": 1.488,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -8.6,
       "rmsDbfs": -23.2,
       "clipped": false,
@@ -276,7 +287,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "grillos-suves",
@@ -284,9 +297,8 @@
       "original": "grillos suves .wav",
       "bytes": 895400,
       "durationSeconds": 48.849,
-      "sampleRate": 44100,
+      "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -17.2,
       "rmsDbfs": -37.1,
       "clipped": false,
@@ -297,7 +309,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 44100,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "groar-seguido",
@@ -307,7 +321,6 @@
       "durationSeconds": 4.753,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -5.4,
       "rmsDbfs": -22.1,
       "clipped": false,
@@ -318,7 +331,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "groar-sencillo",
@@ -328,7 +343,6 @@
       "durationSeconds": 0.729,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.3,
       "rmsDbfs": -25.0,
       "clipped": false,
@@ -339,7 +353,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "gruar-mejor",
@@ -349,7 +365,6 @@
       "durationSeconds": 3.45,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -10.6,
       "rmsDbfs": -34.3,
       "clipped": false,
@@ -360,7 +375,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "guguguro-eco",
@@ -370,7 +387,6 @@
       "durationSeconds": 2.846,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.0,
       "rmsDbfs": -21.5,
       "clipped": false,
@@ -381,7 +397,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "guitrra",
@@ -391,7 +409,6 @@
       "durationSeconds": 2.155,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.1,
       "rmsDbfs": -18.7,
       "clipped": false,
@@ -402,7 +419,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "guugug",
@@ -412,7 +431,6 @@
       "durationSeconds": 4.728,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -5.8,
       "rmsDbfs": -16.4,
       "clipped": false,
@@ -423,7 +441,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "hubble",
@@ -433,7 +453,6 @@
       "durationSeconds": 13.302,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -0.8,
       "rmsDbfs": -17.7,
       "clipped": false,
@@ -444,7 +463,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "melodia-rela",
@@ -454,7 +475,6 @@
       "durationSeconds": 2.868,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -23.0,
       "rmsDbfs": -35.9,
       "clipped": false,
@@ -465,7 +485,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "mi-mi-mi-miiiii-suave",
@@ -475,7 +497,6 @@
       "durationSeconds": 2.498,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": 0.0,
       "rmsDbfs": -4.8,
       "clipped": true,
@@ -486,7 +507,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "miii-mimi",
@@ -496,7 +519,6 @@
       "durationSeconds": 1.996,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -19.1,
       "rmsDbfs": -30.8,
       "clipped": false,
@@ -507,7 +529,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "mimimimim",
@@ -517,7 +541,6 @@
       "durationSeconds": 1.884,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": 0.0,
       "rmsDbfs": -9.0,
       "clipped": true,
@@ -528,7 +551,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "movil",
@@ -538,7 +563,6 @@
       "durationSeconds": 2.336,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -15.1,
       "rmsDbfs": -30.8,
       "clipped": false,
@@ -549,7 +573,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "mumu",
@@ -559,7 +585,6 @@
       "durationSeconds": 185.705,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": 0.0,
       "rmsDbfs": -26.9,
       "clipped": true,
@@ -570,7 +595,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "oajaros-suaves",
@@ -578,9 +605,8 @@
       "original": "oajaros suaves .wav",
       "bytes": 2031058,
       "durationSeconds": 112.438,
-      "sampleRate": 44100,
+      "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -8.6,
       "rmsDbfs": -31.5,
       "clipped": false,
@@ -591,7 +617,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 44100,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "pi-pi-p-i-progresivo",
@@ -601,7 +629,6 @@
       "durationSeconds": 2.621,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -14.1,
       "rmsDbfs": -29.1,
       "clipped": false,
@@ -612,7 +639,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "pi-pi-pi-2",
@@ -622,7 +651,6 @@
       "durationSeconds": 55.432,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -10.3,
       "rmsDbfs": -37.6,
       "clipped": false,
@@ -633,7 +661,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "pimpum-suave",
@@ -643,7 +673,6 @@
       "durationSeconds": 1.022,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -22.5,
       "rmsDbfs": -34.9,
       "clipped": false,
@@ -654,7 +683,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "quemado",
@@ -664,7 +695,6 @@
       "durationSeconds": 2.852,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.2,
       "rmsDbfs": -17.5,
       "clipped": false,
@@ -675,7 +705,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "rayo-1",
@@ -685,7 +717,6 @@
       "durationSeconds": 4.027,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -15.3,
       "rmsDbfs": -29.8,
       "clipped": false,
@@ -696,7 +727,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "rfa-pequena-aire",
@@ -706,7 +739,6 @@
       "durationSeconds": 1.456,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -9.5,
       "rmsDbfs": -23.0,
       "clipped": false,
@@ -717,7 +749,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "rio",
@@ -725,9 +759,8 @@
       "original": "rio.wav",
       "bytes": 497683,
       "durationSeconds": 24.772,
-      "sampleRate": 44100,
+      "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -0.1,
       "rmsDbfs": -20.8,
       "clipped": false,
@@ -738,7 +771,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 44100,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "ro",
@@ -748,7 +783,6 @@
       "durationSeconds": 1.167,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -11.8,
       "rmsDbfs": -29.8,
       "clipped": false,
@@ -759,7 +793,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "run-run-run",
@@ -769,7 +805,6 @@
       "durationSeconds": 5.219,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -15.5,
       "rmsDbfs": -29.1,
       "clipped": false,
@@ -780,17 +815,18 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
-      "id": "tormeta-albert",
-      "file": "samples/tormeta-albert.ogg",
-      "original": "TORMETA ALBERT .wav",
+      "id": "tormenta-albert",
+      "file": "samples/tormenta-albert.ogg",
+      "original": "TORMENTA ALBERT.wav",
       "bytes": 277805,
       "durationSeconds": 16.588,
-      "sampleRate": 44100,
+      "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.3,
       "rmsDbfs": -28.8,
       "clipped": false,
@@ -801,7 +837,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 44100,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "viento-1",
@@ -811,7 +849,6 @@
       "durationSeconds": 3.513,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -25.6,
       "rmsDbfs": -39.8,
       "clipped": false,
@@ -822,7 +859,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "vineto-2",
@@ -832,7 +871,6 @@
       "durationSeconds": 3.301,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -8.0,
       "rmsDbfs": -27.5,
       "clipped": false,
@@ -843,7 +881,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "wua-1",
@@ -853,7 +893,6 @@
       "durationSeconds": 0.462,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -6.2,
       "rmsDbfs": -19.0,
       "clipped": false,
@@ -864,7 +903,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "wuaw-1-opcion-2",
@@ -874,7 +915,6 @@
       "durationSeconds": 0.725,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -16.4,
       "rmsDbfs": -30.8,
       "clipped": false,
@@ -885,7 +925,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     },
     {
       "id": "wuwuw-1",
@@ -895,7 +937,6 @@
       "durationSeconds": 0.42,
       "sampleRate": 48000,
       "channels": 2,
-      "bitsPerSample": 16,
       "peakDbfs": -9.6,
       "rmsDbfs": -24.3,
       "clipped": false,
@@ -906,7 +947,9 @@
       "loop": null,
       "gainDb": null,
       "credit": null,
-      "metadata": null
+      "metadata": null,
+      "sourceSampleRate": 48000,
+      "sourceBitsPerSample": 16
     }
   ]
 }

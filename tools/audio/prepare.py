@@ -144,9 +144,9 @@ def measure(path: Path) -> dict:
 
     return {
         "durationSeconds": round(duration, 3),
-        "sampleRate": sample_rate,
+        "sourceSampleRate": sample_rate,
         "channels": channels,
-        "bitsPerSample": sample_width * 8,
+        "sourceBitsPerSample": sample_width * 8,
         "peakDbfs": dbfs(peak),
         "rmsDbfs": dbfs(rms),
         "clipped": peak is not None and peak >= 0.999,
@@ -190,11 +190,44 @@ def prepare(source_dir: Path, out_dir: Path, manifest_path: Path, sample_rate: i
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
+    previous: dict[str, dict] = {}
+    if manifest_path.is_file():
+        try:
+            old = json.loads(manifest_path.read_text(encoding="utf-8"))
+            previous = {item["original"]: item for item in old.get("samples", []) if item.get("original")}
+        except (OSError, ValueError, TypeError):
+            previous = {}
+
     used_ids: set[str] = set()
     samples: list[dict] = []
     failures: list[str] = []
 
     for index, source in enumerate(sources, start=1):
+        source_hash = sha256_of(source)
+        prior = previous.get(source.name)
+        if prior and prior.get("sourceSha256") == source_hash:
+            prior_file = Path(str(prior.get("file", ""))).name
+            prior_destination = out_dir / prior_file
+            if prior_file and prior_destination.is_file():
+                sound_id = str(prior.get("id") or slugify(source.stem))
+                used_ids.add(sound_id)
+                print(f"[{index}/{len(sources)}] {source.name} -> {prior_file} (unchanged)", flush=True)
+                reused = {
+                    **prior,
+                    "id": sound_id,
+                    "file": f"samples/{prior_file}",
+                    "original": source.name,
+                    "bytes": prior_destination.stat().st_size,
+                    "sourceSampleRate": prior.get("sourceSampleRate", prior.get("sampleRate", sample_rate)),
+                    "sourceBitsPerSample": prior.get("sourceBitsPerSample", prior.get("bitsPerSample", 16)),
+                    "sampleRate": sample_rate,
+                    "sourceSha256": source_hash,
+                    "suggestedCategory": suggest_category(source.name),
+                }
+                reused.pop("bitsPerSample", None)
+                samples.append(reused)
+                continue
+
         base_id = slugify(source.stem)
         sound_id = base_id
         suffix = 2
@@ -221,18 +254,26 @@ def prepare(source_dir: Path, out_dir: Path, manifest_path: Path, sample_rate: i
                 "file": f"samples/{destination.name}",
                 "original": source.name,
                 "bytes": destination.stat().st_size,
+                "sampleRate": sample_rate,
                 **measurements,
-                "sourceSha256": sha256_of(source),
+                "sourceSha256": source_hash,
                 "suggestedCategory": suggest_category(source.name),
-                # Final metadata arrives later; keep a stable, explicit placeholder.
-                "category": None,
-                "role": None,
-                "loop": None,
-                "gainDb": None,
-                "credit": None,
-                "metadata": None,
+                # Final metadata arrives later. Preserve anything already filled in
+                # for a sound whose content changed, so a re-run never loses it.
+                "category": prior.get("category") if prior else None,
+                "role": prior.get("role") if prior else None,
+                "loop": prior.get("loop") if prior else None,
+                "gainDb": prior.get("gainDb") if prior else None,
+                "credit": prior.get("credit") if prior else None,
+                "metadata": prior.get("metadata") if prior else None,
             }
         )
+
+    written = {Path(item["file"]).name for item in samples}
+    for stale in out_dir.glob("*.ogg"):
+        if stale.name not in written:
+            stale.unlink()
+            print(f"Removed stale {stale.name}", flush=True)
 
     samples.sort(key=lambda item: item["id"])
     manifest = {

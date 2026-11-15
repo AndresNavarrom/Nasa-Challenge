@@ -9,7 +9,7 @@ afterEach(() => {
 
 function setup() {
   const context = new FakeAudioContext();
-  const engine = createSoundEngine({ context: context.asAudioContext() });
+  const engine = createSoundEngine({ context: context.asAudioContext(), lightningSampleUrl: null });
   return { context, engine };
 }
 

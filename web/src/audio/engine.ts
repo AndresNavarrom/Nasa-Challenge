@@ -39,6 +39,12 @@ export interface SoundEngineOptions {
   rampSeconds?: number;
   /** Time constant of the one-pole input smoother, in seconds. */
   smoothingSeconds?: number;
+  /** Thunder sample for the lightning layer; `null` keeps the synthesized hit. */
+  lightningSampleUrl?: string | null;
+  /** Injected sample buffer (tests); skips the network. */
+  lightningSample?: AudioBuffer | null;
+  /** Loader injection for tests; defaults to `fetch`. */
+  fetchSample?: (url: string) => Promise<ArrayBuffer>;
 }
 
 const DEFAULT_RAMP_SECONDS = 0.05;
@@ -48,6 +54,12 @@ const STOP_FADE_SECONDS = 0.2;
 const SETTLE_MS = 250;
 /** When the rate rises by more than this, the pending hit is moved earlier. */
 const LIGHTNING_RATE_RESCHEDULE = 0.05;
+/** Thunder sample prepared by tools/audio/prepare.py from TORMENTA ALBERT.wav. */
+export const DEFAULT_LIGHTNING_SAMPLE_URL = "./audio/samples/tormenta-albert.ogg";
+/** Excerpt starts (seconds) cycled through so repeated hits do not sound identical. */
+const LIGHTNING_SAMPLE_OFFSETS = [0.15, 4.25, 6.25, 8.25];
+const LIGHTNING_SAMPLE_GAIN = 0.9;
+const LIGHTNING_SAMPLE_ATTACK = 0.008;
 const FOREST_HARMONY_MIX = 0.35;
 const FOREST_LOWPASS_HZ = 4000;
 const SMOKE_TONE_HZ = 180;
@@ -160,7 +172,12 @@ export class WebAudioSoundEngine implements SoundEngine {
   private lightningNextHitAt = 0;
   private lightningPitchHz = 90;
   private lightningDecaySeconds = 0.16;
+  private lightningHitIndex = 0;
   private readonly lightningHits = new Set<LightningHit>();
+  private readonly lightningSampleUrl: string | null;
+  private readonly fetchSample: (url: string) => Promise<ArrayBuffer>;
+  private lightningSample: AudioBuffer | null;
+  private lightningSampleLoad: Promise<void> | null = null;
 
   /** Keeps `state` honest when the browser or the OS suspends the context. */
   private readonly handleContextStateChange = (): void => {
@@ -179,6 +196,16 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.injectedContext = options.context;
     this.rampSeconds = options.rampSeconds ?? DEFAULT_RAMP_SECONDS;
     this.smoothingSeconds = options.smoothingSeconds ?? DEFAULT_SMOOTHING_SECONDS;
+    this.lightningSampleUrl =
+      options.lightningSampleUrl === undefined ? DEFAULT_LIGHTNING_SAMPLE_URL : options.lightningSampleUrl;
+    this.lightningSample = options.lightningSample ?? null;
+    this.fetchSample =
+      options.fetchSample ??
+      (async (url: string) => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+        return response.arrayBuffer();
+      });
   }
 
   get state(): SoundEngineState {
@@ -199,6 +226,9 @@ export class WebAudioSoundEngine implements SoundEngine {
     this.clearSuspendTimer();
     this.clearSettleTimers();
     this.clearLightning();
+    this.lightningHitIndex = 0;
+    await this.loadLightningSample(context);
+    if (this.context !== context || !this.graph) return;
     try {
       await context.resume();
     } catch (cause) {
@@ -735,6 +765,10 @@ export class WebAudioSoundEngine implements SoundEngine {
     const context = this.context;
     const graph = this.graph;
     if (!context || !graph || this.currentState !== "running") return;
+    if (this.lightningSample) {
+      this.playLightningSampleHit(this.lightningSample);
+      return;
+    }
     const now = context.currentTime;
     const pitch = this.lightningPitchHz;
     const decay = this.lightningDecaySeconds;
@@ -807,6 +841,86 @@ export class WebAudioSoundEngine implements SoundEngine {
       },
     };
     body.onended = cleanup;
+    this.lightningHits.add(hit);
+  }
+
+  /** Loads the thunder sample once; a failure leaves the synthesized fallback. */
+  private async loadLightningSample(context: AudioContext): Promise<void> {
+    const url = this.lightningSampleUrl;
+    if (!url || this.lightningSample) return;
+    if (!this.lightningSampleLoad) {
+      this.lightningSampleLoad = (async () => {
+        try {
+          const data = await this.fetchSample(url);
+          this.lightningSample = await context.decodeAudioData(data.slice(0));
+        } catch (cause) {
+          console.warn(
+            "Earth Jukebox: the thunder sample could not be loaded; using the synthesized hit.",
+            cause,
+          );
+        }
+      })();
+    }
+    await this.lightningSampleLoad;
+  }
+
+  /** Grain length shrinks as the hit rate rises, so fast hits do not turn to mud. */
+  private lightningGrainSeconds(): number {
+    const rate = Math.max(0.1, this.lightningRateHz);
+    return Math.min(1.2, Math.max(0.45, 1.2 / rate));
+  }
+
+  /** One hit built from an excerpt of the thunder sample. */
+  private playLightningSampleHit(sample: AudioBuffer): void {
+    const context = this.context;
+    const graph = this.graph;
+    if (!context || !graph || this.currentState !== "running") return;
+    const now = context.currentTime;
+    const grain = this.lightningGrainSeconds();
+    const duration = Number.isFinite(sample.duration) && sample.duration > 0 ? sample.duration : grain;
+    const baseOffset = LIGHTNING_SAMPLE_OFFSETS[this.lightningHitIndex % LIGHTNING_SAMPLE_OFFSETS.length] ?? 0;
+    this.lightningHitIndex += 1;
+    const offset = Math.min(Math.max(0, duration - grain), baseOffset);
+
+    const source = context.createBufferSource();
+    source.buffer = sample;
+    const gain = context.createGain();
+    source.connect(gain);
+    gain.connect(graph.lightning.gain);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(LIGHTNING_SAMPLE_GAIN, now + LIGHTNING_SAMPLE_ATTACK);
+    gain.gain.setValueAtTime(LIGHTNING_SAMPLE_GAIN, now + Math.min(grain * 0.6, 0.4));
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + grain);
+    source.start(now, offset, grain);
+    source.stop(now + grain + 0.02);
+
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      try {
+        source.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      try {
+        gain.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+      this.lightningHits.delete(hit);
+    };
+    const hit: LightningHit = {
+      stop: () => {
+        try {
+          source.stop();
+        } catch {
+          // Already stopped.
+        }
+        cleanup();
+      },
+    };
+    source.onended = cleanup;
     this.lightningHits.add(hit);
   }
 

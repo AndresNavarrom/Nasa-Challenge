@@ -13,6 +13,7 @@ function setup() {
     context: context.asAudioContext(),
     rampSeconds: 0.05,
     smoothingSeconds: 0.15,
+    lightningSampleUrl: null,
   });
   return { context, engine };
 }
@@ -265,6 +266,63 @@ describe("sound engine", () => {
 
     engine.dispose();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("uses the thunder sample for lightning hits when it is available", async () => {
+    vi.useFakeTimers();
+    const context = new FakeAudioContext();
+    const sample = { duration: 16.6 } as AudioBuffer;
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSample: sample,
+      lightningSampleUrl: null,
+    });
+    engine.setLayerIntensity("lightning", 0.5);
+    await engine.start();
+    const sourcesBefore = context.bufferSources.length; // the shared noise loop
+
+    vi.advanceTimersByTime(1);
+    expect(context.bufferSources).toHaveLength(sourcesBefore + 1);
+    expect(context.bufferSources.at(-1)?.buffer).toBe(sample);
+    expect(context.oscillators).toHaveLength(6); // no synthesized body
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("loads the thunder sample once from its URL", async () => {
+    const context = new FakeAudioContext();
+    const fetchSample = vi.fn(async () => new ArrayBuffer(8));
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: "thunder.ogg",
+      fetchSample,
+    });
+
+    await engine.start();
+    expect(fetchSample).toHaveBeenCalledTimes(1);
+    expect(context.decodeAudioData).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+
+  it("falls back to the synthesized hit when the sample cannot be loaded", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const context = new FakeAudioContext();
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: "missing.ogg",
+      fetchSample: async () => {
+        throw new Error("offline");
+      },
+    });
+    engine.setLayerIntensity("lightning", 0.5);
+    await engine.start();
+
+    vi.advanceTimersByTime(1);
+    expect(context.oscillators).toHaveLength(7); // synthesized body
+    engine.dispose();
+    warn.mockRestore();
   });
 
   it("stops the lightning rhythm when the layer has no data", async () => {
