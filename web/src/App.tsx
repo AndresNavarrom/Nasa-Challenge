@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Driver } from "driver.js";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AudioStart } from "./audio/AudioStart";
 import type { SoundEngine } from "./audio/engine";
 import { useSoundEngine } from "./audio/useSoundEngine";
@@ -8,7 +9,10 @@ import { sampleLayerAt } from "./lib/interpolate";
 import { EarthScene, type Probe, type TargetView } from "./scene/EarthScene";
 import type { ViewMode } from "./scene/FocusTransition";
 import { ListeningPointProvider, useListeningPoint } from "./scene/listeningPoint";
+import { allHeard, isHeard, withHeard, type HeardLayers } from "./ui/heardLayers";
 import { PlanetHud } from "./ui/PlanetHud";
+import { startTour } from "./ui/tour";
+import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
 type LoadState =
   | { status: "loading" }
@@ -26,8 +30,17 @@ function defaultLayerId(data: JukeboxData): string {
   return withGlobal?.manifest.id ?? "";
 }
 
+interface PlanetViewProps {
+  data: JukeboxData;
+  lite: boolean;
+  audio?: ReactNode;
+  heard?: HeardLayers;
+  onToggleHeard?: (layerId: string, on: boolean) => void;
+  onShowTour?: () => void;
+}
+
 /** The planet, the Amazon map and their controls, once the data is loaded. */
-function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; audio?: ReactNode }) {
+function PlanetView({ data, lite, audio, heard, onToggleHeard, onShowTour }: PlanetViewProps) {
   const [activeLayerId, setActiveLayerId] = useState(() => defaultLayerId(data));
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
@@ -77,6 +90,9 @@ function PlanetView({ data, lite, audio }: { data: JukeboxData; lite: boolean; a
         lite={lite}
         sceneError={sceneError}
         audio={audio}
+        heard={heard}
+        onToggleHeard={onToggleHeard}
+        onShowTour={onShowTour}
       />
     </>
   );
@@ -107,11 +123,59 @@ function AudioListener({ data, engine }: { data: JukeboxData; engine: SoundEngin
   return null;
 }
 
+/** Delay before the first-visit tour, so the HUD is laid out when it measures it. */
+const TOUR_START_DELAY_MS = 400;
+
+/**
+ * The welcome window and guided tour: shown by itself on the first visit of
+ * this browser, and again whenever `show` is called (the "?" button).
+ */
+function useGuidedTour(): () => void {
+  const tourRef = useRef<Driver | null>(null);
+
+  const show = useCallback(() => {
+    tourRef.current?.destroy();
+    tourRef.current = startTour(() => {
+      markTourSeen(browserFlagStore());
+      tourRef.current = null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hasSeenTour(browserFlagStore())) return undefined;
+    const timer = window.setTimeout(show, TOUR_START_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [show]);
+
+  // Close a tour that is still open when the view goes away.
+  useEffect(() => () => tourRef.current?.destroy(), []);
+
+  return show;
+}
+
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
+  const [heard, setHeard] = useState<HeardLayers>(() => allHeard(data.layers.map((layer) => layer.manifest.id)));
+  const toggleHeard = useCallback((layerId: string, on: boolean) => setHeard((current) => withHeard(current, layerId, on)), []);
+  const showTour = useGuidedTour();
+
+  // A layer that is not heard keeps its data and drawing; only its voice goes quiet.
+  useEffect(() => {
+    for (const layer of data.layers) {
+      engine.setLayerEnabled(layer.manifest.id, isHeard(heard, layer.manifest.id));
+    }
+  }, [engine, data, heard]);
+
   return (
     <>
-      <PlanetView data={data} lite={lite} audio={<AudioStart engine={engine} className="w-56" />} />
+      <PlanetView
+        data={data}
+        lite={lite}
+        audio={<AudioStart engine={engine} className="w-56" />}
+        heard={heard}
+        onToggleHeard={toggleHeard}
+        onShowTour={showTour}
+      />
       <AudioListener data={data} engine={engine} />
     </>
   );
