@@ -1,4 +1,4 @@
-"""SVS 5011 lightning windows -> one grey PNG per quarter, for the timeline.
+"""SVS 5011 lightning windows -> one grey PNG per month, for the timeline.
 
 The saved lightning windows (data/raw/5011/lightning_dots_2017_2023.npz, made by
 ``lightning_dots.py collect``) hold the lightning pixels of 250 frames of the
@@ -8,18 +8,18 @@ lightning; the video runs linearly from 1 January 2017 to 31 July 2023 over
 (about 9.6 days apart for the 250 frames expected; the count of the saved
 windows is used, not a fixed 250).
 
-Each window is placed in the quarter that holds its middle day, and every
-quarter becomes one image: the mean yellowness (0..255, see
-lightning_composite.py) of the windows of that quarter only. Nothing is carried
-over from one quarter to the next, so playing the images in order shows where
-lightning was seen in each quarter, not an accumulation. The last quarter holds
-July 2023 only.
+Each window is placed in the month that holds its middle day, and every month
+becomes one image: the mean yellowness (0..255, see lightning_composite.py) of
+the windows of that month only (two to four of them). Nothing is carried over
+from one month to the next, so playing the images in order shows where
+lightning was seen in each month (the storm belt moving north and south with
+the seasons), not an accumulation.
 
 The output images have the size of the video frames (equirectangular, north row
-first, 0 = no lightning) and are named ``lightning_<year>_q<n>.png``. The script
-prints one line per quarter: file, label and number of windows.
+first, 0 = no lightning) and are named ``lightning_<year>_<mm>.png``. The script
+prints one line per month: file, label, ISO start date and number of windows.
 
-Usage: python lightning_quarters.py DOTS.npz OUTPUT_DIR
+Usage: python lightning_months.py DOTS.npz OUTPUT_DIR
 """
 
 from __future__ import annotations
@@ -43,26 +43,25 @@ WINDOW_DAYS = 10
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
-@dataclass(frozen=True)
-class Quarter:
+@dataclass(frozen=True, order=True)
+class Month:
     year: int
-    number: int  # 1..4
+    number: int  # 1..12
 
     @property
     def file(self) -> str:
-        return f"lightning_{self.year}_q{self.number}.png"
-
-    @property
-    def first_month(self) -> int:
-        return (self.number - 1) * 3 + 1
+        return f"lightning_{self.year}_{self.number:02d}.png"
 
     def label(self) -> str:
-        """Months of the quarter inside the period, e.g. "Jan - Mar 2017" or "Jul 2023"."""
-        first = self.first_month
-        last = min(first + 2, PERIOD_END.month) if self.year == PERIOD_END.year else first + 2
-        if last <= first:
-            return f"{MONTHS[first - 1]} {self.year}"
-        return f"{MONTHS[first - 1]} - {MONTHS[last - 1]} {self.year}"
+        """Readable month, e.g. "Jan 2017"."""
+        return f"{MONTHS[self.number - 1]} {self.year}"
+
+    def iso(self) -> str:
+        """First day of the month at midnight UTC, e.g. "2017-01-01T00:00:00Z"."""
+        return f"{self.year:04d}-{self.number:02d}-01T00:00:00Z"
+
+    def next(self) -> "Month":
+        return Month(self.year + 1, 1) if self.number == 12 else Month(self.year, self.number + 1)
 
 
 def window_middle(frame: int, frames: int = EXPECTED_FRAMES) -> date:
@@ -76,28 +75,28 @@ def window_middle(frame: int, frames: int = EXPECTED_FRAMES) -> date:
     return end - timedelta(days=WINDOW_DAYS / 2)
 
 
-def quarter_of(day: date) -> Quarter:
-    return Quarter(day.year, (day.month - 1) // 3 + 1)
+def month_of(day: date) -> Month:
+    return Month(day.year, day.month)
 
 
-def quarters_in_period() -> list[Quarter]:
-    quarters: list[Quarter] = []
-    current = quarter_of(PERIOD_START)
-    last = quarter_of(PERIOD_END)
-    while (current.year, current.number) <= (last.year, last.number):
-        quarters.append(current)
-        current = Quarter(current.year + 1, 1) if current.number == 4 else Quarter(current.year, current.number + 1)
-    return quarters
+def months_in_period() -> list[Month]:
+    months: list[Month] = []
+    current = month_of(PERIOD_START)
+    last = month_of(PERIOD_END)
+    while current <= last:
+        months.append(current)
+        current = current.next()
+    return months
 
 
-def windows_by_quarter(frames: int) -> dict[Quarter, list[int]]:
-    """Frames of each quarter of the period; windows whose middle falls outside the period are left out."""
-    groups: dict[Quarter, list[int]] = {quarter: [] for quarter in quarters_in_period()}
+def windows_by_month(frames: int) -> dict[Month, list[int]]:
+    """Frames of each month of the period; windows whose middle falls outside the period are left out."""
+    groups: dict[Month, list[int]] = {month: [] for month in months_in_period()}
     for frame in range(frames):
         middle = window_middle(frame, frames)
         if middle < PERIOD_START or middle > PERIOD_END:
             continue
-        groups[quarter_of(middle)].append(frame)
+        groups[month_of(middle)].append(frame)
     return groups
 
 
@@ -120,23 +119,23 @@ def main(argv: list[str]) -> int:
     try:
         dots = load_dots(source)
     except DotsError as error:
-        print(f"lightning_quarters: {error}", file=sys.stderr)
+        print(f"lightning_months: {error}", file=sys.stderr)
         return 1
-    groups = windows_by_quarter(dots.frames)
-    empty = [quarter.label() for quarter, frames in groups.items() if not frames]
+    groups = windows_by_month(dots.frames)
+    empty = [month.label() for month, frames in groups.items() if not frames]
     if empty:
-        print(f"lightning_quarters: no window falls in {', '.join(empty)}", file=sys.stderr)
+        print(f"lightning_months: no window falls in {', '.join(empty)}", file=sys.stderr)
         return 1
     from PIL import Image
 
     target.mkdir(parents=True, exist_ok=True)
-    for quarter, frames in groups.items():
+    for month, frames in groups.items():
         grey = mean_of_windows(dots, frames)
-        path = target / quarter.file
+        path = target / month.file
         partial = path.with_name(path.name + ".part.png")
         Image.fromarray(grey, mode="L").save(partial)
         partial.replace(path)
-        print(f"{quarter.file}\t{quarter.label()}\t{len(frames)}")
+        print(f"{month.file}\t{month.label()}\t{month.iso()}\t{len(frames)}")
     return 0
 
 

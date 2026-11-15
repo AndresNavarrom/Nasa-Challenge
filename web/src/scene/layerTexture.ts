@@ -41,23 +41,16 @@ export const LIGHTNING_STOPS: readonly Rgb[] = [
 ];
 
 /**
- * CO2 colours, after NASA SVS 5196: amber where there is a little, then orange and
- * red-orange, pale yellow where there is the most (big emitters, fires).
+ * CO2 colours for OCO-2 GEOS XCO2 on its fixed 404..420 ppm scale: deep blue where
+ * the column holds the least, through pale yellow, to red where it holds the most.
  */
 export const CO2_STOPS: readonly Rgb[] = [
-  [110, 50, 20],
-  [190, 85, 25],
-  [235, 70, 30],
-  [255, 150, 40],
-  [255, 235, 160],
+  [45, 70, 150],
+  [60, 140, 195],
+  [235, 225, 150],
+  [240, 140, 55],
+  [195, 45, 40],
 ];
-
-/**
- * Grid value that takes the brightest CO2 colour. The CO2 "warmth" grid sits low
- * on its scale: across the planet half the cells are 0, 99 % are below 55 and only
- * the biggest sources (eastern China, central Africa) pass 96 (about 0.3 % of cells).
- */
-export const CO2_DOMAIN = 96;
 
 export const LAYER_OPACITY_DEFAULT = 0.8;
 
@@ -85,7 +78,32 @@ export const RELIEF_LAYERS: ReadonlySet<string> = new Set(["forest"]);
 
 export const NEUTRAL_RAMP: ColorRamp = { low: [90, 90, 100], high: [240, 240, 245], maxAlpha: 1 };
 
-const SMOKE_RAMP: ColorRamp = { low: [170, 170, 170], high: [125, 72, 30], maxAlpha: 1 };
+/**
+ * Smoke colours on the square-root optical depth scale of MERRA-2 (0..255 = 0..2):
+ * pale yellow haze, orange, then dark brown and charcoal in the thickest plumes.
+ */
+export const SMOKE_STOPS: readonly Rgb[] = [
+  [250, 235, 170],
+  [245, 185, 90],
+  [215, 110, 45],
+  [140, 60, 35],
+  [60, 35, 30],
+];
+
+/**
+ * The cleanest air (below about 0.02 of optical depth, grey 25) stays clear, smoke
+ * fades in up to grey 60 (about 0.11, a visible haze) and is opaque above, so only
+ * the smoke shows, not a tint over the whole planet.
+ */
+const SMOKE_RAMP: ColorRamp = {
+  low: SMOKE_STOPS[0]!,
+  high: SMOKE_STOPS[SMOKE_STOPS.length - 1]!,
+  maxAlpha: 1,
+  stops: SMOKE_STOPS,
+  presence: { from: 60, fade: 35 },
+  opacity: 0.85,
+  baseDim: 0.15,
+};
 
 /** Ramps keyed by layer id; ids not listed here use NEUTRAL_RAMP. */
 export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {
@@ -93,18 +111,16 @@ export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {
   forest: { low: [77, 61, 38], high: [253, 239, 229], maxAlpha: 1, stops: GEDI_COLORBAR, presence: { from: 6, fade: 4 }, opacity: 0.95 },
   smoke: SMOKE_RAMP,
   aerosol: SMOKE_RAMP,
-  // Hot spots stand out over a dimmed grey Earth: the faint background haze (below
-  // 14 of 255, where 90 % of the cells are) stays transparent, CO2 fades in up to
-  // 64 and is opaque above, and the colours span 0..CO2_DOMAIN instead of 0..255.
+  // A field that covers the whole planet every day: drawn everywhere there is data
+  // (0 is only the fill value), see-through enough to keep the continents readable.
   co2: {
     low: CO2_STOPS[0]!,
     high: CO2_STOPS[CO2_STOPS.length - 1]!,
     maxAlpha: 1,
     stops: CO2_STOPS,
-    domain: CO2_DOMAIN,
-    presence: { from: 64, fade: 50 },
-    opacity: 0.95,
-    baseDim: 0.7,
+    presence: { from: 1, fade: 1 },
+    opacity: 0.7,
+    baseDim: 0.35,
   },
   // Like NASA SVS 5011: glowing orange and yellow flashes over a dimmed grey Earth.
   // Rare lightning stays transparent (half of the cells with any lightning are below
@@ -236,6 +252,12 @@ export interface LayerTextures {
   global: DataTexture | null;
   /** Amazon texture, drawn inside `region.bbox` on the planet and on the map. */
   region: DataTexture;
+  /**
+   * The next instant, which the shader fades in over `global` / `region` as the
+   * timeline moves between the two (uFrameMix). Equal to `nextFrame`.
+   */
+  globalNext: DataTexture | null;
+  regionNext: DataTexture;
   /** Heights for relief layers (RELIEF_LAYERS); null otherwise. */
   heightGlobal: DataTexture | null;
   heightRegion: DataTexture | null;
@@ -245,14 +267,21 @@ export interface LayerTextures {
   baseDim: number;
   /** Instant currently drawn in `global` and `region`. */
   frame: number;
+  /** Instant currently drawn in `globalNext` and `regionNext`. */
+  nextFrame: number;
 }
 
 /**
- * three.js textures of one instant of a layer (the first by default). Rows keep
- * the grid order (north first), so shaders sample them with
+ * three.js textures of one instant of a layer (the first by default) and of the
+ * instant the shader fades towards (`nextFrame`, the same one by default). Rows
+ * keep the grid order (north first), so shaders sample them with
  * `v = (north - lat) / (north - south)`.
  */
-export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTANT): LayerTextures {
+export function layerTextureFor(
+  layer: LoadedLayer,
+  frame: number = FIRST_INSTANT,
+  nextFrame: number = frame,
+): LayerTextures {
   const id = layer.manifest.id;
   const created: DataTexture[] = [];
   const keep = (texture: DataTexture): DataTexture => {
@@ -262,6 +291,8 @@ export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTAN
   try {
     const global = layer.global ? keep(textureOf(layer.global, id, true, frame)) : null;
     const region = keep(textureOf(layer.region, id, false, frame));
+    const globalNext = layer.global ? keep(textureOf(layer.global, id, true, nextFrame)) : null;
+    const regionNext = keep(textureOf(layer.region, id, false, nextFrame));
     const relief = RELIEF_LAYERS.has(id);
     const heightGlobal = relief && layer.global ? keep(heightTextureOf(layer.global, id, true)) : null;
     const heightRegion = relief ? keep(heightTextureOf(layer.region, id, false)) : null;
@@ -269,11 +300,14 @@ export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTAN
     return {
       global,
       region,
+      globalNext,
+      regionNext,
       heightGlobal,
       heightRegion,
       opacity: ramp.opacity ?? LAYER_OPACITY_DEFAULT,
       baseDim: ramp.baseDim ?? 0,
       frame: frameIn(layer.region, frame),
+      nextFrame: frameIn(layer.region, nextFrame),
     };
   } catch (cause) {
     // Some textures may already exist when a later one throws.
@@ -282,33 +316,75 @@ export function layerTextureFor(layer: LoadedLayer, frame: number = FIRST_INSTAN
   }
 }
 
-/**
- * Redraws the layer's textures at another instant, in place: the shader keeps the
- * same textures and only their pixels change, so one instant replaces the previous
- * one (nothing accumulates). Does nothing when that instant is already drawn.
- * Heights (relief) stay on the first instant: only static layers have relief.
- */
-export function showLayerFrame(textures: LayerTextures, layer: LoadedLayer, frame: number): void {
-  const next = frameIn(layer.region, frame);
-  if (next === textures.frame) return;
-  const id = layer.manifest.id;
-  // Both images are computed before either texture changes, so a failure leaves
-  // the planet and the Amazon map on the same (previous) instant.
+type Pixels = Uint8Array;
+
+/** Pixels of one view (planet or Amazon) for the pair of instants, reusing what is already drawn. */
+function pairPixels(
+  grid: Grid,
+  drawn: { frame: number; pixels: Pixels; nextFrame: number; nextPixels: Pixels },
+  from: number,
+  to: number,
+  id: string,
+): { pixels: Pixels; nextPixels: Pixels } {
   const ramp = rampFor(id);
-  const globalPixels = textures.global && layer.global ? gridToRgba(layer.global, frameIn(layer.global, next), ramp, id) : null;
-  const regionPixels = gridToRgba(layer.region, frameIn(layer.region, next), ramp, id);
-  if (textures.global && globalPixels) {
-    textures.global.image.data = globalPixels;
-    textures.global.needsUpdate = true;
+  const reuse = (frame: number): Pixels | null =>
+    frame === drawn.frame ? drawn.pixels : frame === drawn.nextFrame ? drawn.nextPixels : null;
+  const pixels = reuse(from) ?? gridToRgba(grid, frameIn(grid, from), ramp, id);
+  const nextPixels = to === from ? pixels : (reuse(to) ?? gridToRgba(grid, frameIn(grid, to), ramp, id));
+  return { pixels, nextPixels };
+}
+
+/**
+ * Redraws the layer's textures at another pair of instants, in place: the shader
+ * keeps the same textures and only their pixels change, so the instants on screen
+ * replace the previous ones (nothing accumulates). Moving on by one instant only
+ * computes the new later one: the earlier one is the image already drawn.
+ * Does nothing when that pair is already drawn. Heights (relief) stay on the
+ * first instant: only static layers have relief.
+ */
+export function showLayerBlend(textures: LayerTextures, layer: LoadedLayer, from: number, to: number): void {
+  const first = frameIn(layer.region, from);
+  const second = frameIn(layer.region, to);
+  if (first === textures.frame && second === textures.nextFrame) return;
+  const id = layer.manifest.id;
+  const drawn = (texture: DataTexture, next: DataTexture) => ({
+    frame: textures.frame,
+    pixels: texture.image.data as Pixels,
+    nextFrame: textures.nextFrame,
+    nextPixels: next.image.data as Pixels,
+  });
+  // Every image is computed before any texture changes, so a failure leaves the
+  // planet and the Amazon map on the same (previous) instants.
+  const globalPair =
+    textures.global && textures.globalNext && layer.global
+      ? pairPixels(layer.global, drawn(textures.global, textures.globalNext), first, second, id)
+      : null;
+  const regionPair = pairPixels(layer.region, drawn(textures.region, textures.regionNext), first, second, id);
+  const put = (texture: DataTexture, pixels: Pixels): void => {
+    if (texture.image.data === pixels) return;
+    texture.image.data = pixels;
+    texture.needsUpdate = true;
+  };
+  if (globalPair && textures.global && textures.globalNext) {
+    put(textures.global, globalPair.pixels);
+    put(textures.globalNext, globalPair.nextPixels);
   }
-  textures.region.image.data = regionPixels;
-  textures.region.needsUpdate = true;
-  textures.frame = next;
+  put(textures.region, regionPair.pixels);
+  put(textures.regionNext, regionPair.nextPixels);
+  textures.frame = first;
+  textures.nextFrame = second;
+}
+
+/** Shows a single instant (no fade): the earlier and later textures both hold it. */
+export function showLayerFrame(textures: LayerTextures, layer: LoadedLayer, frame: number): void {
+  showLayerBlend(textures, layer, frame, frame);
 }
 
 export function disposeLayerTextures(textures: LayerTextures): void {
   textures.global?.dispose();
   textures.region.dispose();
+  textures.globalNext?.dispose();
+  textures.regionNext.dispose();
   textures.heightGlobal?.dispose();
   textures.heightRegion?.dispose();
 }

@@ -1,32 +1,46 @@
-// Shared timeline state for the app (FR7): one playback clock that the audio
-// (and, in the next slice, the scene and the timeline bar) read.
+// Shared timeline state for the app (FR7): one position that the audio, the
+// scene and the timeline line under the planet read.
 //
 // Decisions recorded here (full rationale in docs/TIMELINE-HANDOFF.md):
-// - Shared normalized position, loop forever, 1x default, speed 0.1x-8x.
-// - State is published at ~30 Hz while playing, not on every animation frame,
-//   so the scene and the audio engine are not re-rendered 60 times a second.
-// - The provider owns no UI. Controls (TimelineBar, step 13) call the actions.
+// - Shared normalized position, loop forever.
+// - In the app the timeline moves with the planet: the turning planet calls
+//   `step` (about 30 times a second), scaled by `speed` (4x or 8x on the line),
+//   and the person can `seek` on the line. The play/pause clock below stays for
+//   the dev harness.
+// - The provider owns no UI. Controls (TimelineTrack) call the actions.
 
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
 import { createPlayback, playbackReducer, type PlaybackState } from "../lib/playback";
+import { DEFAULT_TIMELINE_SPEED } from "../lib/timelineTrack";
 
 /** How often the provider publishes a new position while playing. */
 export const TIMELINE_UPDATE_HZ = 30;
 
-export interface TimelineValue extends PlaybackState {
+/** What changes the timeline. Stable for the life of the provider. */
+export interface TimelineActions {
   play(): void;
   pause(): void;
   toggle(): void;
   seek(position: number): void;
+  /** Moves the position by `delta` (0..1 scale) times the speed, starting again after the end; the turning planet calls it. */
+  step(delta: number): void;
   setSpeed(speed: number): void;
   setLoop(loop: boolean): void;
   setDuration(durationSeconds: number): void;
 }
 
+export interface TimelineValue extends PlaybackState, TimelineActions {}
+
 const TimelineContext = createContext<TimelineValue | null>(null);
+// The actions alone: components that only change the timeline (the turning
+// planet) read this one, so they are not re-rendered each time it moves.
+const TimelineActionsContext = createContext<TimelineActions | null>(null);
 
 export function TimelineProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(playbackReducer, undefined, () => createPlayback());
+  // The line offers 4x and 8x only, so the timeline starts at 4x.
+  const [state, dispatch] = useReducer(playbackReducer, undefined, () =>
+    createPlayback({ speed: DEFAULT_TIMELINE_SPEED }),
+  );
 
   useEffect(() => {
     if (!state.playing) return;
@@ -51,21 +65,35 @@ export function TimelineProvider({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, [state.playing]);
 
-  const value = useMemo<TimelineValue>(
+  const actions = useMemo<TimelineActions>(
     () => ({
-      ...state,
       play: () => dispatch({ type: "play" }),
       pause: () => dispatch({ type: "pause" }),
       toggle: () => dispatch({ type: "toggle" }),
       seek: (position: number) => dispatch({ type: "seek", position }),
+      step: (delta: number) => dispatch({ type: "step", delta }),
       setSpeed: (speed: number) => dispatch({ type: "set-speed", speed }),
       setLoop: (loop: boolean) => dispatch({ type: "set-loop", loop }),
       setDuration: (durationSeconds: number) => dispatch({ type: "set-duration", durationSeconds }),
     }),
-    [state],
+    [],
   );
+  const value = useMemo<TimelineValue>(() => ({ ...state, ...actions }), [state, actions]);
 
-  return <TimelineContext.Provider value={value}>{children}</TimelineContext.Provider>;
+  return (
+    <TimelineActionsContext.Provider value={actions}>
+      <TimelineContext.Provider value={value}>{children}</TimelineContext.Provider>
+    </TimelineActionsContext.Provider>
+  );
+}
+
+/** The timeline's actions only; never re-renders the caller when the position moves. */
+export function useTimelineActions(): TimelineActions {
+  const actions = useContext(TimelineActionsContext);
+  if (!actions) {
+    throw new Error("useTimelineActions must be used inside <TimelineProvider>.");
+  }
+  return actions;
 }
 
 /** Current timeline state and actions. Throws when used outside the provider. */

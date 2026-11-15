@@ -136,6 +136,18 @@ export interface EarthMeshProps {
   /** The "Auto-rotate" switch: the planet turns by itself on the planet view. */
   autoRotate: boolean;
   /**
+   * Called on every frame the planet turns by itself (never for a drag), with the
+   * angle turned in radians. The timeline plays from it, so it moves exactly
+   * while, and as fast as, the planet turns.
+   */
+  onSpin?: (radians: number) => void;
+  /**
+   * How far the timeline is from the instant in `layerTextures.global/region`
+   * towards the one in `globalNext/regionNext` (0..1). Read on every frame, so
+   * the picture fades smoothly without React re-rendering.
+   */
+  frameMix?: RefObject<number>;
+  /**
    * Sharp forest height images (forest-height-8k/4k.png and forest-height-amazon.png),
    * when the active layer is the forest and both have loaded; null otherwise, and
    * the relief then comes from the layer's grids (layerTextures.height*).
@@ -172,6 +184,11 @@ export interface ReliefImages {
   region: Texture;
   /** Colour ramp of the layer (its stops and presence go to the shader). */
   ramp: ColorRamp;
+  /**
+   * True for heights (the forest): shaded relief and raised height. False for any
+   * other value drawn sharp (CO2): colour and presence only, the surface stays flat.
+   */
+  relief: boolean;
 }
 
 export interface DotImage {
@@ -240,6 +257,10 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uLayerGlobal;
   uniform bool uHasGlobal;
   uniform sampler2D uLayerRegion;
+  // The next instant of the layer and how far the timeline is towards it (0..1).
+  uniform sampler2D uLayerGlobalNext;
+  uniform sampler2D uLayerRegionNext;
+  uniform float uFrameMix;
   uniform float uLayerOpacity;
   uniform float uBaseDim;
   // uBbox comes with HEIGHT_AT below.
@@ -308,6 +329,14 @@ const FRAGMENT_SHADER = /* glsl */ `
     return clamp(1.0 + uReliefShade * 0.7 * (dx - dy), 0.7, 1.25);
   }
 
+  // Fades from one instant of the layer to the next, weighting each colour by its
+  // own opacity so a transparent pixel adds no colour of its own.
+  vec4 blendFrames(vec4 a, vec4 b, float m) {
+    float alpha = mix(a.a, b.a, m);
+    vec3 rgb = (a.rgb * a.a * (1.0 - m) + b.rgb * b.a * m) / max(alpha, 1e-4);
+    return vec4(rgb, alpha);
+  }
+
   void main() {
     float lon = -180.0 + 360.0 * vUv.x;
     float lat = -90.0 + 180.0 * vUv.y;
@@ -348,9 +377,10 @@ const FRAGMENT_SHADER = /* glsl */ `
     } else if (inRegion) {
       // Inside the Amazon: the detailed regional grid (north row first).
       vec2 regionUv = vec2((lon - uBbox.x) / (uBbox.z - uBbox.x), (uBbox.w - lat) / (uBbox.w - uBbox.y));
-      overlay = texture2D(uLayerRegion, regionUv);
+      overlay = blendFrames(texture2D(uLayerRegion, regionUv), texture2D(uLayerRegionNext, regionUv), uFrameMix);
     } else if (uHasGlobal) {
-      overlay = texture2D(uLayerGlobal, vec2(vUv.x, 1.0 - vUv.y));
+      vec2 globalUv = vec2(vUv.x, 1.0 - vUv.y);
+      overlay = blendFrames(texture2D(uLayerGlobal, globalUv), texture2D(uLayerGlobalNext, globalUv), uFrameMix);
     }
     float layerAmount = overlay.a * uLayerOpacity;
     color = mix(color, overlay.rgb, layerAmount);
@@ -436,6 +466,9 @@ interface Uniforms {
   uLayerGlobal: IUniform<Texture | null>;
   uHasGlobal: IUniform<boolean>;
   uLayerRegion: IUniform<Texture | null>;
+  uLayerGlobalNext: IUniform<Texture | null>;
+  uLayerRegionNext: IUniform<Texture | null>;
+  uFrameMix: IUniform<number>;
   uBbox: IUniform<Vector4>;
   uLayerOpacity: IUniform<number>;
   uBaseDim: IUniform<number>;
@@ -489,6 +522,8 @@ export function EarthMesh({
   segments,
   raiseRelief,
   autoRotate,
+  onSpin,
+  frameMix,
   reliefImages,
   dotImage,
   scenes,
@@ -530,6 +565,9 @@ export function EarthMesh({
       uLayerGlobal: { value: null },
       uHasGlobal: { value: false },
       uLayerRegion: { value: null },
+      uLayerGlobalNext: { value: null },
+      uLayerRegionNext: { value: null },
+      uFrameMix: { value: 0 },
       uBbox: { value: new Vector4() },
       uLayerOpacity: { value: 0.8 },
       uBaseDim: { value: 0 },
@@ -582,13 +620,16 @@ export function EarthMesh({
     uniforms.uLayerGlobal.value = layerTextures.global;
     uniforms.uHasGlobal.value = layerTextures.global !== null;
     uniforms.uLayerRegion.value = layerTextures.region;
+    uniforms.uLayerGlobalNext.value = layerTextures.globalNext;
+    uniforms.uLayerRegionNext.value = layerTextures.regionNext;
     uniforms.uBbox.value.set(bbox.west, bbox.south, bbox.east, bbox.north);
     uniforms.uLayerOpacity.value = layerTextures.opacity;
     uniforms.uBaseDim.value = layerTextures.baseDim;
-    // A relief layer draws from the sharp forest images once they are there,
-    // from its own grids before that or when they failed to load.
-    const relief = layerTextures.heightRegion !== null;
-    const sharp = relief && reliefImages !== null;
+    // A layer with sharp images (the forest heights, CO2) draws from them once they
+    // are there, from its own grids before that or when they failed to load. Only
+    // heights are shaded and raised.
+    const sharp = reliefImages !== null;
+    const relief = sharp ? reliefImages.relief : layerTextures.heightRegion !== null;
     const heightGlobal = sharp ? reliefImages.global : layerTextures.heightGlobal;
     const heightRegion = sharp ? reliefImages.region : layerTextures.heightRegion;
     uniforms.uHeightGlobal.value = heightGlobal;
@@ -630,6 +671,8 @@ export function EarthMesh({
 
     // Raised height: sample one mean height per vertex (the mesh has `segments.width` columns over 360 degrees).
     uniforms.uLift.value = relief && raiseRelief ? RELIEF_LIFT : 0;
+    // Shaded relief only for heights; other sharp values (CO2) keep the surface evenly lit.
+    uniforms.uReliefShade.value = relief ? RELIEF_SHADE : 0;
     const vertexSpacing = 360 / segments.width;
     uniforms.uLiftLodGlobal.value = lodForSpacing(vertexSpacing, globalCell);
     uniforms.uLiftLodRegion.value = lodForSpacing(vertexSpacing, regionCell);
@@ -689,12 +732,15 @@ export function EarthMesh({
   const rotation = useMemo(() => new Matrix4(), []);
   useFrame((_, delta) => {
     const state = view.current;
+    const before = state.yaw;
     state.yaw = spinStep(state.yaw, delta, {
       spinning: state.spinning,
       autoRotate,
       mode,
       dragging: dragRef.current !== null,
     });
+    if (state.yaw !== before) onSpin?.(state.yaw - before);
+    uniforms.uFrameMix.value = frameMix?.current ?? 0;
     euler.set(state.pitch, state.yaw, 0);
     rotation.makeRotationFromEuler(euler);
     uniforms.uRotation.value.setFromMatrix4(rotation);

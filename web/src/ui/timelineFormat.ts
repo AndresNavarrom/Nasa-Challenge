@@ -1,34 +1,29 @@
-// Text and values shown by the timeline bar (TimelineBar.tsx), kept free of
-// React so they can be tested in Node.
+// Text and choices of the timeline line under the planet (TimelineTrack.tsx),
+// kept free of React so they can be tested in Node.
 
 import type { LoadedLayer } from "../data/types";
-import { clampPosition } from "../lib/timeline";
+import { dateLabelAt, frameIndexAt } from "../lib/timeline";
 import { layerForChoice } from "./layerChoice";
 
-/** Step of the position slider (0..1): fine enough to land on any instant. */
-export const SCRUB_STEP = 0.001;
-
-/** True for a layer that changes over time (smoke, CO2); static ones (forest, lightning) have one date. */
+/** True for a layer that changes over time (smoke, CO2, lightning); a static one (forest) has one date. */
 export function isTimed(layer: LoadedLayer): boolean {
   return !layer.manifest.static && layer.manifest.dates.length > 1;
 }
 
 /**
- * The layer the timeline bar is for: the one picked in the layer picker, when
- * it changes over time. Null for a static layer, the plain Earth view or an
- * unknown value, and then the bar is not shown at all.
+ * The layer the timeline line is for: the one picked in the layer picker,
+ * changing over time or not (a static layer shows a dimmed line with its one
+ * period). Null on the plain Earth view or for an unknown value: no line.
  */
-export function timelineLayer(layers: readonly LoadedLayer[], activeChoiceId: string): LoadedLayer | null {
-  const layer = layerForChoice(layers, activeChoiceId);
-  return layer && isTimed(layer) ? layer : null;
+export function trackLayer(layers: readonly LoadedLayer[], activeChoiceId: string): LoadedLayer | null {
+  return layerForChoice(layers, activeChoiceId);
 }
 
-/** Position as a whole percentage, "0 %" to "100 %". */
-export function formatPercent(position: number): string {
-  return `${Math.round(clampPosition(position) * 100)} %`;
-}
-
-/** Text a screen reader announces for the position slider. */
-export function scrubValueText(position: number): string {
-  return `Timeline at ${formatPercent(position)}`;
+/** Text a screen reader announces for the timeline: the date and which instant of how many. */
+export function trackValueText(layer: LoadedLayer, position: number): string {
+  const { manifest } = layer;
+  const date = dateLabelAt(manifest, position);
+  if (!isTimed(layer)) return `${date}, fixed layer`;
+  const frame = frameIndexAt(position, manifest.dates.length);
+  return `${date}, instant ${frame + 1} of ${manifest.dates.length}`;
 }

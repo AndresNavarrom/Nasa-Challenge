@@ -10,7 +10,7 @@ use image::{Rgba, RgbaImage};
 use crate::config::{BBox, GridSizes, LayerOut, Manifest, RegionOut, Source};
 use crate::error::Result;
 use crate::grid::quantize;
-use crate::pipeline::{ensure_dir, write_area, write_manifest, AreaOutput};
+use crate::pipeline::{ensure_dir, remove_stale_sharp, write_area, write_manifest, AreaOutput};
 
 const SAMPLE_FRAMES: usize = 6;
 
@@ -178,9 +178,15 @@ pub fn run(out_dir: &Path, bbox: BBox, sizes: GridSizes) -> Result<Manifest> {
             is_static: layer.is_static,
             sample: true,
             dates,
+            // Sample data has no real calendar: the app spaces its instants evenly.
+            times: Vec::new(),
+            cadence: None,
             global: Some(write_area(out_dir, layer.id, "global", &global)?),
             region: write_area(out_dir, layer.id, "region", &region)?,
+            sharp: None,
         });
+        // Sample data has no sharp images: drop any left by a real run.
+        remove_stale_sharp(out_dir, layer.id, None)?;
     }
     let manifest = Manifest { layers, region: RegionOut { bbox } };
     write_manifest(out_dir, &manifest)?;

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { DataTexture } from "three";
 import type { Grid, LayerManifest, LoadedLayer } from "../data/types";
 import {
-  CO2_DOMAIN,
   CO2_STOPS,
+  SMOKE_STOPS,
   FIRST_INSTANT,
   GEDI_COLORBAR,
   LAYER_RAMPS,
@@ -14,6 +14,7 @@ import {
   rampAlpha,
   rampColor,
   rampFor,
+  showLayerBlend,
   showLayerFrame,
   type ColorRamp,
 } from "./layerTexture";
@@ -88,7 +89,7 @@ describe("forest drawn like NASA SVS 4950", () => {
     const flat = layerTextureFor({ manifest: manifest("smoke"), global, region });
     expect(flat.heightGlobal).toBeNull();
     expect(flat.heightRegion).toBeNull();
-    expect(flat.opacity).toBe(0.8);
+    expect(flat.opacity).toBe(0.85);
     disposeLayerTextures(flat);
   });
 });
@@ -132,6 +133,29 @@ describe("instants following the timeline", () => {
     disposeLayerTextures(textures);
   });
 
+  it("fades between two instants, computing only the new one when the timeline moves on", () => {
+    const textures = layerTextureFor(layer, 0, 1);
+    expect([textures.frame, textures.nextFrame]).toEqual([0, 1]);
+    const pixels = (frame: number) => Array.from(gridToRgba(layer.region, frame, ramp, "smoke"));
+    expect(Array.from(textures.region.image.data as Uint8Array)).toEqual(pixels(0));
+    expect(Array.from(textures.regionNext.image.data as Uint8Array)).toEqual(pixels(1));
+    const later = textures.regionNext.image.data;
+
+    showLayerBlend(textures, layer, 1, 2);
+    // The image that was the later one is now the earlier one, reused as it is.
+    expect(textures.region.image.data).toBe(later);
+    expect(Array.from(textures.regionNext.image.data as Uint8Array)).toEqual(pixels(2));
+    expect(Array.from(textures.globalNext!.image.data as Uint8Array)).toEqual(
+      Array.from(gridToRgba(layer.global!, 2, ramp, "smoke")),
+    );
+
+    // A single instant: both textures hold it.
+    showLayerFrame(textures, layer, 0);
+    expect([textures.frame, textures.nextFrame]).toEqual([0, 0]);
+    expect(Array.from(textures.regionNext.image.data as Uint8Array)).toEqual(pixels(0));
+    disposeLayerTextures(textures);
+  });
+
   it("builds at a later instant and limits instants outside the grid", () => {
     const textures = layerTextureFor(layer, 2);
     expect(textures.frame).toBe(2);
@@ -140,6 +164,23 @@ describe("instants following the timeline", () => {
     showLayerFrame(textures, layer, -4);
     expect(textures.frame).toBe(0);
     disposeLayerTextures(textures);
+  });
+});
+
+describe("smoke drawn from MERRA-2 carbon optical depth", () => {
+  const smoke = LAYER_RAMPS.smoke!;
+
+  it("goes from pale haze through orange to charcoal in the thickest plumes", () => {
+    expect(rampColor(smoke, 0)).toEqual(SMOKE_STOPS[0]);
+    expect(rampColor(smoke, 127.5)).toEqual(SMOKE_STOPS[2]);
+    expect(rampColor(smoke, 255)).toEqual(SMOKE_STOPS[SMOKE_STOPS.length - 1]);
+  });
+
+  it("keeps clean air clear and shows a visible haze fully", () => {
+    expect(rampAlpha(smoke, 10)).toBe(0); // optical depth about 0.003
+    expect(rampAlpha(smoke, 25)).toBe(0);
+    expect(rampAlpha(smoke, 60)).toBe(255); // about 0.11
+    expect(rampAlpha(smoke, 200)).toBe(255);
   });
 });
 
@@ -163,24 +204,20 @@ describe("lightning drawn like NASA SVS 5011", () => {
   });
 });
 
-describe("CO2 drawn with contrast, after NASA SVS 5196", () => {
+describe("CO2 drawn as a whole-planet field (OCO-2 GEOS XCO2)", () => {
   const co2 = LAYER_RAMPS.co2!;
 
-  it("spans its colours over the values the layer really has (0..CO2_DOMAIN)", () => {
+  it("goes from blue at 404 ppm to red at 420 ppm over the whole 0..255 scale", () => {
     expect(rampColor(co2, 0)).toEqual(CO2_STOPS[0]);
-    expect(rampColor(co2, CO2_DOMAIN)).toEqual(CO2_STOPS[CO2_STOPS.length - 1]);
-    // Above the domain the brightest colour stays.
+    expect(rampColor(co2, 127.5)).toEqual(CO2_STOPS[2]);
     expect(rampColor(co2, 255)).toEqual(CO2_STOPS[CO2_STOPS.length - 1]);
-    // Middle of the domain is the middle stop of the five.
-    expect(rampColor(co2, CO2_DOMAIN / 2)).toEqual(CO2_STOPS[2]);
-    expect(co2.baseDim).toBeGreaterThan(0);
+    expect(co2.domain).toBeUndefined();
+    expect(co2.opacity).toBeLessThan(1);
   });
 
-  it("keeps the faint background haze transparent and the hot spots opaque", () => {
+  it("is drawn wherever there is data and nowhere on the fill value", () => {
     expect(rampAlpha(co2, 0)).toBe(0);
-    expect(rampAlpha(co2, 14)).toBe(0);
-    expect(rampAlpha(co2, 39)).toBe(128);
-    expect(rampAlpha(co2, 64)).toBe(255);
+    expect(rampAlpha(co2, 1)).toBe(255);
     expect(rampAlpha(co2, 200)).toBe(255);
   });
 
