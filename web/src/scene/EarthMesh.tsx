@@ -128,6 +128,7 @@ export interface EarthMeshProps {
   /** Clickable scene points; shown only on the flattened Amazon map. */
   scenes?: SceneDefinition[];
   onSceneSelect?: (scene: SceneDefinition) => void;
+  onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
   onHover: (hit: GlobeHit | null) => void;
   onGlobeClick: (lon: number, lat: number) => void;
 }
@@ -418,6 +419,7 @@ export function EarthMesh({
   dotImage,
   scenes,
   onSceneSelect,
+  onSceneHover,
   onHover,
   onGlobeClick,
 }: EarthMeshProps) {
@@ -709,7 +711,12 @@ export function EarthMesh({
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
           {scenes && scenes.length > 0 && onSceneSelect && (
-            <SceneMarkers scenes={scenes} bbox={bbox} onSelect={onSceneSelect} />
+            <SceneMarkers
+              scenes={scenes}
+              bbox={bbox}
+              onSelect={onSceneSelect}
+              onHover={onSceneHover ?? (() => {})}
+            />
           )}
         </>
       )}

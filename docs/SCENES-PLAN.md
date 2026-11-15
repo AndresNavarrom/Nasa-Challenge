@@ -264,9 +264,10 @@ Total: roughly **10–12 h**; the audio and marker pieces can be developed in pa
 - Coordinates are filled: birds `(-68.546, -3.398)`, river `(-73.246, -0.868)`.
 - `tools/scenes/prepare.py` validates them against the Amazon box and publishes
   `web/public/scenes/` (`scenes-prep` Docker service).
-- Markers are small R3F dots with no ring, fading in over 0.5 s when the map
-  appears; the popup fills the window with a small margin and puts the title and
-  description in a card at the top right.
+- Markers are small white dots (no filled ring) with an expanding pulse ring;
+  the title appears in a DOM tooltip on hover. They fade in over 0.5 s when the
+  map appears. The popup fills the window with a small margin and puts the title
+  and description in a card at the top right.
 - The map camera zooms towards the scene point while the popup fades/scales in,
   and zooms back out after the popup fades out on close.
 - `ARPA` and the loop start together; the loop fades 0 → `loopGain × 2` over

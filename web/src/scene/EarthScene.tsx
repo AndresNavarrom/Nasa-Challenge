@@ -71,6 +71,7 @@ export interface EarthSceneProps {
   onSceneSelect?: (scene: SceneDefinition) => void;
   /** Scene whose popup is open; the map zooms towards its point. */
   focusedScene?: SceneDefinition | null;
+  onSceneHover?: (scene: SceneDefinition | null, clientX?: number, clientY?: number) => void;
 }
 
 const CAMERA_FOV = 45;
@@ -210,6 +211,7 @@ function SceneContents(props: SceneContentsProps) {
     onSceneError,
     scenes,
     onSceneSelect,
+    onSceneHover,
     focusedScene,
     setListeningPoint,
   } = props;
@@ -500,6 +502,7 @@ function SceneContents(props: SceneContentsProps) {
         dotImage={dotImage}
         scenes={scenes}
         onSceneSelect={onSceneSelect}
+        onSceneHover={onSceneHover}
         onHover={handleHover}
         onGlobeClick={handleGlobeClick}
       />

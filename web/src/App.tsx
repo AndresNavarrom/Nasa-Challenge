@@ -79,6 +79,7 @@ function PlanetView({
   const [probe, setProbe] = useState<Probe | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
+  const [sceneHover, setSceneHover] = useState<{ scene: SceneDefinition; x: number; y: number } | null>(null);
 
   // null: the plain Earth view, no layer drawn.
   const activeLayer = useMemo(
@@ -87,9 +88,31 @@ function PlanetView({
   );
   const showAmazon = useCallback(() => setTargetView("map"), []);
   const showEarth = useCallback(() => {
+    setSceneHover(null);
     onCloseScene?.();
     setTargetView("globe");
   }, [onCloseScene]);
+  const handleSceneSelect = useCallback(
+    (scene: SceneDefinition) => {
+      setSceneHover(null);
+      onSceneSelect?.(scene);
+    },
+    [onSceneSelect],
+  );
+  const handleSceneHover = useCallback(
+    (scene: SceneDefinition | null, clientX?: number, clientY?: number) => {
+      if (!scene || clientX === undefined || clientY === undefined) {
+        setSceneHover(null);
+        return;
+      }
+      setSceneHover({ scene, x: clientX, y: clientY });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (targetView !== "map") setSceneHover(null);
+  }, [targetView]);
 
   if (data.layers.length === 0) {
     return (
@@ -117,7 +140,8 @@ function PlanetView({
           onFps={setFps}
           onSceneError={setSceneError}
           scenes={scenes?.scenes}
-          onSceneSelect={onSceneSelect}
+          onSceneSelect={handleSceneSelect}
+          onSceneHover={handleSceneHover}
           focusedScene={focusedScene}
         />
       </div>
@@ -138,6 +162,15 @@ function PlanetView({
         onToggleHeard={onToggleHeard}
         onShowTour={onShowTour}
       />
+      {sceneHover && !focusedScene && (
+        <div
+          data-testid="scene-marker-title"
+          className="pointer-events-none fixed z-20 -translate-y-full rounded bg-slate-950/90 px-2 py-1 text-xs text-white shadow"
+          style={{ left: sceneHover.x + 12, top: sceneHover.y - 12 }}
+        >
+          {sceneHover.scene.title}
+        </div>
+      )}
     </>
   );
 }
