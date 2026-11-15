@@ -56,17 +56,14 @@ describe("guided tour steps", () => {
       if (!step.testId) continue;
       const literal = `data-testid="${step.testId}"`;
       const viaConstant = step.testId === TOUR_BUTTON_TEST_ID && CONTROL_SOURCES[0]!.includes("data-testid={TOUR_BUTTON_TEST_ID}");
-      const viaTemplate =
-        step.testId === "timeline-speed-4" &&
-        timelineTrackSource.includes("data-testid={`timeline-speed-${value}`}");
-      expect(viaConstant || viaTemplate || CONTROL_SOURCES.some((source) => source.includes(literal)), `${step.testId} not found`).toBe(true);
+      expect(viaConstant || CONTROL_SOURCES.some((source) => source.includes(literal)), `${step.testId} not found`).toBe(true);
     }
   });
 
   it("opens a timed layer before pointing at the timeline", () => {
     const autoRotate = TOUR_STEPS.find((step) => step.testId === "planet-hud-auto-rotate");
     const timeline = TOUR_STEPS.find((step) => step.testId === "timeline-track");
-    const speed = TOUR_STEPS.find((step) => step.testId === "timeline-speed-4");
+    const speed = TOUR_STEPS.find((step) => step.testId === "timeline-speed");
     expect(autoRotate?.onNext).toBe("show-timeline");
     expect(timeline).toBeDefined();
     expect(speed).toBeDefined();

@@ -69,10 +69,10 @@ export const TOUR_STEPS: readonly TourStep[] = [
     align: "center",
   },
   {
-    testId: "timeline-speed-4",
+    testId: "timeline-speed",
     title: "Timeline speed",
     description:
-      "Use the 4× and 8× buttons on the line to cover more data time per turn. The line shows how much one turn spans.",
+      "Use the speed slider (4×–32×) on the line to cover more data time per turn. The line shows how much one turn spans.",
     side: "top",
     align: "center",
   },
