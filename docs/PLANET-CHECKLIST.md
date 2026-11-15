@@ -45,7 +45,15 @@ Write the result (pass / fail and a note) next to each line.
       60 %) and over the Atlantic Ocean low or "no data here" (FR4.4).
 - [ ] On the map, the indicator follows the cursor in the same way.
 - [ ] Moving the cursor off the planet or the map clears the indicator, and
-      it stays empty during the transition (listening point `null`, FR4.3).
+      it stays empty during the transition. The listening point is kept (not
+      `null`) during the transition so the sound does not cut out (FR4.3,
+      FR5.2).
+- [ ] With the cursor still over the planet, the indicator keeps following the
+      place under it as the planet turns (FR6).
+- [ ] With the cursor still, switching the layer picker updates the indicator
+      value at once, without moving the mouse.
+- [ ] With the cursor still over the Amazon, the indicator is back as soon as
+      the transition ends.
 - [ ] Optional, with React DevTools: the `ListeningPointProvider` state holds
       `{ lon, lat, screenX }` and `screenX` goes from 0 at the left edge to 1
       at the right edge of the canvas.
