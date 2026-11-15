@@ -45,6 +45,7 @@ import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type Lay
 import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 import {
   AMAZON_REGION_ID,
+  DEFAULT_REGIONS,
   buildRegionMap,
   focusBboxFor,
   regionById,
@@ -69,8 +70,12 @@ export interface EarthSceneProps {
   targetView: TargetView;
   lite: boolean;
   onRequestView: (view: TargetView) => void;
-  /** Regions of the world, the Amazon first (regions.ts); they are outlined and can be visited. */
-  regions: readonly Region[];
+  /**
+   * Regions of the world, the Amazon first (regions.ts); they are outlined and can be
+   * visited. null while they load: nothing is outlined yet, and the region map is
+   * built once, when they arrive.
+   */
+  regions: readonly Region[] | null;
   /** Region visited by the map view (an id of `regions`); the Amazon uses the data file's rectangle. */
   focusRegionId: string;
   /** A region was double-clicked on the planet: visit it. */
@@ -103,6 +108,8 @@ function emptyLayerTextures(): LayerTextures {
 
 /** Size of the region map: about 0.09 degrees per cell, so the outline stays smooth on the zoomed map. */
 const REGION_MASK_SIZE = { width: 4096, height: 2048 };
+/** Lite mode (plan B): a quarter of the cells, built faster and four times lighter on the GPU. */
+const LITE_REGION_MASK_SIZE = { width: 2048, height: 1024 };
 
 /** The layer whose heights shape the regions (the forest inside each search area). */
 const REGION_SHAPE_LAYER = "forest";
@@ -111,8 +118,13 @@ const REGION_SHAPE_LAYER = "forest";
  * The region map (regions.ts), shaped by the forest height grid when the data has
  * one, and its one-channel texture, read cell by cell (no filtering between regions).
  */
-function buildRegionMask(data: JukeboxData, regions: readonly Region[]): { map: RegionMap; texture: DataTexture } {
-  const { width, height } = REGION_MASK_SIZE;
+interface RegionMask {
+  map: RegionMap;
+  texture: DataTexture;
+}
+
+function buildRegionMask(data: JukeboxData, regions: readonly Region[], lite: boolean): RegionMask {
+  const { width, height } = lite ? LITE_REGION_MASK_SIZE : REGION_MASK_SIZE;
   const forest = data.layers.find((layer) => layer.manifest.id === REGION_SHAPE_LAYER)?.global ?? null;
   const map = buildRegionMap(width, height, forest, regions);
   const texture = new DataTexture(map.cells, width, height, RedFormat, UnsignedByteType);
@@ -259,25 +271,48 @@ function SceneContents(props: SceneContentsProps) {
 
   // Regions: the map of every region for the shader (built once), the one under
   // the cursor, and the rectangle of the one being visited.
-  const mask = useMemo(() => buildRegionMask(data, regions), [data, regions]);
-  useEffect(() => () => mask.texture.dispose(), [mask]);
-  const regionAt = useCallback((lon: number, lat: number) => regionMapIndexAt(mask.map, lon, lat), [mask]);
+  // Built once the regions are known, after the frame is drawn (never during a
+  // render), and again only if the data, the regions or lite mode change.
+  const [mask, setMask] = useState<RegionMask | null>(null);
+  useEffect(() => {
+    if (regions === null) return undefined;
+    let built: RegionMask | null = null;
+    const timer = window.setTimeout(() => {
+      try {
+        built = buildRegionMask(data, regions, lite);
+        setMask(built);
+      } catch (cause) {
+        console.error("Earth Jukebox could not build the region outlines:", cause);
+      }
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      built?.texture.dispose();
+      setMask(null);
+    };
+  }, [data, regions, lite]);
+  const knownRegions = regions ?? DEFAULT_REGIONS;
+  const regionAt = useCallback(
+    (lon: number, lat: number) => (mask ? regionMapIndexAt(mask.map, lon, lat) : null),
+    [mask],
+  );
   const [hoverRegion, setHoverRegion] = useState<number | null>(null);
   const focusBbox = useMemo(() => {
-    const region = regionById(focusRegionId, regions) ?? regionById(AMAZON_REGION_ID, regions);
+    const region = regionById(focusRegionId, knownRegions) ?? regionById(AMAZON_REGION_ID, knownRegions);
     return region ? focusBboxFor(region, data.bbox) : data.bbox;
-  }, [focusRegionId, data.bbox, regions]);
+  }, [focusRegionId, data.bbox, knownRegions]);
   const showHoverRegion = useCallback(
     (index: number | null) => {
       setHoverRegion(index);
-      onHoverRegion(index === null ? null : (regions[index]?.id ?? null));
+      onHoverRegion(index === null ? null : (knownRegions[index]?.id ?? null));
     },
-    [onHoverRegion, regions],
+    [onHoverRegion, knownRegions],
   );
-  // New regions (the world regions arriving) renumber the map: forget the old highlight.
+  // A new region map renumbers the regions: forget the old highlight, in the
+  // shader and in the status text alike.
   useEffect(() => {
-    setHoverRegion(null);
-  }, [mask]);
+    showHoverRegion(null);
+  }, [mask, showHoverRegion]);
   const [mode, setModeState] = useState<ViewMode>("globe");
   const modeRef = useRef<ViewMode>("globe");
   const targetRef = useRef<TargetView>(targetView);
@@ -523,10 +558,10 @@ function SceneContents(props: SceneContentsProps) {
   const handleGlobeDoubleClick = useCallback(
     (lon: number, lat: number) => {
       const index = regionAt(lon, lat);
-      const region = index === null ? undefined : regions[index];
+      const region = index === null ? undefined : knownRegions[index];
       if (region) onFocusRegion(region.id);
     },
-    [onFocusRegion, regionAt, regions],
+    [onFocusRegion, regionAt, knownRegions],
   );
 
   return (
@@ -537,7 +572,7 @@ function SceneContents(props: SceneContentsProps) {
         layerTextures={layer.textures}
         bbox={data.bbox}
         focusBbox={focusBbox}
-        regionMask={mask.texture}
+        regionMask={mask?.texture ?? null}
         regionAt={regionAt}
         hoverRegion={hoverRegion}
         view={view}

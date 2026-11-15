@@ -73,7 +73,8 @@ function PlanetView({
   );
   // The regions of the world (the Amazon alone until regions.json arrives, or if it
   // cannot be read), the one the map view visits and the one under the cursor.
-  const [regions, setRegions] = useState<readonly Region[]>(DEFAULT_REGIONS);
+  // null while regions.json loads, so the region map is built once, with all of them.
+  const [regions, setRegions] = useState<readonly Region[] | null>(null);
   useEffect(() => {
     let cancelled = false;
     loadWorldRegions(data.baseUrl)
@@ -82,6 +83,7 @@ function PlanetView({
       })
       .catch((cause: unknown) => {
         console.error("Earth Jukebox could not load the world regions; only the Amazon is outlined:", cause);
+        if (!cancelled) setRegions(DEFAULT_REGIONS);
       });
     return () => {
       cancelled = true;
@@ -134,8 +136,8 @@ function PlanetView({
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
-        regionName={regionById(focusRegionId, regions)?.name ?? "Amazon"}
-        hoveredRegionName={hoveredRegionId ? (regionById(hoveredRegionId, regions)?.name ?? null) : null}
+        regionName={regionById(focusRegionId, regions ?? DEFAULT_REGIONS)?.name ?? "Amazon"}
+        hoveredRegionName={hoveredRegionId ? (regionById(hoveredRegionId, regions ?? DEFAULT_REGIONS)?.name ?? null) : null}
         probe={probe}
         fps={fps}
         lite={lite}
