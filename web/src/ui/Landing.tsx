@@ -24,7 +24,7 @@ import globeForest from "../assets/landing/globe-forest.jpg";
 import globeLightning from "../assets/landing/globe-lightning.jpg";
 import globeSmoke from "../assets/landing/globe-smoke.jpg";
 import { useEffect, useState, type ReactNode } from "react";
-import { JUKEBOX_HASH } from "./landingRoute";
+import { CREDITS_HASH, JUKEBOX_HASH } from "./landingRoute";
 
 /** Name of the team, as it is written everywhere (README, HUD, landing). */
 export const TEAM_NAME = "Sagitta";
@@ -32,6 +32,7 @@ export const TEAM_NAME = "Sagitta";
 const NAV = [
   { href: "#layers", label: "LAYERS" },
   { href: "#about", label: "ABOUT" },
+  { href: CREDITS_HASH, label: "CREDITS" },
 ] as const;
 
 const LAYERS = [
@@ -410,6 +411,13 @@ export function Landing() {
       <footer className="border-t border-landing-line pb-12 pt-7">
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-4 font-label text-[11px] tracking-[0.16em] text-landing-label">
           <p>EARTHJUKEBOX.TECH</p>
+          <a
+            href={CREDITS_HASH}
+            data-testid="landing-credits"
+            className="rounded-full border border-landing-line px-4 py-1.5 text-landing-mist transition-colors hover:border-landing-label hover:text-landing-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-accent"
+          >
+            CREDITS
+          </a>
           <p>NOT AN OFFICIAL NASA PRODUCT</p>
         </div>
       </footer>

@@ -37,7 +37,7 @@ describe("landing page or jukebox", () => {
 
 describe("landing layout and colours", () => {
   it("is split into three full-height sections", () => {
-    expect(landingSource.match(/<section /g)).toHaveLength(3);
+    expect(landingSource.match(/<section\s/g)).toHaveLength(3);
     for (const id of ["listen", "layers", "about"]) {
       expect(landingSource).toContain(`data-testid="landing-section-${id}"`);
     }
@@ -57,8 +57,8 @@ describe("landing layout and colours", () => {
   it("keeps the button the only filled bright shape, and every title thin", () => {
     // The mint fill appears once: in OpenJukebox.
     expect(landingSource.match(/\bbg-landing-accent(?!-)/g)).toHaveLength(1);
-    expect(landingSource).toMatch(/<h1 className=\{`\$\{calmTitle\}/);
-    expect(landingSource.match(/<h2 className=\{`\$\{calmTitle\}/g)).toHaveLength(2);
+    expect(landingSource).toMatch(/<h1\s+className=\{`\$\{calmTitle\}/);
+    expect(landingSource.match(/<h2\s+className=\{`\$\{calmTitle\}/g)).toHaveLength(2);
     expect(landingSource).toContain('const calmTitle = "font-display font-extralight text-landing-title"');
   });
 });
