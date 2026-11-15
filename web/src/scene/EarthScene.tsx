@@ -4,14 +4,30 @@
 // accepts 8192-pixel textures and earth-4k.jpg otherwise, plus the Amazon crop
 // earth-amazon.jpg (FR1.2, FR1.3). Lite mode (`?lite=1`, plan B) always uses
 // earth-4k.jpg, fewer segments, no antialiasing and switches views at once.
+// The forest layer is drawn from the GEDI height images forest-height-8k.png
+// (or -4k.png, same rule as the base image) and forest-height-amazon.png, and
+// lightning from the dots image lightning-4k.png (one size: 4096 pixels fit every
+// card); the sound and the probe keep reading the grids.
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DataTexture, TextureLoader, type Texture, type WebGLRenderer } from "three";
+import {
+  ClampToEdgeWrapping,
+  DataTexture,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  NoColorSpace,
+  RedFormat,
+  RepeatWrapping,
+  TextureLoader,
+  type Texture,
+  type WebGLRenderer,
+} from "three";
 import type { JukeboxData, LoadedLayer } from "../data/types";
 import { sampleLayerAt } from "../lib/interpolate";
-import { REGION_BASE_IMAGE, pickBaseImage } from "./baseImage";
-import { EarthMesh, type GlobeHit } from "./EarthMesh";
+import { FOREST_HEIGHT_IMAGES, REGION_BASE_IMAGE, REGION_FOREST_HEIGHT_IMAGE, pickBaseImage, pickImage } from "./baseImage";
+import { dotImageFor } from "./dotImage";
+import { EarthMesh, type DotImage, type GlobeHit, type ReliefImages } from "./EarthMesh";
 import {
   GLOBE_CAMERA_Z,
   createViewState,
@@ -23,7 +39,7 @@ import {
   type ViewState,
 } from "./FocusTransition";
 import { isInsideBbox, screenX01 } from "./geo";
-import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, type LayerTextures } from "./layerTexture";
+import { FIRST_INSTANT, disposeLayerTextures, layerTextureFor, rampFor, type LayerTextures } from "./layerTexture";
 import { useSetListeningPoint, type ListeningPoint } from "./listeningPoint";
 
 export type TargetView = "globe" | "map";
@@ -37,7 +53,8 @@ export interface Probe {
 
 export interface EarthSceneProps {
   data: JukeboxData;
-  activeLayer: LoadedLayer;
+  /** null: the plain Earth, no layer drawn. */
+  activeLayer: LoadedLayer | null;
   targetView: TargetView;
   lite: boolean;
   onRequestView: (view: TargetView) => void;
@@ -49,13 +66,20 @@ export interface EarthSceneProps {
 }
 
 const CAMERA_FOV = 45;
-const FULL_SEGMENTS = { width: 128, height: 64 };
+/** The layer drawn from the sharp GEDI height images (forest-height-*.png). */
+const SHARP_RELIEF_LAYER = "forest";
+/** The layer drawn from the sharp dots image (lightning-4k.png). */
+const DOT_IMAGE_LAYER = "lightning";
+/** Largest anisotropic filtering used on those images. */
+const MAX_ANISOTROPY = 8;
+// Dense enough for the raised forest relief to show its shape (about 0.7 degrees per vertex).
+const FULL_SEGMENTS = { width: 512, height: 256 };
 const LITE_SEGMENTS = { width: 64, height: 32 };
 
 function emptyLayerTextures(): LayerTextures {
   const region = new DataTexture(new Uint8Array(4), 1, 1);
   region.needsUpdate = true;
-  return { global: null, region };
+  return { global: null, region, heightGlobal: null, heightRegion: null, opacity: 0.8, baseDim: 0 };
 }
 
 /** WebGL's largest texture side, or null when the renderer does not report it. */
@@ -73,18 +97,28 @@ function readMaxTextureSize(gl: WebGLRenderer): number | null {
  * Loads an image as a texture. On failure it logs the cause, reports
  * `failureMessage` and leaves the texture null, so the caller draws without it.
  * A success (or a new URL) clears the message, so a fixed image stops the banner.
+ * A null URL loads nothing. `configure` runs on the texture before it is first
+ * drawn (filters, format), so it applies to the first upload to the GPU.
  */
-function useImageTexture(url: string, failureMessage: string, onError: (message: string | null) => void): Texture | null {
+function useImageTexture(
+  url: string | null,
+  failureMessage: string,
+  onError: (message: string | null) => void,
+  configure?: (texture: Texture) => void,
+): Texture | null {
   const [texture, setTexture] = useState<Texture | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const messageRef = useRef(failureMessage);
   messageRef.current = failureMessage;
+  const configureRef = useRef(configure);
+  configureRef.current = configure;
 
   useEffect(() => {
+    onErrorRef.current(null);
+    if (url === null) return;
     let cancelled = false;
     let loaded: Texture | null = null;
-    onErrorRef.current(null);
     new TextureLoader().load(
       url,
       (result) => {
@@ -92,6 +126,7 @@ function useImageTexture(url: string, failureMessage: string, onError: (message:
           result.dispose();
           return;
         }
+        configureRef.current?.(result);
         loaded = result;
         setTexture(loaded);
         onErrorRef.current(null);
@@ -111,6 +146,26 @@ function useImageTexture(url: string, failureMessage: string, onError: (message:
   }, [url]);
 
   return texture;
+}
+
+/**
+ * A greyscale image (forest height, lightning dots) as a one-channel texture (R8:
+ * a quarter of the memory of RGBA), north row first like the grids, with mipmaps
+ * so the planet does not shimmer when the image is drawn much smaller than its
+ * size and so the shader can read mean values per vertex, per shading step or for
+ * the glow around the lightning dots.
+ */
+function configureGreyImage(texture: Texture, wrapAround: boolean, anisotropy: number): void {
+  texture.format = RedFormat;
+  texture.colorSpace = NoColorSpace; // heights, not colours: no conversion on upload
+  texture.flipY = false;
+  texture.generateMipmaps = true;
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.magFilter = LinearFilter;
+  texture.wrapS = wrapAround ? RepeatWrapping : ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.anisotropy = anisotropy;
+  texture.needsUpdate = true;
 }
 
 /** Average frames per second over the last second, reported once a second. */
@@ -152,6 +207,9 @@ function SceneContents(props: SceneContentsProps) {
   const [baseError, setBaseError] = useState<string | null>(null);
   const [regionError, setRegionError] = useState<string | null>(null);
   const [layerError, setLayerError] = useState<string | null>(null);
+  const [forestGlobalError, setForestGlobalError] = useState<string | null>(null);
+  const [forestRegionError, setForestRegionError] = useState<string | null>(null);
+  const [lightningError, setLightningError] = useState<string | null>(null);
 
   const maxTextureSize = useMemo(() => readMaxTextureSize(gl), [gl]);
   const baseUrl = `${data.baseUrl}${pickBaseImage(maxTextureSize, lite)}`;
@@ -167,7 +225,69 @@ function SceneContents(props: SceneContentsProps) {
     setRegionError,
   );
 
+  // Sharp forest images: requested the first time the forest is chosen and then
+  // kept, so switching back to it is instant. The Earth view and other layers
+  // never wait for them.
+  const forestActive = activeLayer?.manifest.id === SHARP_RELIEF_LAYER;
+  const [forestWanted, setForestWanted] = useState(forestActive);
+  useEffect(() => {
+    if (forestActive) setForestWanted(true);
+  }, [forestActive]);
+  const anisotropy = useMemo(() => {
+    try {
+      return Math.max(1, Math.min(MAX_ANISOTROPY, gl.capabilities.getMaxAnisotropy()));
+    } catch {
+      return 1;
+    }
+  }, [gl]);
+  const configureGlobalHeight = useCallback((texture: Texture) => configureGreyImage(texture, true, anisotropy), [anisotropy]);
+  const configureRegionHeight = useCallback((texture: Texture) => configureGreyImage(texture, false, anisotropy), [anisotropy]);
+  const forestGlobalUrl = forestWanted ? `${data.baseUrl}${pickImage(maxTextureSize, lite, FOREST_HEIGHT_IMAGES)}` : null;
+  const forestGlobal = useImageTexture(
+    forestGlobalUrl,
+    `The sharp forest image (${forestGlobalUrl}) could not be loaded, so the forest is drawn from the coarser grid. Everything else still works.`,
+    setForestGlobalError,
+    configureGlobalHeight,
+  );
+  const forestRegionUrl = forestWanted ? `${data.baseUrl}${REGION_FOREST_HEIGHT_IMAGE}` : null;
+  const forestRegion = useImageTexture(
+    forestRegionUrl,
+    `The sharp Amazon forest image (${forestRegionUrl}) could not be loaded, so the forest is drawn from the coarser grid. Everything else still works.`,
+    setForestRegionError,
+    configureRegionHeight,
+  );
+  const reliefImages = useMemo<ReliefImages | null>(
+    () =>
+      forestActive && forestGlobal && forestRegion
+        ? { global: forestGlobal, region: forestRegion, ramp: rampFor(SHARP_RELIEF_LAYER) }
+        : null,
+    [forestActive, forestGlobal, forestRegion],
+  );
+
+  // Sharp lightning dots: requested the first time lightning is shown, then kept
+  // (same rule as the forest images), so start-up does not wait for them.
+  const lightningActive = activeLayer?.manifest.id === DOT_IMAGE_LAYER;
+  const dotStyle = lightningActive ? dotImageFor(DOT_IMAGE_LAYER) : null;
+  const [lightningWanted, setLightningWanted] = useState(lightningActive);
+  useEffect(() => {
+    if (lightningActive) setLightningWanted(true);
+  }, [lightningActive]);
+  const lightningFile = dotImageFor(DOT_IMAGE_LAYER)?.file ?? null;
+  const lightningUrl = lightningWanted && lightningFile ? `${data.baseUrl}${lightningFile}` : null;
+  const lightningTexture = useImageTexture(
+    lightningUrl,
+    `The sharp lightning image (${lightningUrl}) could not be loaded, so lightning is drawn from the coarser grid. Everything else still works.`,
+    setLightningError,
+    configureGlobalHeight,
+  );
+  const dotImage = useMemo<DotImage | null>(
+    () => (dotStyle && lightningTexture ? { texture: lightningTexture, style: dotStyle } : null),
+    [dotStyle, lightningTexture],
+  );
+
   const layer = useMemo(() => {
+    // The plain Earth view: an empty (fully transparent) layer, so only the planet shows.
+    if (activeLayer === null) return { textures: emptyLayerTextures(), error: null };
     try {
       return { textures: layerTextureFor(activeLayer), error: null };
     } catch (cause) {
@@ -187,9 +307,13 @@ function SceneContents(props: SceneContentsProps) {
 
   // One banner for every source: a good layer or image clears itself without
   // hiding a failure somewhere else.
+  // The forest image banners only show while the forest is the layer on screen.
+  const forestError = forestActive ? (forestGlobalError ?? forestRegionError) : null;
+  // Likewise the lightning image banner, only while lightning is on screen.
+  const lightningImageError = lightningActive ? lightningError : null;
   useEffect(() => {
-    onSceneError(layerError ?? baseError ?? regionError ?? null);
-  }, [layerError, baseError, regionError, onSceneError]);
+    onSceneError(layerError ?? baseError ?? regionError ?? forestError ?? lightningImageError ?? null);
+  }, [layerError, baseError, regionError, forestError, lightningImageError, onSceneError]);
 
   const setMode = (next: ViewMode) => {
     modeRef.current = next;
@@ -250,7 +374,7 @@ function SceneContents(props: SceneContentsProps) {
     (hit: GlobeHit): Probe => ({
       lon: hit.lon,
       lat: hit.lat,
-      value: sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT),
+      value: activeLayer ? sampleLayerAt(activeLayer, data.bbox, hit.lon, hit.lat, FIRST_INSTANT) : null,
     }),
     [activeLayer, data.bbox],
   );
@@ -326,6 +450,9 @@ function SceneContents(props: SceneContentsProps) {
         view={view}
         mode={mode}
         segments={lite ? LITE_SEGMENTS : FULL_SEGMENTS}
+        raiseRelief={!lite}
+        reliefImages={reliefImages}
+        dotImage={dotImage}
         onHover={handleHover}
         onGlobeClick={handleGlobeClick}
       />
