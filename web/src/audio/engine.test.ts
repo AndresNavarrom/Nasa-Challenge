@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSoundEngine, SMOKE_LAYER_TRIM } from "./engine";
+import { createSoundEngine, LIGHTNING_SAMPLE_TAIL_SECONDS, SMOKE_LAYER_TRIM } from "./engine";
 import { co2ToBreath, forestToVoice, intensityToGain, positionToPan, smokeToTimbre } from "./mapping";
 import { FakeAnalyser, FakeAudioContext, FakeGain, FakePanner, type FakeParam } from "./testing/fakeAudioContext";
 
@@ -13,6 +13,7 @@ function setup() {
     context: context.asAudioContext(),
     rampSeconds: 0.05,
     smoothingSeconds: 0.15,
+    lightningSampleUrl: null,
   });
   return { context, engine };
 }
@@ -265,6 +266,99 @@ describe("sound engine", () => {
 
     engine.dispose();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("uses the thunder sample for lightning hits when it is available", async () => {
+    vi.useFakeTimers();
+    const context = new FakeAudioContext();
+    const sample = { duration: 16.6 } as AudioBuffer;
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSample: sample,
+      lightningSampleUrl: null,
+    });
+    engine.setLayerIntensity("lightning", 0.5);
+    await engine.start();
+    const sourcesBefore = context.bufferSources.length; // the shared noise loop
+
+    vi.advanceTimersByTime(1);
+    expect(context.bufferSources).toHaveLength(sourcesBefore + 1);
+    const hit = context.bufferSources.at(-1)!;
+    expect(hit.buffer).toBe(sample);
+    expect(hit.start.mock.calls[0]?.[2]).toBeCloseTo(LIGHTNING_SAMPLE_TAIL_SECONDS, 6);
+    expect(context.oscillators).toHaveLength(6); // no synthesized body
+
+    // 3 hits/s: each hit is scaled down from the 0.9 single-hit level.
+    const hitGain = context.gains.at(-1)!;
+    const ramp = hitGain.gain.events.find((event) => event.method === "linearRampToValueAtTime");
+    expect(ramp?.target).toBeCloseTo(0.9 / Math.sqrt(3), 5);
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("layers thunder tails instead of cutting them when the rate is high", async () => {
+    vi.useFakeTimers();
+    const context = new FakeAudioContext();
+    const sample = { duration: 16.6 } as AudioBuffer;
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSample: sample,
+      lightningSampleUrl: null,
+    });
+    engine.setLayerIntensity("lightning", 1); // 6 hits/s, one every ~167 ms
+    await engine.start();
+    const sourcesBefore = context.bufferSources.length; // the shared noise loop
+
+    vi.advanceTimersByTime(1);
+    vi.advanceTimersByTime(170);
+    expect(context.bufferSources).toHaveLength(sourcesBefore + 2);
+
+    const first = context.bufferSources[sourcesBefore]!;
+    const second = context.bufferSources[sourcesBefore + 1]!;
+    expect(first.start.mock.calls[0]?.[2]).toBeCloseTo(LIGHTNING_SAMPLE_TAIL_SECONDS, 6);
+    expect(second.start.mock.calls[0]?.[2]).toBeCloseTo(LIGHTNING_SAMPLE_TAIL_SECONDS, 6);
+    // The first hit was not stopped early; its scheduled stop is its start + tail.
+    const startAt = first.start.mock.calls[0]?.[0] as number;
+    expect(first.stop.mock.calls[0]?.[0]).toBeCloseTo(startAt + LIGHTNING_SAMPLE_TAIL_SECONDS + 0.02, 6);
+
+    engine.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("loads the thunder sample once from its URL", async () => {
+    const context = new FakeAudioContext();
+    const fetchSample = vi.fn(async () => new ArrayBuffer(8));
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: "thunder.ogg",
+      fetchSample,
+    });
+
+    await engine.start();
+    expect(fetchSample).toHaveBeenCalledTimes(1);
+    expect(context.decodeAudioData).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+
+  it("falls back to the synthesized hit when the sample cannot be loaded", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const context = new FakeAudioContext();
+    const engine = createSoundEngine({
+      context: context.asAudioContext(),
+      lightningSampleUrl: "missing.ogg",
+      fetchSample: async () => {
+        throw new Error("offline");
+      },
+    });
+    engine.setLayerIntensity("lightning", 0.5);
+    await engine.start();
+
+    vi.advanceTimersByTime(1);
+    expect(context.oscillators).toHaveLength(7); // synthesized body
+    engine.dispose();
+    warn.mockRestore();
   });
 
   it("stops the lightning rhythm when the layer has no data", async () => {
