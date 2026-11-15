@@ -105,7 +105,8 @@ function majorLabel(time: Date, cadence: Cadence): string {
     case "hour":
       return `${MONTHS[time.getUTCMonth()]} ${time.getUTCDate()}`;
     case "day":
-      return `${MONTHS[time.getUTCMonth()]} ${time.getUTCFullYear()}`;
+      // Short, so twelve months fit on the line; the year only where it starts.
+      return time.getUTCMonth() === 0 ? `${MONTHS[0]} ${time.getUTCFullYear()}` : MONTHS[time.getUTCMonth()]!;
     case "month":
       return String(time.getUTCFullYear());
   }

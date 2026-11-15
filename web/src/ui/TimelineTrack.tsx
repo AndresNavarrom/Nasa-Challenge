@@ -166,7 +166,7 @@ export function TimelineTrack(props: TimelineTrackProps) {
                 <span
                   key={`label-${index}`}
                   className={`absolute top-5 whitespace-nowrap text-[10px] text-slate-400 ${
-                    tick.fraction > 0.9 ? "-translate-x-full" : ""
+                    tick.fraction > 0.97 ? "-translate-x-full" : ""
                   }`}
                   style={{ left: `${tick.fraction * 100}%` }}
                 >

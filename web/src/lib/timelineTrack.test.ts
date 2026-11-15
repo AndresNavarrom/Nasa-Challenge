@@ -117,6 +117,13 @@ describe("marks on the line", () => {
     expect(years).toEqual(["2017", "2018", "2019", "2020", "2021", "2022", "2023"]);
   });
 
+  it("labels each month of daily data briefly, with the year only in January", () => {
+    const times = Array.from({ length: 366 }, (_, day) => Date.UTC(2020, 0, 1 + day));
+    const daily: Timed = { dates: times.map(String), times, cadence: { unit: "day", count: 1 } };
+    const labels = timelineTicks(daily).filter((tick) => tick.major).map((tick) => tick.label);
+    expect(labels).toEqual(["Jan 2020", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
+  });
+
   it("labels only the ends when the layer has no times", () => {
     const ticks = timelineTicks({ dates: ["Sample 1 of 3", "Sample 2 of 3", "Sample 3 of 3"] });
     expect(ticks.map((tick) => tick.label)).toEqual(["Sample 1 of 3", "", "Sample 3 of 3"]);
