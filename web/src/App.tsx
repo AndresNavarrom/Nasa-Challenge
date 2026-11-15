@@ -220,7 +220,6 @@ function useGuidedTour(): () => void {
 
   return show;
 }
-}
 
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
