@@ -1,7 +1,8 @@
 // Which image sizes the browser loads (FR1.2). tools/prep writes the Natural
 // Earth image in two sizes plus a full-resolution crop of the Amazon rectangle
 // (FR1.3) into the data folder; tools/fetch/gedi_visual.py writes the forest
-// height the same way (greyscale, 0 = no forest, 255 = 50 m or more).
+// height the same way (greyscale, 0 = no forest, 255 = 50 m or more), and
+// tools/fetch/lightning_dots.py the lightning dots (greyscale, 0 = no lightning).
 
 /** The two sizes of one whole-planet image. */
 export interface SizedImages {
@@ -21,6 +22,13 @@ export const REGION_BASE_IMAGE = "earth-amazon.jpg";
 export const FOREST_HEIGHT_IMAGES: SizedImages = { large: "forest-height-8k.png", small: "forest-height-4k.png" };
 /** The Amazon rectangle at 0.01 degree (3600 x 2800). */
 export const REGION_FOREST_HEIGHT_IMAGE = "forest-height-amazon.png";
+
+/**
+ * Lightning dots of NASA SVS 5011 for drawing the lightning layer sharply (not for
+ * the sound), written by tools/fetch/lightning_dots.py: 4096 x 2048, one channel,
+ * 0 = no lightning. One size: 4096 fits every graphics card.
+ */
+export const LIGHTNING_IMAGE = "lightning-4k.png";
 
 const SIDE_8K = 8192;
 

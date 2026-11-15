@@ -90,6 +90,26 @@ describe("forest drawn like NASA SVS 4950", () => {
   });
 });
 
+describe("lightning drawn like NASA SVS 5011", () => {
+  const lightning = LAYER_RAMPS.lightning!;
+
+  it("goes from orange to almost white and dims the planet under it", () => {
+    expect(rampColor(lightning, 0)).toEqual([255, 120, 0]);
+    expect(rampColor(lightning, 255)).toEqual([255, 252, 225]);
+    expect(rampColor(lightning, 127.5)).toEqual([255, 215, 60]);
+    expect(lightning.baseDim).toBeGreaterThan(0);
+  });
+
+  it("keeps rare lightning transparent so only the active regions show", () => {
+    // Half of the cells with any lightning are below 14 of 255.
+    expect(rampAlpha(lightning, 14)).toBe(0);
+    expect(rampAlpha(lightning, 18)).toBe(0);
+    expect(rampAlpha(lightning, 39)).toBe(128);
+    expect(rampAlpha(lightning, 60)).toBe(255);
+    expect(rampAlpha(lightning, 200)).toBe(255);
+  });
+});
+
 describe("gridToRgba errors (FR1.3)", () => {
   it("fails with a message naming the layer when the grid has fewer bytes than declared", () => {
     const shortGrid: Grid = { width: 2, height: 2, frames: 2, data: Uint8Array.from([1, 2, 3, 4, 5]) };

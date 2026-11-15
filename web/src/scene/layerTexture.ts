@@ -21,7 +21,18 @@ export interface ColorRamp {
   presence?: { from: number; fade: number };
   /** Opacity of the layer over the base image (default LAYER_OPACITY_DEFAULT). */
   opacity?: number;
+  /** How much the base image is turned dark grey under this layer (0 = untouched, 1 = fully), for contrast. */
+  baseDim?: number;
 }
+
+/** Lightning colours of NASA SVS 5011: orange, yellow, then pale yellow-white where it strikes most. */
+export const LIGHTNING_STOPS: readonly Rgb[] = [
+  [255, 120, 0],
+  [255, 170, 20],
+  [255, 215, 60],
+  [255, 240, 150],
+  [255, 252, 225],
+];
 
 export const LAYER_OPACITY_DEFAULT = 0.8;
 
@@ -58,8 +69,18 @@ export const LAYER_RAMPS: Readonly<Record<string, ColorRamp>> = {
   smoke: SMOKE_RAMP,
   aerosol: SMOKE_RAMP,
   co2: { low: [140, 90, 10], high: [255, 196, 50], maxAlpha: 1 },
-  // Dark blue where lightning is rare to electric white where it strikes most often.
-  lightning: { low: [20, 30, 110], high: [235, 245, 255], maxAlpha: 1 },
+  // Like NASA SVS 5011: glowing orange and yellow flashes over a dimmed grey Earth.
+  // Rare lightning stays transparent (half of the cells with any lightning are below
+  // 14 of 255), so only the active regions show; the busiest turn almost white.
+  lightning: {
+    low: [255, 120, 0],
+    high: [255, 252, 225],
+    maxAlpha: 1,
+    stops: LIGHTNING_STOPS,
+    presence: { from: 60, fade: 42 },
+    opacity: 1,
+    baseDim: 0.9,
+  },
 };
 
 /** Index of the instant drawn while there is no timeline yet (plan rule: first instant). */
@@ -167,6 +188,8 @@ export interface LayerTextures {
   heightRegion: DataTexture | null;
   /** Opacity of the layer over the base image. */
   opacity: number;
+  /** How much the base image is dimmed to grey under this layer (0..1). */
+  baseDim: number;
 }
 
 /**
@@ -186,7 +209,15 @@ export function layerTextureFor(layer: LoadedLayer): LayerTextures {
     const relief = RELIEF_LAYERS.has(id);
     const heightGlobal = relief && layer.global ? keep(heightTextureOf(layer.global, id, true)) : null;
     const heightRegion = relief ? keep(heightTextureOf(layer.region, id, false)) : null;
-    return { global, region, heightGlobal, heightRegion, opacity: rampFor(id).opacity ?? LAYER_OPACITY_DEFAULT };
+    const ramp = rampFor(id);
+    return {
+      global,
+      region,
+      heightGlobal,
+      heightRegion,
+      opacity: ramp.opacity ?? LAYER_OPACITY_DEFAULT,
+      baseDim: ramp.baseDim ?? 0,
+    };
   } catch (cause) {
     // Some textures may already exist when a later one throws.
     for (const texture of created) texture.dispose();
