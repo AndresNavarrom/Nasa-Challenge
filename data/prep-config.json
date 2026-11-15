@@ -1,7 +1,11 @@
 {
   "bbox": { "west": -80, "south": -20, "east": -44, "north": 8 },
-  "grid": { "global": [144, 72], "region": [96, 72] },
-  "earth": { "file": "earth/earth_noClouds.0330.jpg" },
+  "grid": { "global": [1440, 720], "region": [360, 280] },
+  "earth": {
+    "file": "naturalearth/NE1_HR_LC_SR_W_DR.tif",
+    "sizes": [[8192, 4096], [4096, 2048]],
+    "region_file": "earth-amazon.jpg"
+  },
   "layers": [
     {
       "id": "forest",
@@ -10,6 +14,7 @@
       "source": { "title": "GEDI Forest Height (NASA SVS 4950)", "url": "https://svs.gsfc.nasa.gov/4950" },
       "static": true,
       "global": true,
+      "grid": { "region": [360, 280] },
       "value": {
         "method": "colorbar",
         "image": { "file": "4950/GEDI_colorbar_0to50_01_print.jpg", "from": [55, 510], "to": [485, 510], "samples": 16 },
@@ -19,20 +24,20 @@
         {
           "date": "Apr 2019 - Apr 2020",
           "views": [
-            { "file": "4950/gedi_globe_3.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 119.82, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_6.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 94.20, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_10.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 68.57, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_14.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 42.95, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_17.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 17.32, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_21.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -8.30, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_24.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -33.93, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_28.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -59.55, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_32.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -85.17, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_35.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -110.80, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_39.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -136.42, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_42.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": -162.05, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_46.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 172.33, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
-            { "file": "4950/gedi_globe_50.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 540, "radius": 520, "center_lon": 146.70, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } }
+            { "file": "4950/4k/GEDI_global.0199.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 119.82, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.0415.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 94.20, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.0631.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 68.57, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.0847.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 42.95, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1063.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 17.32, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1279.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -8.30, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1495.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -33.93, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1711.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -59.55, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.1927.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -85.17, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2143.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -110.80, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2359.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -136.42, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2575.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": -162.05, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2791.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 172.33, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } },
+            { "file": "4950/4k/GEDI_global.2999.png", "projection": { "type": "orthographic", "cx": 1920, "cy": 1080, "radius": 1040, "center_lon": 147.65, "center_lat": -0.38, "roll": 1.15, "distance": 4.08, "min_weight": 0.5 } }
           ]
         }
       ]
@@ -40,41 +45,50 @@
     {
       "id": "smoke",
       "title": "Wildfire smoke",
-      "description": "Fine smoke particles (PM2.5) from fires, modelled by NASA's GEOS-CF system for July and August 2024, an active fire season. More smoke makes the sound rougher and darker. Shown over the Amazon only.",
-      "source": { "title": "Air Quality Model Runs (NASA SVS 5533)", "url": "https://svs.gsfc.nasa.gov/5533" },
+      "description": "Fine particles (PM2.5) in the air near the ground, mostly smoke from fires, modelled hour by hour by NASA's GEOS-CF system for 1 September 2026, in the fire season. Fixed scale: 0 µg/m³ is the bottom and 150 µg/m³ or more is the top. More smoke makes the sound rougher and darker.",
+      "source": { "title": "GEOS-CF v2 surface PM2.5 (NASA GMAO)", "url": "https://portal.nccs.nasa.gov/datashare/gmao/geos-cf/v2/" },
       "static": false,
-      "global": false,
-      "value": { "method": "brightness", "low": 0.25, "high": 0.97, "invert": true },
+      "global": true,
+      "grid": { "region": [144, 112] },
+      "value": { "method": "brightness", "low": 0, "high": 1 },
       "instants": [
-        { "date": "Jul-Aug 2024, clip 0:00", "views": [ { "file": "5533/eic_airquality_0.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90, "rect": [0, 0, 1080, 540] } } ] },
-        { "date": "Jul-Aug 2024, clip 0:04", "views": [ { "file": "5533/eic_airquality_4.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90, "rect": [0, 0, 1080, 540] } } ] },
-        { "date": "Jul-Aug 2024, clip 0:53", "views": [ { "file": "5533/eic_airquality_53.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90, "rect": [1080, 0, 1080, 540] } } ] },
-        { "date": "Jul-Aug 2024, clip 0:57", "views": [ { "file": "5533/eic_airquality_57.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90, "rect": [0, 0, 1080, 540] } } ] },
-        { "date": "Jul-Aug 2024, clip 1:01", "views": [ { "file": "5533/eic_airquality_61.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90, "rect": [0, 0, 1080, 540] } } ] },
-        { "date": "Jul-Aug 2024, clip 1:05", "views": [ { "file": "5533/eic_airquality_65.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90, "rect": [0, 0, 1080, 540] } } ] }
+        { "date": "Sep 1, 2026 00:30 UTC", "views": [ { "file": "geoscf/pm25_0030.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 01:30 UTC", "views": [ { "file": "geoscf/pm25_0130.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 02:30 UTC", "views": [ { "file": "geoscf/pm25_0230.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 03:30 UTC", "views": [ { "file": "geoscf/pm25_0330.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 04:30 UTC", "views": [ { "file": "geoscf/pm25_0430.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 05:30 UTC", "views": [ { "file": "geoscf/pm25_0530.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 06:30 UTC", "views": [ { "file": "geoscf/pm25_0630.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 07:30 UTC", "views": [ { "file": "geoscf/pm25_0730.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 08:30 UTC", "views": [ { "file": "geoscf/pm25_0830.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 09:30 UTC", "views": [ { "file": "geoscf/pm25_0930.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 10:30 UTC", "views": [ { "file": "geoscf/pm25_1030.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 11:30 UTC", "views": [ { "file": "geoscf/pm25_1130.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 12:30 UTC", "views": [ { "file": "geoscf/pm25_1230.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 13:30 UTC", "views": [ { "file": "geoscf/pm25_1330.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 14:30 UTC", "views": [ { "file": "geoscf/pm25_1430.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 15:30 UTC", "views": [ { "file": "geoscf/pm25_1530.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 16:30 UTC", "views": [ { "file": "geoscf/pm25_1630.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 17:30 UTC", "views": [ { "file": "geoscf/pm25_1730.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 18:30 UTC", "views": [ { "file": "geoscf/pm25_1830.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 19:30 UTC", "views": [ { "file": "geoscf/pm25_1930.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 20:30 UTC", "views": [ { "file": "geoscf/pm25_2030.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 21:30 UTC", "views": [ { "file": "geoscf/pm25_2130.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 22:30 UTC", "views": [ { "file": "geoscf/pm25_2230.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] },
+        { "date": "Sep 1, 2026 23:30 UTC", "views": [ { "file": "geoscf/pm25_2330.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] }
       ]
     },
     {
-      "id": "co2",
-      "title": "Global CO2",
-      "description": "Carbon dioxide moving through the atmosphere, 23 to 25 February 2020, every six hours, from NASA's DYAMOND simulation with the GEOS model. It is the global context, not a measured effect of the Amazon. More CO2 makes the breathing pulse faster and heavier. Shown over the Amazon only.",
-      "source": { "title": "DYAMOND Global Carbon Dioxide (NASA SVS 5196)", "url": "https://svs.gsfc.nasa.gov/5196" },
-      "static": false,
-      "global": false,
-      "value": { "method": "warmth", "low": 0.02, "high": 0.75 },
+      "id": "lightning",
+      "title": "Lightning",
+      "description": "How often lightning was seen from the International Space Station (NASA's LIS instrument) between January 2017 and July 2023, all years accumulated. Brighter means lightning in more of the ten-day windows of the period; it is a relative frequency read from a NASA visualization, not a flash count. LIS sees only between about 55° N and 55° S.",
+      "source": { "title": "Lightning Events Detected from the ISS 2017-2023 (NASA SVS 5011)", "url": "https://svs.gsfc.nasa.gov/5011" },
+      "static": true,
+      "global": true,
+      "grid": { "region": [360, 280] },
+      "value": { "method": "brightness", "low": 0, "high": 0.2 },
       "instants": [
-        { "date": "Feb 23, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_31.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -49.90, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 23, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_31.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -51.07, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 23, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_31.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -52.24, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 23, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_31.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -53.40, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_32.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -54.57, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_32.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -55.74, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_32.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -56.91, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 24, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_32.7.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -58.08, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 00:00 UTC", "views": [ { "file": "5196/co2_globe_32.9.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -59.24, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 06:00 UTC", "views": [ { "file": "5196/co2_globe_33.1.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -60.41, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 12:00 UTC", "views": [ { "file": "5196/co2_globe_33.3.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -61.58, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] },
-        { "date": "Feb 25, 2020 18:00 UTC", "views": [ { "file": "5196/co2_globe_33.5.png", "projection": { "type": "orthographic", "cx": 960, "cy": 530, "radius": 470, "center_lon": -62.75, "center_lat": 0.34, "roll": -0.19, "distance": 4.57 } } ] }
+        { "date": "2017 - 2023 (accumulated)", "views": [ { "file": "5011/lightning_2017_2023.png", "projection": { "type": "equirect", "west": -180, "south": -90, "east": 180, "north": 90 } } ] }
       ]
     }
   ]
