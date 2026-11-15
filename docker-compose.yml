@@ -8,7 +8,10 @@
 #   docker compose run --rm server-test    cargo test for server/
 #   docker compose run --rm fetch-test     pytest for the conversions in tools/fetch
 #   docker compose run --rm fetch          download the sources into data/raw/ and rewrite
-#                                          data/SOURCES.md (about 1.9 GB, needs internet)
+#                                          data/SOURCES.md (about 2.2 GB, needs internet);
+#                                          also draws the sharp lightning dots of the planet
+#                                          view, web/public/data/lightning-4k.png
+#                                          (tools/fetch/lightning_dots.py)
 #   docker compose run --rm fetch-gedi     download GEDI L3 forest height into data/raw/gedi/
 #                                          (about 617 MB); needs a NASA Earthdata login in
 #                                          ~/.netrc (only the urs.earthdata.nasa.gov line),
@@ -169,6 +172,9 @@ services:
       - ./tools:/work/tools:ro
       # Output: the downloaded and converted sources in data/raw/ and data/SOURCES.md.
       - ./data:/work/data
+      # Output: lightning-4k.png, the lightning dots drawn on the planet (not used by
+      # the sound). Nothing else in this folder is written by this service.
+      - ./web/public/data:/work/web/public/data
 
   # GEDI L3 canopy height: the only source behind a NASA Earthdata login, so it has
   # its own service and `fetch` needs no account.
