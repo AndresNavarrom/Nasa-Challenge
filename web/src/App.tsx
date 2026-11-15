@@ -21,10 +21,10 @@ import {
   useListeningPoint,
 } from "./scene/listeningPoint";
 import { TimelineProvider, useTimeline } from "./timeline/TimelineProvider";
-import { allHeard, isHeard, withHeard, type HeardLayers } from "./ui/heardLayers";
 import { PlanetHud } from "./ui/PlanetHud";
 import { TimelineBar } from "./ui/TimelineBar";
 import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
+import { layerVoices } from "./ui/soloLayer";
 import { startTour } from "./ui/tour";
 import { browserFlagStore, hasSeenTour, markTourSeen } from "./ui/tourSteps";
 
@@ -43,8 +43,9 @@ interface PlanetViewProps {
   lite: boolean;
   audio?: ReactNode;
   timeline?: ReactNode;
-  heard?: HeardLayers;
-  onToggleHeard?: (layerId: string, on: boolean) => void;
+  /** The layer picker's value: a layer id or EARTH_VIEW_ID. */
+  activeLayerId: string;
+  onSelectLayer: (layerId: string) => void;
   onShowTour?: () => void;
 }
 
@@ -54,11 +55,10 @@ function PlanetView({
   lite,
   audio,
   timeline,
-  heard,
-  onToggleHeard,
+  activeLayerId,
+  onSelectLayer,
   onShowTour,
 }: PlanetViewProps) {
-  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const [targetView, setTargetView] = useState<TargetView>("globe");
   const [mode, setMode] = useState<ViewMode>("globe");
   const [probe, setProbe] = useState<Probe | null>(null);
@@ -103,7 +103,7 @@ function PlanetView({
       <PlanetHud
         layers={data.layers}
         activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
-        onSelectLayer={setActiveLayerId}
+        onSelectLayer={onSelectLayer}
         mode={mode}
         onAmazon={showAmazon}
         onBackToEarth={showEarth}
@@ -113,8 +113,6 @@ function PlanetView({
         sceneError={sceneError}
         audio={audio}
         timeline={timeline}
-        heard={heard}
-        onToggleHeard={onToggleHeard}
         onShowTour={onShowTour}
       />
     </>
@@ -214,16 +212,17 @@ function useGuidedTour(): () => void {
 
 function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
   const engine = useSoundEngine();
-  const [heard, setHeard] = useState<HeardLayers>(() => allHeard(data.layers.map((layer) => layer.manifest.id)));
-  const toggleHeard = useCallback((layerId: string, on: boolean) => setHeard((current) => withHeard(current, layerId, on)), []);
+  // Starts on the plain Earth view, with no layer drawn and none sounding.
+  const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
   const showTour = useGuidedTour();
 
-  // A layer that is not heard keeps its data and drawing; only its voice goes quiet.
+  // The layers never mix: only the picked layer sounds (plain Earth: none).
   useEffect(() => {
-    for (const layer of data.layers) {
-      engine.setLayerEnabled(layer.manifest.id, isHeard(heard, layer.manifest.id));
+    const voices = layerVoices(data.layers.map((layer) => layer.manifest.id), activeLayerId);
+    for (const { manifest } of data.layers) {
+      engine.setLayerEnabled(manifest.id, voices[manifest.id] === true);
     }
-  }, [engine, data, heard]);
+  }, [engine, data, activeLayerId]);
 
   return (
     <>
@@ -232,8 +231,8 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
         lite={lite}
         audio={<AudioStart engine={engine} className="w-56" />}
         timeline={<TimelineControls layers={data.layers} />}
-        heard={heard}
-        onToggleHeard={toggleHeard}
+        activeLayerId={activeLayerId}
+        onSelectLayer={setActiveLayerId}
         onShowTour={showTour}
       />
       <AudioListener data={data} engine={engine} />

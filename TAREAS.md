@@ -44,11 +44,12 @@ Jukebox Terrestre (equipo Sagitta). Envío: domingo 15 de noviembre, objetivo 10
 - [ ] **Revisar el planeta** con `docs/PLANET-CHECKLIST.md`; la lista sigue sin marcar.
 - [ ] **Modo historia** (planeta → Amazonía, tres pasos, menos de 60 s); el recorrido de bienvenida no es el modo historia.
 - [ ] **Pantalla de inicio dedicada**, si se quiere además del recorrido de bienvenida.
-- [ ] **Panel lateral completo**: hoy hay selector de capa y casillas “Listen to”, no un panel lateral.
+- [ ] **Panel lateral completo**: hoy hay selector de capa, no un panel lateral.
 - [ ] **Paso 14**: teclado (capas, reproducir/pausar, flechas para el punto), `web/src/ui/a11y.ts` con su prueba y texto para lector de pantalla (capa, lugar y valor bajo/medio/alto).
 - [ ] **30 fps** con audio y en el portátil de la demo.
 - [x] Título **“Atmospheric CO2”**, capa CO2 global, en alta resolución y con contraste (PR #13).
-- [x] Barra de tiempo, fechas, selector de capa, casillas “Listen to” y `data-testid` de esos controles.
+- [x] Barra de tiempo, fechas, selector de capa y `data-testid` de esos controles.
+- [x] Las capas no se mezclan: solo suena la capa elegida en el selector; se quitan las casillas “Listen to”.
 
 ### Sonido (Fernando)
 
