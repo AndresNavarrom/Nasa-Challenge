@@ -12,8 +12,13 @@ import { DataAudio } from "./audio/DataAudio";
 import type { SoundEngine } from "./audio/engine";
 import type { VisibleField } from "./audio/overview";
 import { useSoundEngine } from "./audio/useSoundEngine";
-import { loadJukeboxData } from "./data/loadManifest";
-import type { JukeboxData, LoadedLayer } from "./data/types";
+import {
+  jukeboxDataOf,
+  loadJukeboxCatalog,
+  loadLayerGrids,
+  type JukeboxCatalog,
+} from "./data/loadManifest";
+import type { JukeboxData, LayerId, LoadedLayer } from "./data/types";
 import { sampleLayerAt } from "./lib/interpolate";
 import { frameBlend, frameIndexAt } from "./lib/timeline";
 import { SpinAccumulator, playDelta, positionPerTurn } from "./lib/timelineTrack";
@@ -29,7 +34,7 @@ import {
 import { TIMELINE_UPDATE_HZ, TimelineProvider, useTimeline, useTimelineActions } from "./timeline/TimelineProvider";
 import { PlanetHud } from "./ui/PlanetHud";
 import { ScenePopup } from "./ui/ScenePopup";
-import { EARTH_VIEW_ID, layerForChoice } from "./ui/layerChoice";
+import { EARTH_VIEW_ID, layerForChoice, type WithManifest } from "./ui/layerChoice";
 import { layerVoices } from "./ui/soloLayer";
 import { TimelineTrack } from "./ui/TimelineTrack";
 import { startTour } from "./ui/tour";
@@ -37,8 +42,16 @@ import { browserFlagStore, hasSeenTour, markTourSeen, type TourAction } from "./
 
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; data: JukeboxData }
+  | { status: "ready"; catalog: JukeboxCatalog; startLayers: LoadedLayer[] }
   | { status: "error"; message: string };
+
+/**
+ * Layers whose grids load before the planet shows: only the forest (about 0.3 MB),
+ * which also shapes the region outlines. Every other layer (smoke 16 MB, CO2 9 MB,
+ * lightning 5 MB) is fetched the first time it is chosen, so the planet appears
+ * without waiting for them.
+ */
+const START_LAYER_IDS: readonly LayerId[] = ["forest"];
 
 /** Data voices fade to this level while a scene popup is open, over 0.6 s. */
 const SCENE_DATA_DUCK = 0.12;
@@ -50,7 +63,14 @@ function readLiteMode(search: string): boolean {
 }
 
 interface PlanetViewProps {
+  /** The loaded layers only (a chosen layer joins once its grids have arrived). */
   data: JukeboxData;
+  /** Every layer of the data file, loaded or not, for the picker. */
+  layerCatalog: readonly WithManifest[];
+  /** True while the chosen layer's grids are downloading. */
+  loadingLayer?: boolean;
+  /** Why the chosen layer could not be loaded, or null. */
+  layerLoadError?: string | null;
   engine: SoundEngine;
   lite: boolean;
   audio?: ReactNode;
@@ -67,6 +87,9 @@ interface PlanetViewProps {
 /** The planet, the Amazon map and their controls, once the data is loaded. Starts on the plain Earth, with no layer drawn. */
 function PlanetView({
   data,
+  layerCatalog,
+  loadingLayer = false,
+  layerLoadError = null,
   engine,
   lite,
   audio,
@@ -205,7 +228,7 @@ function PlanetView({
     [showEarth],
   );
 
-  if (data.layers.length === 0) {
+  if (layerCatalog.length === 0) {
     return (
       <p
         role="alert"
@@ -262,8 +285,10 @@ function PlanetView({
         overviewFieldRef={overviewFieldRef}
       />
       <PlanetHud
-        layers={data.layers}
-        activeLayerId={activeLayer?.manifest.id ?? EARTH_VIEW_ID}
+        layers={layerCatalog}
+        activeLayerId={loadingLayer || layerLoadError ? activeLayerId : (activeLayer?.manifest.id ?? EARTH_VIEW_ID)}
+        loadingLayer={loadingLayer}
+        layerLoadError={layerLoadError}
         onSelectLayer={onSelectLayer}
         autoRotate={autoRotate}
         onToggleAutoRotate={setAutoRotate}
@@ -409,10 +434,81 @@ function useGuidedTour(onAction: (action: TourAction) => void): () => void {
   return show;
 }
 
-function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
+/**
+ * The loaded layers, plus a way to load another one the first time it is chosen.
+ * Each layer is fetched once; a failed one is retried when it is chosen again.
+ */
+function useLayerLoader(catalog: JukeboxCatalog, startLayers: LoadedLayer[]) {
+  const [loaded, setLoaded] = useState<LoadedLayer[]>(startLayers);
+  const [errors, setErrors] = useState<Partial<Record<LayerId, string>>>({});
+  const pending = useRef(new Set<LayerId>());
+
+  const request = useCallback(
+    (layerId: string) => {
+      const manifest = catalog.manifest.layers.find((layer) => layer.id === layerId);
+      if (!manifest || pending.current.has(manifest.id)) return;
+      if (loaded.some((layer) => layer.manifest.id === manifest.id)) return;
+      pending.current.add(manifest.id);
+      setErrors((current) => {
+        const next = { ...current };
+        delete next[manifest.id];
+        return next;
+      });
+      loadLayerGrids(manifest, catalog.baseUrl)
+        .then((layer) => {
+          // Kept in the order of the data file, whatever order they arrive in.
+          const order = catalog.manifest.layers.map((entry) => entry.id);
+          setLoaded((current) =>
+            [...current.filter((entry) => entry.manifest.id !== layer.manifest.id), layer].sort(
+              (a, b) => order.indexOf(a.manifest.id) - order.indexOf(b.manifest.id),
+            ),
+          );
+        })
+        .catch((cause: unknown) => {
+          console.error(`Earth Jukebox could not load the ${manifest.id} layer:`, cause);
+          const message = cause instanceof Error ? cause.message : String(cause);
+          setErrors((current) => ({
+            ...current,
+            [manifest.id]: `The ${manifest.title} data could not be loaded (${message}). Choose the layer again to retry.`,
+          }));
+        })
+        .finally(() => pending.current.delete(manifest.id));
+    },
+    [catalog, loaded],
+  );
+
+  const data = useMemo(() => jukeboxDataOf(catalog, loaded), [catalog, loaded]);
+  return { data, errors, request };
+}
+
+function JukeboxView({
+  catalog,
+  startLayers,
+  lite,
+}: {
+  catalog: JukeboxCatalog;
+  startLayers: LoadedLayer[];
+  lite: boolean;
+}) {
   const engine = useSoundEngine();
   // Starts on the plain Earth view, with no layer drawn and none sounding.
   const [activeLayerId, setActiveLayerId] = useState(EARTH_VIEW_ID);
+  const { data, errors, request } = useLayerLoader(catalog, startLayers);
+  const layerCatalog = useMemo(
+    () => catalog.manifest.layers.map((manifest) => ({ manifest })),
+    [catalog],
+  );
+  const selectLayer = useCallback(
+    (layerId: string) => {
+      setActiveLayerId(layerId);
+      if (layerId !== EARTH_VIEW_ID) request(layerId);
+    },
+    [request],
+  );
+  const activeLoaded = data.layers.some((layer) => layer.manifest.id === activeLayerId);
+  const layerLoadError =
+    activeLayerId === EARTH_VIEW_ID ? null : (errors[activeLayerId as LayerId] ?? null);
+  const loadingLayer = activeLayerId !== EARTH_VIEW_ID && !activeLoaded && layerLoadError === null;
   const previousLayerRef = useRef<string | null>(null);
   const handleTourAction = useCallback(
     (action: TourAction) => {
@@ -492,21 +588,24 @@ function JukeboxView({ data, lite }: { data: JukeboxData; lite: boolean }) {
 
   // The layers never mix: only the picked layer sounds (plain Earth: none).
   useEffect(() => {
-    const voices = layerVoices(data.layers.map((layer) => layer.manifest.id), activeLayerId);
-    for (const { manifest } of data.layers) {
-      engine.setLayerEnabled(manifest.id, voices[manifest.id] === true);
+    const voices = layerVoices(catalog.manifest.layers.map((layer) => layer.id), activeLayerId);
+    for (const layer of catalog.manifest.layers) {
+      engine.setLayerEnabled(layer.id, voices[layer.id] === true);
     }
-  }, [engine, data, activeLayerId]);
+  }, [engine, catalog, activeLayerId]);
 
   return (
     <>
       <PlanetView
         data={data}
+        layerCatalog={layerCatalog}
+        loadingLayer={loadingLayer}
+        layerLoadError={layerLoadError}
         engine={engine}
         lite={lite}
         audio={<AudioStart engine={engine} className="w-full sm:w-56" />}
         activeLayerId={activeLayerId}
-        onSelectLayer={setActiveLayerId}
+        onSelectLayer={selectLayer}
         onShowTour={showTour}
         scenes={scenes}
         onSceneSelect={setOpenScene}
@@ -530,9 +629,16 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    loadJukeboxData()
-      .then((data) => {
-        if (!cancelled) setState({ status: "ready", data });
+    // Only manifest.json and the start layers (about 0.3 MB) before the planet shows;
+    // the other layers load when they are chosen (useLayerLoader).
+    loadJukeboxCatalog()
+      .then(async (catalog) => {
+        const startLayers = await Promise.all(
+          catalog.manifest.layers
+            .filter((layer) => START_LAYER_IDS.includes(layer.id))
+            .map((layer) => loadLayerGrids(layer, catalog.baseUrl)),
+        );
+        if (!cancelled) setState({ status: "ready", catalog, startLayers });
       })
       .catch((cause: unknown) => {
         const message = cause instanceof Error ? cause.message : String(cause);
@@ -571,7 +677,7 @@ export default function App() {
           )}
 
           {state.status === "ready" && (
-            <JukeboxView data={state.data} lite={lite} />
+            <JukeboxView catalog={state.catalog} startLayers={state.startLayers} lite={lite} />
           )}
         </main>
       </ListeningPointProvider>

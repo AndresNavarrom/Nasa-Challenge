@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DataLoadError, gridBytes, loadJukeboxData, parseCadence } from "./loadManifest";
+import {
+  DataLoadError,
+  gridBytes,
+  jukeboxDataOf,
+  loadJukeboxCatalog,
+  loadJukeboxData,
+  loadLayerGrids,
+  parseCadence,
+} from "./loadManifest";
 import type { LayerManifest, Manifest } from "./types";
 
 const manifest: Manifest = {
@@ -193,5 +201,56 @@ describe("parseCadence", () => {
     expect(parseCadence("P0M")).toBeNull();
     expect(parseCadence("1H")).toBeNull();
     expect(parseCadence("P1Y")).toBeNull();
+  });
+});
+
+describe("loading layer by layer (fast first view)", () => {
+  /** A fetch that records every URL it is asked for. */
+  function recordingFetch(files: Record<string, BodyInit>) {
+    const asked: string[] = [];
+    const inner = fakeFetch(files);
+    const fetcher = async (url: string): Promise<Response> => {
+      asked.push(url);
+      return inner(url);
+    };
+    return { asked, fetcher };
+  }
+
+  it("reads only manifest.json for the catalog, no grid", async () => {
+    const { asked, fetcher } = recordingFetch(filesFor(manifest));
+    const catalog = await loadJukeboxCatalog("./data/", fetcher);
+
+    expect(asked).toEqual(["./data/manifest.json"]);
+    expect(catalog.baseUrl).toBe("./data/");
+    expect(catalog.manifest.layers.map((layer) => layer.id)).toEqual(["forest", "smoke"]);
+  });
+
+  it("loads the grids of the one layer asked for, and nothing of the others", async () => {
+    const { asked, fetcher } = recordingFetch(filesFor(manifest));
+    const catalog = await loadJukeboxCatalog("./data/", fetcher);
+    const smoke = await loadLayerGrids(catalog.manifest.layers[1]!, "./data/", fetcher);
+
+    expect(asked).toEqual(["./data/manifest.json", "./data/smoke_region.bin"]);
+    expect(smoke.global).toBeNull();
+    expect(smoke.region.frames).toBe(2);
+
+    const data = jukeboxDataOf(catalog, [smoke]);
+    expect(data.layers).toEqual([smoke]);
+    expect(data.bbox).toEqual(manifest.region.bbox);
+    expect(data.baseUrl).toBe("./data/");
+  });
+
+  it("fails naming the file when the asked layer's grid is missing", async () => {
+    const files = filesFor(manifest);
+    delete files["./data/smoke_region.bin"];
+    const catalog = await loadJukeboxCatalog("./data/", fakeFetch(files));
+
+    await expect(loadLayerGrids(catalog.manifest.layers[1]!, "./data/", fakeFetch(files))).rejects.toThrow(
+      /smoke_region\.bin/,
+    );
+    // The other layers still load.
+    await expect(loadLayerGrids(catalog.manifest.layers[0]!, "./data/", fakeFetch(files))).resolves.toMatchObject({
+      manifest: { id: "forest" },
+    });
   });
 });

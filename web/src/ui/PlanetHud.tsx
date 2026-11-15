@@ -10,16 +10,21 @@
 // screens kept clear; from `sm` up the layout is the original one.
 
 import type { ReactNode } from "react";
-import type { LoadedLayer } from "../data/types";
 import type { ViewMode } from "../scene/FocusTransition";
 import type { Probe } from "../scene/EarthScene";
 import { useListeningPoint } from "../scene/listeningPoint";
-import { layerChoices, layerForChoice } from "./layerChoice";
+import { layerChoices, layerForChoice, type WithManifest } from "./layerChoice";
 import { TOUR_BUTTON_TEST_ID } from "./tourSteps";
 
 export interface PlanetHudProps {
-  layers: LoadedLayer[];
+  /** Every layer of the data file, loaded or not (the picker lists them all). */
+  layers: readonly WithManifest[];
+  /** The picker's value: a layer id or EARTH_VIEW_ID. */
   activeLayerId: string;
+  /** True while the grids of the chosen layer are downloading (the plain Earth is drawn meanwhile). */
+  loadingLayer?: boolean;
+  /** Why the chosen layer could not be loaded, or null. */
+  layerLoadError?: string | null;
   onSelectLayer: (layerId: string) => void;
   /** Whether the planet turns by itself on the planet view (the "Auto-rotate" switch). */
   autoRotate: boolean;
@@ -82,6 +87,8 @@ export function PlanetHud(props: PlanetHudProps) {
   const {
     layers,
     activeLayerId,
+    loadingLayer = false,
+    layerLoadError = null,
     onSelectLayer,
     autoRotate,
     onToggleAutoRotate,
@@ -99,8 +106,8 @@ export function PlanetHud(props: PlanetHudProps) {
     timeline,
     onShowTour,
   } = props;
-  // null on the plain Earth view.
-  const activeLayer = layerForChoice(layers, activeLayerId);
+  // null on the plain Earth view, and while the chosen layer is loading or failed.
+  const activeLayer = loadingLayer || layerLoadError ? null : layerForChoice(layers, activeLayerId);
   const selectedPoint = useListeningPoint();
 
   return (
@@ -140,6 +147,16 @@ export function PlanetHud(props: PlanetHudProps) {
               ))}
             </select>
           </label>
+          {loadingLayer && (
+            <p role="status" data-testid="planet-hud-layer-loading" className="mt-1 text-xs text-emerald-300">
+              Loading the layer data…
+            </p>
+          )}
+          {layerLoadError && (
+            <p role="alert" data-testid="planet-hud-layer-error" className="mt-1 max-w-xs text-xs text-red-300">
+              {layerLoadError}
+            </p>
+          )}
           <label className="mt-2 flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
