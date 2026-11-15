@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "transition": "arpa",
+  "scenes": [
+    {
+      "id": "birds",
+      "title": "Birds",
+      "description": "",
+      "lon": null,
+      "lat": null,
+      "image": "birds/birds.jpeg",
+      "imageAlt": "Birds in the Amazon forest",
+      "loop": "birds/birds.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
+    },
+    {
+      "id": "river",
+      "title": "Amazon River",
+      "description": "",
+      "lon": null,
+      "lat": null,
+      "image": "river/iss074e0492148~medium.jpg",
+      "imageAlt": "The Amazon River seen from the International Space Station",
+      "loop": "river/amazon-river.ogg",
+      "loopGain": 0.8,
+      "imageCredit": null,
+      "audioCredit": null
+    }
+  ]
+}
