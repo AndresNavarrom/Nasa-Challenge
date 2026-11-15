@@ -198,6 +198,19 @@ for frame in 0199 0415 0631 0847 1063 1279 1495 1711 1927 2143 2359 2575 2791 29
   record "$png" "$GEDI_FRAMES/GEDI_global.$frame.tif" "4K frame (16-bit TIFF) converted to 8-bit PNG with ffmpeg"
 done
 
+echo "World regions - Natural Earth 1:50m countries"
+NE_COUNTRIES_URL="https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson"
+download "naturalearth/ne_50m_admin_0_countries.geojson" "$NE_COUNTRIES_URL"
+record "naturalearth/ne_50m_admin_0_countries.geojson" "$NE_COUNTRIES_URL" "downloaded as published"
+REGIONS_JSON="$ROOT/web/public/data/regions.json"
+if [[ "$FORCE" != "1" && -s "$REGIONS_JSON" && "$REGIONS_JSON" -nt "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" ]]; then
+  echo "  have   web/public/data/regions.json"
+elif ! python3 "$FETCH_TOOLS/world_regions.py" "$RAW/naturalearth/ne_50m_admin_0_countries.geojson" "$REGIONS_JSON"; then
+  echo "fetch-frames: could not build web/public/data/regions.json" >&2
+  exit 1
+fi
+ROWS+="| \`web/public/data/regions.json\` | <$NE_COUNTRIES_URL> | the 22 world regions (UN subregions of the countries, merged and simplified) by tools/fetch/world_regions.py |"$'\n'
+
 cat >"$SOURCES" <<EOF
 # Data sources
 
@@ -277,6 +290,20 @@ backdrop of the planet and the map; it carries no data values.
 ## Amazon rectangle
 
 West 80 W, east 44 W, south 20 S, north 8 N.
+
+## World regions
+
+The regions outlined on the planet (\`web/public/data/regions.json\`) divide the
+world into 22 regions built from Natural Earth's 1:50m countries
+(\`ne_50m_admin_0_countries.geojson\`, version 5.1.2) by
+tools/fetch/world_regions.py: each country goes to its UN subregion (the
+SUBREGION field) and each subregion's countries are merged. Russia is a region
+of its own, Melanesia, Micronesia and Polynesia are joined as Pacific Islands,
+the open-ocean islands are left out, and France's overseas departments go with
+the region they lie in. Outlines are simplified (Douglas-Peucker, 0.05 degree)
+and rings under 0.02 square degrees are dropped. The Amazon is drawn on top as
+its own region: the app keeps the forest (GEDI height of about 5 m or more)
+inside a hand-drawn area around the basin.
 
 ## Licences and credit
 
