@@ -13,6 +13,7 @@ count, who tested). Planet-specific checks during development are in
 |---|---|---|---|---|---|
 | Demo | | | | | |
 | Backup | | | | | |
+| Development (pre-check, section 2 only) | Windows 11 | | | Andres Navarro | 2026-11-14 |
 
 ## 1. Before unplugging the network (needs internet)
 
@@ -30,6 +31,12 @@ count, who tested). Planet-specific checks during development are in
 - [ ] Time from running the script to the page answering is **5 s or less**: ______ s (the script prints it)
 - [ ] Time from opening the page to hearing sound is **5 s or less**: ______ s
 - [ ] Browser developer tools, Network tab, reload: **no request leaves `127.0.0.1`** (no fonts, textures or scripts from the internet)
+
+> **Pre-check on the development laptop (Sat 14 Nov 2026, Andres Navarro): passed.**
+> With Wi-Fi off and no cable, `run-demo` started the app, the planet loaded
+> and the sound played. Online, on the same laptop and image, the script
+> reported the app ready in 1.2 s. This does not replace the check on the demo
+> and backup laptops above.
 
 ## 3. Sound
 
