@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSoundEngine } from "./engine";
-import { OVERVIEW_COLUMNS } from "./overview";
+import { OVERVIEW_COLUMNS, OVERVIEW_ROWS } from "./overview";
 import type { OverviewColumn } from "./overview";
 import { FakeAudioContext, type FakeParam } from "./testing/fakeAudioContext";
 
@@ -12,7 +12,7 @@ function scheduled(parameter: FakeParam): number {
 function columns(): OverviewColumn[] {
   return Array.from({ length: OVERVIEW_COLUMNS }, (_, column) => ({
     pan: column === 0 ? -0.8 : column === OVERVIEW_COLUMNS - 1 ? 0.8 : 0,
-    cells: Array.from({ length: 6 }, (_, row) => ({ pitchHz: 110 * (row + 1), gain: 0.5 + column * 0.01 })),
+    cells: Array.from({ length: OVERVIEW_ROWS }, (_, row) => ({ pitchHz: 110 * (row + 1), gain: 0.5 + column * 0.01 })),
   }));
 }
 
@@ -24,8 +24,8 @@ describe("overview sound engine", () => {
     engine.setOverview("smoke", columns());
     engine.setOverviewEnabled(true);
 
-    // 6 point-mode oscillators + 12 columns x 6 rows.
-    expect(context.oscillators).toHaveLength(6 + OVERVIEW_COLUMNS * 6);
+    // 6 point-mode oscillators + 12 columns x 12 rows.
+    expect(context.oscillators).toHaveLength(6 + OVERVIEW_COLUMNS * OVERVIEW_ROWS);
     expect(context.panners).toHaveLength(4 + OVERVIEW_COLUMNS);
     expect(context.oscillators[6]!.type).toBe("sawtooth");
     expect(scheduled(context.panners[4]!.pan)).toBeLessThan(0);
@@ -40,7 +40,7 @@ describe("overview sound engine", () => {
     engine.setOverviewEnabled(true);
     await engine.start();
 
-    expect(context.oscillators).toHaveLength(6 + OVERVIEW_COLUMNS * 6);
+    expect(context.oscillators).toHaveLength(6 + OVERVIEW_COLUMNS * OVERVIEW_ROWS);
     expect(context.filters).toHaveLength(3 + OVERVIEW_COLUMNS);
     const firstOverviewFilter = context.filters[3]!;
     const overviewRowGains = context.gains.filter((gain) => gain.connections.includes(firstOverviewFilter));

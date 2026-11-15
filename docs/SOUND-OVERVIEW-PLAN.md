@@ -17,7 +17,7 @@ single locked point. Every screen column sounds at once:
 
 ## Field and mapping
 
-- A **12 x 6 screen grid** is raycast against the globe at ~10 Hz, giving 72
+- A **12 x 12 screen grid** is raycast against the globe at ~10 Hz, giving 144
   visible cells with longitude, latitude, and screen position.
 - Every screen column sounds at the same time; the columns spread across the
   stereo field, so the whole visible field is audible at once.
@@ -36,8 +36,8 @@ single locked point. Every screen column sounds at once:
 
 The engine builds the overview field lazily, only when first used:
 
-- 12 columns x 6 rows = 72 oscillators (one per visible cell)
-- each column has six row gains, one low-pass filter and one stereo panner
+- 12 columns x 12 rows = 144 oscillators (one per visible cell)
+- each column has twelve row gains, one low-pass filter and one stereo panner
 - all 12 panners sound simultaneously; there is no scan clock
 - all parameters use short ramps; no nodes are allocated per update
 - the instrument table lives in `web/src/audio/overview.ts`, one entry per layer
@@ -55,16 +55,9 @@ Each entry also sets filter cutoff/Q, attack, release, gain, detune, octave and 
 
 ## Data-time tempo marks
 
-Timed layers get a mark tied to their own unit, following the shared timeline:
-
-| Layer | Mark | Character |
-|---|---|---|
-| Lightning | every month (1 per frame) | short, marked square tick |
-
-Smoke and CO2 have no timed mark. The lightning mark pauses when the planet
-stops and accelerates with the 4x/8x timeline speed. A seek that jumps several
-units is ignored instead of firing a burst. The settings live in
-`web/src/audio/tempo.ts`.
+No layer currently has a timed mark. The helper in `web/src/audio/tempo.ts`
+remains for adding marks to other layers later. Lightning now has a longer
+release on its overview voice instead of a monthly tick.
 
 ## Forest bird ambience
 
@@ -92,11 +85,11 @@ still apply.
 
 ## Verification
 
-- `web/src/audio/overview.test.ts`: 72 cells, pitch/pan/gain mapping, layer
+- `web/src/audio/overview.test.ts`: 144 cells, pitch/pan/gain mapping, layer
   instrument table.
 - `web/src/audio/engine.overview.test.ts`: lazy graph, all-column panners,
   waveform, disable/fade.
 - Existing web tests and the production build cover the rest.
 - Manual: left/right spread, poles low / equator high, value dynamics,
-  Auto-rotate off still sounding the field, forest bird spacing, data-time
-  marks, globe/map transition, no clipping or clicks.
+  Auto-rotate off still sounding the field, forest bird spacing, lightning
+  release, globe/map transition, no clipping or clicks.

@@ -1,10 +1,8 @@
 // Data-time tempo marks for the overview.
 //
-// A mark is tied to the layer's own unit, not to wall-clock time:
-// - lightning: one mark per month (one per frame)
-//
-// The mark follows the shared timeline, so it pauses when the planet stops and
-// runs faster with the timeline speed. Only lightning has a timed mark.
+// No layer currently has a timed mark. The helpers stay for adding marks to
+// other layers later; the overview's data-time clock remains the shared
+// timeline.
 
 import type { LayerId } from "../data/types";
 
@@ -16,21 +14,11 @@ export interface TempoStyle {
   attackSeconds: number;
 }
 
-/** Marks per prepared frame. Forest has no timed marks. */
-export const TEMPO_BEATS_PER_FRAME: Partial<Record<LayerId, number>> = {
-  lightning: 1, // P1M frames
-};
+/** Marks per prepared frame. Empty while no layer has a timed mark. */
+export const TEMPO_BEATS_PER_FRAME: Partial<Record<LayerId, number>> = {};
 
-/** Editable character of each timed layer's mark. */
-export const TEMPO_STYLES: Partial<Record<LayerId, TempoStyle>> = {
-  lightning: {
-    wave: "square",
-    frequencyHz: 880,
-    gain: 0.16,
-    durationSeconds: 0.08,
-    attackSeconds: 0.002,
-  },
-};
+/** Editable character of each timed layer's mark. Empty for now. */
+export const TEMPO_STYLES: Partial<Record<LayerId, TempoStyle>> = {};
 
 /** Timeline fraction between two marks, or null for a layer with no timed marks. */
 export function tempoStep(frames: number, beatsPerFrame: number | undefined): number | null {

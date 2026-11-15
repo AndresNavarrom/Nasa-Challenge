@@ -734,8 +734,11 @@ export class WebAudioSoundEngine implements SoundEngine {
         const gain = cell
           ? clampUnit(cell.gain) * instrument.gain * gainScale * OVERVIEW_LAYER_GAIN
           : 0;
+        const rowGain = voice.gains[row]!;
+        const rampSeconds =
+          gain < rowGain.gain.value ? instrument.releaseSeconds : instrument.attackSeconds;
         rampParameter(voice.oscillators[row]!.frequency, pitch * detune * 2 ** instrument.octave, now, this.rampSeconds);
-        rampParameter(voice.gains[row]!.gain, gain, now, this.rampSeconds);
+        rampParameter(rowGain.gain, gain, now, Math.max(0.01, rampSeconds));
       }
     }
   }

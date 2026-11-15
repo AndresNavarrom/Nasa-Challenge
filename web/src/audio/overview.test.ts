@@ -17,8 +17,8 @@ import {
 } from "./overview";
 
 describe("overview mapping", () => {
-  it("covers the visible globe with 72 cells", () => {
-    expect(OVERVIEW_COLUMNS * OVERVIEW_ROWS).toBe(72);
+  it("covers the visible globe with 144 cells", () => {
+    expect(OVERVIEW_COLUMNS * OVERVIEW_ROWS).toBe(144);
   });
 
   it("places the equator above the poles on the pentatonic scale", () => {

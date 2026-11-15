@@ -166,10 +166,9 @@ docker compose up web     # then open http://127.0.0.1:5173/
   all at once: screen position sets the stereo side, latitude sets the pitch
   (poles low, equator high), and the layer value sets the volume. Data time and
   the field are independent, so Auto-rotate off freezes the frame but the field
-  keeps sounding. Lightning gets a monthly data-time mark, and the forest
-  overview adds sparse bird excerpts from `audio/samples/oajaros-suaves.ogg`.
-  Drag to turn the planet; double-click a region to fly there. The active layer
-  is drawn over `earth.jpg`.
+  keeps sounding. The forest overview adds sparse bird excerpts from
+  `audio/samples/oajaros-suaves.ogg`. Drag to turn the planet; double-click a
+  region to fly there. The active layer is drawn over `earth.jpg`.
 - **Layer picker** (top left, temporary until the side panel): any layer of
   `web/public/data/manifest.json` appears there, with no code change.
 - **Timeline line** (under the planet): one mark per instant of the picked

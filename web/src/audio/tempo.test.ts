@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import { TEMPO_BEATS_PER_FRAME, TEMPO_STYLES, tempoIndex, tempoStep } from "./tempo";
 
 describe("tempo marks", () => {
-  it("uses the layer units: monthly lightning only", () => {
-    expect(TEMPO_BEATS_PER_FRAME.lightning).toBe(1);
-    expect(TEMPO_BEATS_PER_FRAME.smoke).toBeUndefined();
-    expect(TEMPO_BEATS_PER_FRAME.co2).toBeUndefined();
-    expect(TEMPO_BEATS_PER_FRAME.forest).toBeUndefined();
+  it("has no layer marks configured", () => {
+    expect(Object.keys(TEMPO_BEATS_PER_FRAME)).toEqual([]);
+    expect(Object.keys(TEMPO_STYLES)).toEqual([]);
   });
 
   it("spaces marks across the timeline by frame and unit", () => {
@@ -18,10 +16,4 @@ describe("tempo marks", () => {
     expect(tempoIndex(1, 1 / 10)).toBe(10);
   });
 
-  it("ticks only for lightning", () => {
-    expect(TEMPO_STYLES.lightning?.wave).toBe("square");
-    expect(TEMPO_STYLES.smoke).toBeUndefined();
-    expect(TEMPO_STYLES.co2).toBeUndefined();
-    expect(TEMPO_STYLES.forest).toBeUndefined();
-  });
 });

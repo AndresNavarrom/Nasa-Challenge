@@ -1,6 +1,6 @@
 // Whole-visible-area sonification for the planet view.
 //
-// Every column of a 12 x 6 screen grid sounds at the same time. Each column is
+// Every column of a 12 x 12 screen grid sounds at the same time. Each column is
 // panned by its screen position, every row gets a pitch from its latitude, and
 // the layer value at the cell sets the row gain. The shared timeline chooses the
 // data frame; there is no second scan clock.
@@ -17,9 +17,9 @@ import {
   positionToPan,
 } from "./mapping";
 
-/** Screen grid sampled over the visible globe: 12 columns x 6 rows = 72 cells. */
+/** Screen grid sampled over the visible globe: 12 columns x 12 rows = 144 cells. */
 export const OVERVIEW_COLUMNS = 12;
-export const OVERVIEW_ROWS = 6;
+export const OVERVIEW_ROWS = 12;
 
 /** Lowest overview note and number of scale steps from pole to equator. */
 export const OVERVIEW_BASE_HZ = 110;
@@ -93,8 +93,8 @@ export const OVERVIEW_INSTRUMENTS: Record<LayerId, OverviewInstrument> = {
     filterHz: 2400,
     filterQ: 0.8,
     attackSeconds: 0.01,
-    releaseSeconds: 0.15,
-    gain: 0.55,
+    releaseSeconds: 0.8,
+    gain: 0.4,
     detuneCents: 12,
     octave: 1,
     scale: MAJOR_PENTATONIC_SEMITONES,
