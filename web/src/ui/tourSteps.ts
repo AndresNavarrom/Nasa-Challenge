@@ -33,16 +33,25 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     testId: "audio-controls",
     title: "Start the sound",
-    description: "Browsers keep sound off until you ask. Press Start sound; the bar shows how loud the output is.",
-    side: "left",
+    description:
+      "Browsers keep sound off until you ask. Press Start sound; the bar under it shows how loud the output is, and the bars along the right arc show its spectrum.",
+    side: "right",
     align: "end",
   },
   {
     testId: "planet-hud-layer-select",
     title: "Choose what you hear",
     description:
-      "Pick a layer: it is drawn on the planet and it is the only one you hear. Earth (no layer) is silent.",
+      "Each round button is a layer: it is drawn on the planet, it is the only one you hear and the arcs take its colour. Earth (no layer) is silent.",
     side: "right",
+    align: "center",
+  },
+  {
+    testId: "planet-hud-layer-info",
+    title: "What the sound means",
+    description:
+      "This panel names the picked layer, says what a change in its sound means and reads the place under the cursor. The compass above it shows the centre of the view.",
+    side: "left",
     align: "start",
   },
   {
@@ -57,23 +66,23 @@ export const TOUR_STEPS: readonly TourStep[] = [
     description:
       "Auto-rotate turns the planet by itself. Turn it off to stop the planet while the timeline and the visible-area sound keep going.",
     side: "right",
-    align: "start",
+    align: "end",
     onNext: "show-timeline",
   },
   {
     testId: "timeline-track",
     title: "The timeline",
     description:
-      "The line shows the instants of the picked layer. It runs on its own clock; use Play/Pause, drag along it, or the arrow keys to choose an instant.",
-    side: "top",
-    align: "center",
+      "The marks along the right arc are the instants of the picked layer. It runs on its own clock; use Play/Pause, drag along the arc or the arrow keys. The arrow button folds it away.",
+    side: "left",
+    align: "start",
   },
   {
     testId: "timeline-speed",
     title: "Timeline speed",
     description:
-      "Use the speed slider (4×–32×) on the line to cover more data time per turn. The line shows how much one turn spans.",
-    side: "top",
+      "Use the speed slider (4×–32×) to cover more data time per turn. The line under it says how much one turn spans.",
+    side: "left",
     align: "center",
   },
   {
@@ -81,20 +90,20 @@ export const TOUR_STEPS: readonly TourStep[] = [
     title: "Fly to a region",
     description:
       "The world is divided into regions, with the Amazon on its own. Double-click (or tap twice) one, or press Amazon, to open its map.",
-    side: "left",
+    side: "right",
     align: "end",
   },
   {
     title: "On a regional map",
     description:
-      "Click a point to lock its sound, click and drag to move it and change its pitch, and double-click the map to return to the globe.",
+      "Click a point to lock its sound: two guide lines mark it. Click and drag to move it and change its pitch, and double-click the map to return to the globe.",
   },
   {
-    testId: "planet-hud-back-button",
+    testId: "planet-hud-amazon-button",
     title: "Back to the planet",
     description:
-      "On a regional map, Back to Earth returns to the globe. Double-clicking the map does the same.",
-    side: "left",
+      "On a regional map this same button becomes Back to Earth and returns to the globe. Double-clicking the map does the same.",
+    side: "right",
     align: "end",
   },
   {
