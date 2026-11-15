@@ -23,8 +23,10 @@ export function Root() {
     <Suspense
       fallback={
         <div className="flex h-full flex-col items-center justify-center gap-2">
-          <h1 className="text-3xl font-semibold">Earth Jukebox</h1>
-          <p role="status">Loading…</p>
+          <h1 className="font-label text-sm font-medium uppercase tracking-[0.22em]">Earth Jukebox</h1>
+          <p role="status" className="text-landing-mist">
+            Loading…
+          </p>
         </div>
       }
     >
