@@ -79,6 +79,47 @@ Write the result (pass / fail and a note) next to each line.
       plain ocean colour, and the layers, map and buttons still work. Rename
       it back afterwards.
 
+## High-resolution data (intent 261114-hires-data-layers)
+
+After `docker compose run --rm fetch` and `docker compose run --rm prep`. The
+planet now loads `earth-8k.jpg` (or `earth-4k.jpg`) and `earth-amazon.jpg`
+instead of `earth.jpg`, and the layers are **Forest height**, **Wildfire
+smoke** and **Lightning** (no more Global CO2). Lines above that name
+`earth.jpg` or CO2 apply to the new files and layers in the same way.
+
+- [ ] **Which image (FR1.2).** In the Network tab, a normal load asks for
+      `earth-8k.jpg` on a laptop whose graphics card accepts 8192-pixel
+      textures, and `earth-4k.jpg` otherwise. With `?lite=1` it asks for
+      `earth-4k.jpg` only, never `earth-8k.jpg`. Both load
+      `earth-amazon.jpg`.
+- [ ] **Sharp planet (FR1.1).** Zoomed on the planet, coastlines, rivers and
+      relief look sharp, with no blocky pixels, on the 8192 image.
+- [ ] **Sharp Amazon map (FR1.3).** On the map the Amazon shows the crop:
+      the Amazon river and its tributaries are crisp, sharper than the
+      planet around the rectangle, and the edge of the rectangle shows no
+      jump in colour or position.
+- [ ] **30 fps with the 8192 image (NFR3).** The counter stays at 30 fps or
+      more while the planet turns, while dragging, during both transitions
+      and on the map, with `earth-8k.jpg` loaded.
+- [ ] **Ready in 5 s (NFR3).** From pressing reload to the planet drawn with
+      its image and the layer picker usable: **5 s or less** (Network tab
+      "Load", or a stopwatch).
+- [ ] **Forest on the rivers (FR6.2).** With **Forest height** on the map,
+      the forest edges and the gaps along the large rivers line up with the
+      rivers and coasts of the base image, not shifted.
+- [ ] **No forest gaps (FR6.1).** On the planet, forest height shows on every
+      continent with no empty band of longitude between the views.
+- [ ] **Smoke, 24 instants (FR4.1).** With **Wildfire smoke** active, the
+      panel says `Showing the first instant: Sep 1, 2026 00:30 UTC` and the
+      smoke shows over the whole planet. When the timeline is wired in, its
+      dates run through all 24 hours to `Sep 1, 2026 23:30 UTC` while forest
+      and lightning keep their single date.
+- [ ] **Lightning (FR5).** **Lightning** is in the layer picker, brightest
+      over central Africa, north-west South America and South-East Asia, and
+      reads 0 % or close to it far out at sea and near the poles.
+- [ ] **Offline (NFR2).** With the Wi-Fi off, all three layers and both
+      images load from `127.0.0.1:5173`.
+
 ## Result
 
 - Decision at 11:00 p.m.: keep the flattening planet / go to plan B (`?lite=1`).
